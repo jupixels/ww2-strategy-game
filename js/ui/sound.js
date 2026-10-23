@@ -37,8 +37,8 @@ const SFX = (() => {
     coins:{ src:S('rpg/coins_01', 'rpg/coins_02'), volume:0.7 },
     paper:{ src:S('rpg/book_flip_01', 'rpg/book_flip_02', 'rpg/book_flip_03'), volume:0.8 },
     error:{ src:S('ui/error_01', 'ui/error_03'), volume:0.45 },
-    // drawer tabs: a mechanical war-room switch (sharp click to open, lower click to close)
-    open:{ src:S('ui/switch_02', 'ui/switch_04'), volume:0.35 },
+    // drawer tabs: a mechanical war-room switch (one fixed click to open, a lower click to close)
+    open:{ src:S('ui/switch_04'), volume:0.35 },
     close:{ src:S('ui/switch_alt_02', 'ui/switch_alt_03'), volume:0.6 },
     build:{ src:S('rpg/metal_latch_01'), volume:0.55 },
     factory:{ src:S('impacts/plate_heavy_01'), volume:0.6 },
@@ -96,7 +96,7 @@ const SFX = (() => {
     coins() { play('coins', { vary:0.05 }); },
     paper() { play('paper'); },
     error() { play('error', { bus:'ui' }); },
-    open() { play('open', { bus:'ui', cooldown:0.08 }); },
+    open() { play('open', { bus:'ui', cooldown:0.08, vary:0 }); },
     close() { play('close', { bus:'ui', cooldown:0.08 }); },
     build() { play('build', { vary:0.08 }); },
     factory() { play('factory'); },
