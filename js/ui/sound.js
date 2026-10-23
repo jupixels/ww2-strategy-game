@@ -37,8 +37,9 @@ const SFX = (() => {
     coins:{ src:S('rpg/coins_01', 'rpg/coins_02'), volume:0.7 },
     paper:{ src:S('rpg/book_flip_01', 'rpg/book_flip_02', 'rpg/book_flip_03'), volume:0.8 },
     error:{ src:S('ui/error_01', 'ui/error_03'), volume:0.45 },
-    open:{ src:S('ui/open_02', 'ui/open_03', 'ui/open_04'), volume:0.4 },
-    close:{ src:S('ui/close_01', 'ui/close_02', 'ui/close_03'), volume:0.4 },
+    // drawer tabs: a mechanical war-room switch (sharp click to open, lower click to close)
+    open:{ src:S('ui/switch_02', 'ui/switch_04'), volume:0.35 },
+    close:{ src:S('ui/switch_alt_02', 'ui/switch_alt_03'), volume:0.6 },
     build:{ src:S('rpg/metal_latch_01'), volume:0.55 },
     factory:{ src:S('impacts/plate_heavy_01'), volume:0.6 },
     fort:{ src:S('impacts/wood_heavy_01'), volume:0.55 },
