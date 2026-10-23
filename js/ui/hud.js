@@ -229,14 +229,14 @@ function renderCard() {
   el.innerHTML = h;
   el.querySelector('[data-close]').onclick = () => clearSelection();
   el.querySelectorAll('[data-amt]').forEach(b => b.onclick = () => { sel.amt = b.dataset.amt; SFX.click(); renderCard(); });
-  el.querySelectorAll('[data-build]').forEach(b => b.onclick = e => { const k = b.dataset.build; const many = e.shiftKey ? 5 : 1; SFX.click(); Ctl.act({ c:'buildN', k, pid:i, n:many }); if (G.tut) G.tut.recruited = 1; addFloat(i, `+${many} ${UNIT[k].n}`, '#f0cd7f'); });
+  el.querySelectorAll('[data-build]').forEach(b => b.onclick = e => { const k = b.dataset.build; const many = e.shiftKey ? 5 : 1; k === 'arm' ? SFX.tank() : AIR.includes(k) ? SFX.plane() : NAVY.includes(k) ? SFX.ship() : SFX.build(); Ctl.act({ c:'buildN', k, pid:i, n:many }); if (G.tut) G.tut.recruited = 1; addFloat(i, `+${many} ${UNIT[k].n}`, '#f0cd7f'); });
   el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => cardAction(b.dataset.act));
 }
 function cardAction(act) {
   const pl = ME, i = sel.id, p = G.prov[i];
   SFX.click();
-  if (act === 'fac') { Ctl.act({ c:'factory', pid:i }); addFloat(i, '+1 Factory', '#f0cd7f'); }
-  else if (act === 'fort') { Ctl.act({ c:'fort', pid:i }); addFloat(i, 'Fortified', '#f0cd7f'); }
+  if (act === 'fac') { Ctl.act({ c:'factory', pid:i }); addFloat(i, '+1 Factory', '#f0cd7f'); SFX.factory(); }
+  else if (act === 'fort') { Ctl.act({ c:'fort', pid:i }); addFloat(i, 'Fortified', '#f0cd7f'); SFX.fort(); }
   else if (act === 'war') { Ctl.act({ c:'declare', tag:p.o }); }
   else if (act === 'demand') { Ctl.act({ c:'demand', tag:p.o }); }
   else if (act === 'rocket') { Ctl.act({ c:'rocket', to:i }); }

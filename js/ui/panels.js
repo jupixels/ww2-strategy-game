@@ -5,7 +5,7 @@ function openTab(t) {
   tab = tab === t ? null : t;
   $$('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   hoverNat = null; rebuildOverlay(); staticDirty = true;
-  renderDrawer(); SFX.click();
+  renderDrawer(); tab ? SFX.open() : SFX.close();
 }
 const dh = (title, sub) => `<div class="dh"><div><h2>${title}</h2><p>${sub}</p></div><button class="ibtn" data-closetab aria-label="Close">✕</button></div><div class="db">`;
 const kv = items => `<div class="kv">${items.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('')}</div>`;

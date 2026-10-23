@@ -19,3 +19,6 @@ Host-authoritative over WebRTC (PeerJS, vendored in `js/vendor`), or between tab
 - `js/ui/` — rendering, effects, sound, panels, menus. `js/net/` — multiplayer.
 - `data/map.js` — map geometry. `assets/sfx/` — sound effects.
 - `tests/` — `node tests/sim.js` runs AI-vs-AI campaigns from every start date; the Playwright scripts drive the real page (`tests/play.js`, `tests/mp.js`, `tests/hot.js`).
+
+## Credits
+Sound effects: the original Iron Dominion set, plus CC0 sounds by [Kenney.nl](https://kenney.nl) from the game-sounds library (`assets/sounds`), played through its `sfx.js`. Multiplayer networking: [PeerJS](https://peerjs.com) (MIT).

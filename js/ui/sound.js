@@ -1,102 +1,116 @@
 'use strict';
 /* ================= SOUND =================
-   Recorded samples from assets/sfx, decoded once; every sound falls back to a synthesized version
-   until (or unless) its sample is ready. */
+   Built on sfx.js from the game-sounds library (js/vendor/sfx.js). Samples: the original Iron Dominion set
+   (assets/sfx) plus CC0 Kenney.nl sounds from the game-sounds library (assets/sounds).
+   Gunfire and the air-raid siren have no library match and stay synthesized, as does the war-room music. */
 const SFX = (() => {
-  let ac = null, master = null, sfxBus = null, musBus = null, on = true, music = false, musicNodes = null, musicEl = null;
+  let lib = null, on = true, music = false, drone = null;
   let vol = { sfx:0.8, music:0.5 };
   try { const s = localStorage.getItem('idom-sound'); if (s) { const o = JSON.parse(s); on = o.on !== false; if (o.vol) vol = Object.assign(vol, o.vol); music = !!o.music; } } catch (e) {}
   const persist = () => { try { localStorage.setItem('idom-sound', JSON.stringify({ on, vol, music })); } catch (e) {} };
-  const BUF = {}, LIVE = {};
-  // name -> [files to try in order]; a sound may have several variants that play at random
-  const FILES = {
-    click:['click'], drum:['drum'], thump:['thump'], boom_small:['boom_small'], boom_big:['boom_big'], alarm:['alarm'], fanfare:['fanfare'], medal:['medal'], typewriter:['typewriter'],
-    gunfire:['gunfire'], artillery:['artillery'], plane:['plane'], tank:['tank'], ship:['ship_horn'], radio:['radio'], siren:['siren'], card:['card'], coins:['coins'], paper:['paper'], cannon:['cannon'], victory:['victory'], defeat:['defeat'], march:['march'],
+  const S = (...f) => f.map(x => 'sounds/' + x + '.mp3');
+  const BANK = {
+    // the original set, supplied by the user
+    click:{ src:['sfx/click.mp3'], volume:0.18 }, drum:{ src:['sfx/drum.mp3'], volume:0.8 }, thump:{ src:['sfx/thump.mp3'], volume:0.55 },
+    boom_small:{ src:['sfx/boom_small.mp3'], volume:0.75 }, boom_big:{ src:['sfx/boom_big.mp3'], volume:0.95 }, alarm:{ src:['sfx/alarm.mp3'], volume:0.6 },
+    fanfare:{ src:['sfx/fanfare.mp3'], volume:0.75 }, medal:{ src:['sfx/medal.mp3'], volume:0.7 }, typewriter:{ src:['sfx/typewriter.mp3'], volume:0.6 },
+    // game-sounds library
+    artillery:{ src:S('scifi/explosion_crunch_01', 'scifi/explosion_crunch_02', 'scifi/explosion_crunch_03', 'scifi/explosion_crunch_04'), volume:0.5 },
+    nuke:{ src:S('scifi/explosion_deep_01', 'scifi/explosion_deep_02'), volume:0.6 },
+    plane:{ src:S('scifi/engine_small_02', 'scifi/engine_small_04'), volume:0.5 },
+    tank:{ src:S('scifi/engine_low_02', 'scifi/engine_low_04'), volume:0.5 },
+    ship:{ src:S('impacts/bell_heavy_03', 'impacts/bell_heavy_04'), volume:0.5 },
+    radio:{ src:S('scifi/computer_02'), volume:0.3 },
+    card:{ src:S('tabletop/card_place_01', 'tabletop/card_place_02', 'tabletop/card_place_03', 'tabletop/card_place_04'), volume:0.8 },
+    draw:{ src:S('tabletop/card_slide_01', 'tabletop/card_slide_02', 'tabletop/card_slide_03'), volume:0.7 },
+    shuffle:{ src:S('tabletop/card_shuffle_01'), volume:0.7 },
+    coins:{ src:S('rpg/coins_01', 'rpg/coins_02'), volume:0.7 },
+    paper:{ src:S('rpg/book_flip_01', 'rpg/book_flip_02', 'rpg/book_flip_03'), volume:0.8 },
+    error:{ src:S('ui/error_01', 'ui/error_03'), volume:0.45 },
+    open:{ src:S('ui/open_02', 'ui/open_03', 'ui/open_04'), volume:0.4 },
+    close:{ src:S('ui/close_01', 'ui/close_02', 'ui/close_03'), volume:0.4 },
+    build:{ src:S('rpg/metal_latch_01'), volume:0.55 },
+    factory:{ src:S('impacts/plate_heavy_01'), volume:0.6 },
+    fort:{ src:S('impacts/wood_heavy_01'), volume:0.55 },
+    stinger:{ src:S('jingles/jingle_hit_04'), volume:0.45 },
+    victory:{ src:S('jingles/jingle_hit_02'), volume:0.5 },
+    defeat:{ src:S('jingles/jingle_hit_06'), volume:0.5 },
+    confirm:{ src:S('ui/confirm_01'), volume:0.4 },
   };
-  const MIX = { click:0.18, drum:0.8, thump:0.55, boom_small:0.75, boom_big:0.95, alarm:0.6, fanfare:0.75, medal:0.7, typewriter:0.6, gunfire:0.5, artillery:0.7, plane:0.45, tank:0.5, ship:0.55, radio:0.45, siren:0.5, card:0.5, coins:0.5, paper:0.5, cannon:0.7, victory:0.8, defeat:0.8, march:0.6 };
-  const MAXV = { boom_small:4, boom_big:3, click:3, gunfire:2, artillery:2, plane:2 };
-  function loadSamples() {
-    for (const k in FILES) for (const f of FILES[k]) {
-      fetch('assets/sfx/' + f + '.mp3').then(r => r.ok ? r.arrayBuffer() : null).then(b => { if (!b) return; return ac.decodeAudioData(b).then(d => { (BUF[k] || (BUF[k] = [])).push(d); }); }).catch(() => {});
-    }
-  }
-  function sample(k, jitter = 0, gain = 1) {
-    const list = BUF[k]; if (!list || !list.length) return false;
-    if (ac.state === 'suspended') ac.resume();
-    if ((LIVE[k] || 0) >= (MAXV[k] || 6)) return true;
-    const s = ac.createBufferSource(), g = ac.createGain();
-    s.buffer = list[(Math.random() * list.length) | 0]; if (jitter) s.playbackRate.value = 1 + (Math.random() * 2 - 1) * jitter;
-    g.gain.value = (MIX[k] || 1) * gain; s.connect(g); g.connect(sfxBus);
-    LIVE[k] = (LIVE[k] || 0) + 1; s.onended = () => { LIVE[k]--; };
-    s.start(); return true;
-  }
   function init() {
-    if (ac) return;
-    try {
-      ac = new (window.AudioContext || window.webkitAudioContext)();
-      master = ac.createGain(); master.gain.value = 0.8; master.connect(ac.destination);
-      sfxBus = ac.createGain(); sfxBus.gain.value = vol.sfx; sfxBus.connect(master);
-      musBus = ac.createGain(); musBus.gain.value = vol.music; musBus.connect(master);
-      loadSamples();
-      if (music && on) setTimeout(() => { music = false; api.toggleMusic(); }, 300);
-    } catch (e) { ac = null; }
+    if (lib || !window.SFX) return;
+    try { lib = new window.SFX({ base:'assets/' }); lib.load(BANK); apply(); if (music && on) setTimeout(() => { music = false; api.toggleMusic(); }, 300); } catch (e) { lib = null; }
   }
-  function noise(dur) { const b = ac.createBuffer(1, ac.sampleRate * dur, ac.sampleRate); const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; const s = ac.createBufferSource(); s.buffer = b; return s; }
-  function env(node, t, a, d, peak, bus) { const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); node.connect(g); g.connect(bus || sfxBus); return g; }
-  function tone(f, t, d, type = 'sine', peak = 0.2, bus) { const o = ac.createOscillator(); o.type = type; o.frequency.value = f; env(o, t, 0.01, d, peak, bus); o.start(t); o.stop(t + d + 0.05); return o; }
-  const ok = () => on && ac && ac.state !== 'closed';
+  function apply() { if (!lib) return; lib.setVolume('master', on ? 0.85 : 0); lib.setVolume('sfx', vol.sfx); lib.setVolume('ui', vol.sfx); lib.setVolume('music', vol.music); }
+  const ready = () => on && lib;
+  const has = k => lib && lib.buffers[k] && lib.buffers[k].length;
+  const play = (k, o) => { if (ready() && has(k)) lib.play(k, o); };
+  // long engine recordings are cut short with a fade so a flyover is a pass, not a drone
+  const pass = (k, secs, o) => { if (!ready() || !has(k)) return; const h = lib.loop(k, o); if (h) setTimeout(() => h.stop(0.8), secs * 1000); };
+  function synth(fn) { if (!ready()) return; const ac = lib.ctx; if (ac.state !== 'running') ac.resume(); fn(ac, ac.currentTime, lib.buses.sfx); }
+  function noise(ac, dur) { const b = ac.createBuffer(1, ac.sampleRate * dur, ac.sampleRate); const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; const s = ac.createBufferSource(); s.buffer = b; return s; }
+  function env(ac, node, t, a, d, peak, bus) { const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); node.connect(g); g.connect(bus); return g; }
   const api = {
     init, get on() { return on; }, get music() { return music; }, get vol() { return vol; },
-    setVol(k, v) { vol[k] = v; if (k === 'sfx' && sfxBus) sfxBus.gain.value = v; if (k === 'music' && musBus) musBus.gain.value = v; if (musicEl) musicEl.volume = v * 0.6; persist(); },
-    toggle() { on = !on; persist(); if (!on && music) this.toggleMusic(); return on; },
+    setVol(k, v) { vol[k] = v; apply(); persist(); },
+    toggle() { on = !on; apply(); persist(); if (!on && music) this.toggleMusic(); return on; },
     play(name, arg) { if (this[name]) this[name](arg); },
-    click() { if (!ok()) return; if (sample('click', 0.06)) return; tone(1400, ac.currentTime, 0.04, 'square', 0.012); },
-    boom(big) { if (!ok()) return; if (sample(big ? 'boom_big' : 'boom_small', 0.1)) return; const t = ac.currentTime; const n = noise(1.2); const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(big ? 900 : 600, t); f.frequency.exponentialRampToValueAtTime(60, t + 1); n.connect(f); env(f, t, 0.005, big ? 1.1 : 0.7, big ? 0.9 : 0.55); n.start(t); const o = ac.createOscillator(); o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(30, t + 0.5); env(o, t, 0.005, 0.5, 0.5); o.start(t); o.stop(t + 0.6); },
-    thump() { if (!ok()) return; if (sample('thump', 0.04)) return; const t = ac.currentTime; const o = ac.createOscillator(); o.frequency.setValueAtTime(80, t); o.frequency.exponentialRampToValueAtTime(35, t + 0.3); env(o, t, 0.005, 0.35, 0.35); o.start(t); o.stop(t + 0.4); },
-    drum() { if (!ok()) return; if (sample('drum', 0)) return; const t = ac.currentTime; for (let i = 0; i < 9; i++) { const n = noise(0.08); const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1800; f.Q.value = 0.8; n.connect(f); env(f, t + i * 0.055, 0.003, 0.07, 0.12 + i * 0.02); n.start(t + i * 0.055); } },
-    alarm() { if (!ok()) return; if (sample('alarm', 0)) return; const t = ac.currentTime; [0, 0.35].forEach(d => { const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(220, t + d); o.frequency.linearRampToValueAtTime(330, t + d + 0.3); const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1200; o.connect(f); env(f, t + d, 0.03, 0.3, 0.12); o.start(t + d); o.stop(t + d + 0.4); }); },
-    fanfare() { if (!ok()) return; if (sample('fanfare', 0)) return; const t = ac.currentTime; [[392, 0], [523, 0.14], [659, 0.28], [784, 0.42], [659, 0.62], [784, 0.76]].forEach(([f, d], i) => tone(f, t + d, i === 5 ? 0.7 : 0.16, 'triangle', 0.13)); },
-    medal() { if (!ok()) return; if (sample('medal', 0)) return; const t = ac.currentTime; [1047, 1319, 1568, 2093].forEach((f, i) => tone(f, t + i * 0.07, 0.6, 'sine', 0.08)); },
-    type() { if (!ok()) return; if (sample('typewriter', 0)) return; const t = ac.currentTime; for (let i = 0; i < 14; i++) { const n = noise(0.03); const f = ac.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 2500; n.connect(f); env(f, t + i * (0.045 + Math.random() * 0.04), 0.002, 0.025, 0.12); n.start(t + i * 0.06); } },
-    gunfire() { if (!ok()) return; if (sample('gunfire', 0.08)) return; const t = ac.currentTime; for (let i = 0; i < 16; i++) { const n = noise(0.05); const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 900 + Math.random() * 700; f.Q.value = 1.2; n.connect(f); const tt = t + i * 0.05 + Math.random() * 0.03; env(f, tt, 0.002, 0.045, 0.16); n.start(tt); } },
-    artillery() { if (!ok()) return; if (sample('artillery', 0.08)) return; for (let i = 0; i < 3; i++) setTimeout(() => api.boom(false), i * 180); },
-    plane() { if (!ok()) return; if (sample('plane', 0.06)) return; const t = ac.currentTime; const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(70, t); o.frequency.linearRampToValueAtTime(95, t + 1.2); o.frequency.linearRampToValueAtTime(60, t + 2.2); const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 500; o.connect(f); const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.09, t + 0.8); g.gain.linearRampToValueAtTime(0.0001, t + 2.2); f.connect(g); g.connect(sfxBus); o.start(t); o.stop(t + 2.3); },
-    tank() { if (!ok()) return; if (sample('tank', 0.05)) return; const t = ac.currentTime; const o = ac.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(42, t); o.frequency.linearRampToValueAtTime(55, t + 0.8); const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 260; o.connect(f); env(f, t, 0.15, 0.9, 0.12); o.start(t); o.stop(t + 1.2); },
-    ship() { if (!ok()) return; if (sample('ship', 0)) return; const t = ac.currentTime; [0, 0.03].forEach(d => tone(110 + d * 400, t + d, 1.2, 'sawtooth', 0.05)); },
-    radio() { if (!ok()) return; if (sample('radio', 0.04)) return; const t = ac.currentTime; const n = noise(0.6); const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 2200; f.Q.value = 3; n.connect(f); env(f, t, 0.01, 0.55, 0.08); n.start(t); for (let i = 0; i < 5; i++) tone(700 + (i % 2) * 300, t + 0.1 + i * 0.09, 0.05, 'square', 0.03); },
-    siren() { if (!ok()) return; if (sample('siren', 0)) return; const t = ac.currentTime; const o = ac.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(300, t); o.frequency.linearRampToValueAtTime(700, t + 1.2); o.frequency.linearRampToValueAtTime(300, t + 2.4); env(o, t, 0.2, 2.2, 0.09); o.start(t); o.stop(t + 2.6); },
-    card() { if (!ok()) return; if (sample('card', 0.05)) return; const t = ac.currentTime; const n = noise(0.12); const f = ac.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 3000; n.connect(f); env(f, t, 0.005, 0.1, 0.12); n.start(t); tone(880, t + 0.05, 0.12, 'triangle', 0.05); },
-    coins() { if (!ok()) return; if (sample('coins', 0.05)) return; const t = ac.currentTime; for (let i = 0; i < 4; i++) tone(1800 + Math.random() * 900, t + i * 0.05, 0.15, 'triangle', 0.04); },
-    paper() { if (!ok()) return; if (sample('paper', 0.05)) return; const t = ac.currentTime; const n = noise(0.25); const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 4000; n.connect(f); env(f, t, 0.02, 0.2, 0.06); n.start(t); },
-    cannon() { if (!ok()) return; if (sample('cannon', 0.06)) return; api.boom(false); },
-    victory() { if (!ok()) return; if (sample('victory', 0)) return; api.fanfare(); setTimeout(() => api.fanfare(), 900); },
-    defeat() { if (!ok()) return; if (sample('defeat', 0)) return; const t = ac.currentTime; [[392, 0], [349, 0.4], [311, 0.8], [262, 1.2]].forEach(([f, d]) => tone(f, t + d, 0.6, 'triangle', 0.12)); },
+    click() { play('click', { vary:0.06, bus:'ui', cooldown:0.04 }); },
+    boom(big) { play(big ? 'boom_big' : 'boom_small', { vary:0.1, cooldown:0.12 }); },
+    thump() { play('thump'); },
+    drum() { play('drum'); },
+    alarm() { play('alarm', { cooldown:1 }); },
+    fanfare() { play('fanfare', { cooldown:0.5 }); },
+    medal() { play('medal', { cooldown:0.4 }); },
+    type() { play('typewriter', { cooldown:0.3 }); play('paper', { delay:0.05 }); },
+    artillery() { for (let i = 0; i < 3; i++) play('artillery', { vary:0.08, delay:i * 0.18, cooldown:0 }); },
+    cannon() { play('artillery', { vary:0.1, rate:0.8 }); },
+    nuke() { play('nuke', { cooldown:1 }); },
+    plane() { pass('plane', 2.2, { volume:0.8, fadeIn:0.6 }); },
+    tank() { pass('tank', 1.4, { volume:0.8, fadeIn:0.25 }); },
+    ship() { play('ship', { cooldown:0.6 }); },
+    radio() { pass('radio', 1.1, { volume:0.7, fadeIn:0.05 }); },
+    card() { play('card', { vary:0.05 }); },
+    draw() { play('draw', { vary:0.05 }); },
+    shuffle() { play('shuffle'); },
+    coins() { play('coins', { vary:0.05 }); },
+    paper() { play('paper'); },
+    error() { play('error', { bus:'ui' }); },
+    open() { play('open', { bus:'ui', cooldown:0.08 }); },
+    close() { play('close', { bus:'ui', cooldown:0.08 }); },
+    build() { play('build', { vary:0.08 }); },
+    factory() { play('factory'); },
+    fort() { play('fort'); },
+    stinger() { play('stinger', { cooldown:0.6 }); },
+    confirm() { play('confirm', { bus:'ui' }); },
+    victory() { play('victory'); setTimeout(() => play('fanfare'), 700); },
+    defeat() { play('defeat'); },
+    // no recorded match in the library for these two: synthesized
+    gunfire() { synth((ac, t, bus) => { for (let i = 0; i < 16; i++) { const n = noise(ac, 0.05); const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 900 + Math.random() * 700; f.Q.value = 1.2; n.connect(f); const tt = t + i * 0.05 + Math.random() * 0.03; env(ac, f, tt, 0.002, 0.045, 0.12, bus); n.start(tt); } }); },
+    siren() { synth((ac, t, bus) => { const o = ac.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(300, t); o.frequency.linearRampToValueAtTime(700, t + 1.2); o.frequency.linearRampToValueAtTime(300, t + 2.4); env(ac, o, t, 0.2, 2.2, 0.08, bus); o.start(t); o.stop(t + 2.6); }); },
     toggleMusic() {
-      init(); if (!ac) return false;
+      init(); if (!lib) return false;
       music = !music; persist();
-      if (music && on) {
-        if (ac.state === 'suspended') ac.resume();
-        // a recorded track if the library has one, otherwise a slow procedural war-room drone
-        if (!musicEl) { musicEl = new Audio(); musicEl.loop = true; musicEl.src = 'assets/music/theme.mp3'; musicEl.volume = vol.music * 0.6; musicEl.addEventListener('error', () => { musicEl = null; if (music) startDrone(); }); }
-        if (musicEl) musicEl.play().catch(() => { musicEl = null; startDrone(); });
-      } else {
-        if (musicEl) musicEl.pause();
-        if (musicNodes) { const m = musicNodes; musicNodes = null; clearInterval(m.iv); m.g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 1.2); setTimeout(() => m.oscs.forEach(o => { try { o.stop(); } catch (e) {} }), 1400); }
-        music = false;
-      }
+      if (music && on) startDrone(); else stopDrone();
       return music;
     },
   };
+  // the war-room score: a slow procedural drone with distant drums (the library has no music)
   function startDrone() {
-    if (musicNodes) return;
-    const g = ac.createGain(); g.gain.value = 0.0001; g.connect(musBus); g.gain.exponentialRampToValueAtTime(0.14, ac.currentTime + 3);
+    if (drone) return;
+    const ac = lib.ctx; if (ac.state !== 'running') ac.resume();
+    const g = ac.createGain(); g.gain.value = 0.0001; g.connect(lib.buses.music); g.gain.exponentialRampToValueAtTime(0.16, ac.currentTime + 3);
     const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; lp.connect(g);
     const chords = [[110, 130.8, 164.8], [98, 123.5, 146.8], [87.3, 110, 130.8], [82.4, 98, 123.5], [110, 130.8, 164.8], [116.5, 146.8, 174.6], [98, 123.5, 146.8], [82.4, 103.8, 123.5]];
     const oscs = [0, 1, 2, 3, 4, 5].map(i => { const o = ac.createOscillator(); o.type = i % 2 ? 'triangle' : 'sine'; o.detune.value = (i - 2.5) * 4; o.connect(lp); o.start(); return o; });
     let step = 0;
-    const tick = () => { const ch = chords[step++ % chords.length]; oscs.forEach((o, i) => o.frequency.setTargetAtTime(ch[i % 3] * (i > 2 ? 2 : 1), ac.currentTime, 1.6)); if (step % 2 === 0) { const t = ac.currentTime; [0, 0.5, 1, 1.25].forEach(d => { const n = noise(0.15); const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 160; n.connect(f); env(f, t + d, 0.01, 0.25, 0.22, musBus); n.start(t + d); }); } };
+    const tick = () => { const ch = chords[step++ % chords.length]; oscs.forEach((o, i) => o.frequency.setTargetAtTime(ch[i % 3] * (i > 2 ? 2 : 1), ac.currentTime, 1.6)); if (step % 2 === 0) { const t = ac.currentTime; [0, 0.5, 1, 1.25].forEach(d => { const n = noise(ac, 0.15); const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 160; n.connect(f); env(ac, f, t + d, 0.01, 0.25, 0.22, lib.buses.music); n.start(t + d); }); } };
     tick(); const iv = setInterval(tick, 6000);
-    musicNodes = { g, oscs, iv };
+    drone = { g, oscs, iv };
+  }
+  function stopDrone() {
+    if (!drone) return; const d = drone; drone = null; clearInterval(d.iv);
+    d.g.gain.exponentialRampToValueAtTime(0.0001, lib.ctx.currentTime + 1.2); setTimeout(() => d.oscs.forEach(o => { try { o.stop(); } catch (e) {} }), 1400);
   }
   return api;
 })();

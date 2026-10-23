@@ -23,12 +23,15 @@ const Ctl = {
   },
   after(c, r) {
     if (!r) return;
-    if (!r.ok && r.why) toast('✕', r.why, '', '');
+    if (!r.ok && r.why) { toast('✕', r.why, '', ''); SFX.error(); }
+    if (c.c === 'declare' && r.ok) SFX.stinger();
+    if (c.c === 'answer' && r.ok) SFX.confirm();
     if (r.queued) { toast('➶', `Attack on ${PROV[r.queued.to].name} planned`, 'It goes in when the month ends. Click the arrow\'s source to change orders.', ''); SFX.radio(); }
     if (r.result) { const t = c.tag; const msg = { accepted:'Accepted!', refused:'Refused.', sent:'Proposal sent — awaiting their answer.' }[r.result]; toast(r.result === 'refused' ? '✕' : '✓', `${natName(t)}: ${msg}`, '', r.result === 'accepted' ? 'medal' : ''); }
     if (r.spy) toast(r.spy.ok ? '✓' : '✕', r.spy.ok ? 'Operation succeeded' : 'Operation failed', r.spy.msg, r.spy.ok ? 'medal' : 'war');
     if (c.c === 'card' && r.ok) { SFX.card(); toast(CARDS[c.k].ic, `${CARDS[c.k].n} played`, CARDS[c.k].d, ''); }
     if (c.c === 'fleet' && r.ok) SFX.ship();
+    if (G.tut) { if (r.raid) G.tut.raided = 1; if (c.c === 'fleet' && r.ok) G.tut.sailed = 1; if (c.c === 'spy' && r.ok) G.tut.spied = 1; }
     if (r.raid) { animBattle({ tid:c.to, from:[c.from], a:ME, d:G.prov[c.to].o, raid:r.raid }); SFX.plane(); }
     if (c.c === 'research' && r.ok) SFX.click();
     if (c.c === 'ops' && r.ok) { const n = nat(ME); toast('⌖', `Operation ${n.ops.name}`, `Objectives: ${n.ops.tg.map(i => PROV[i].name).join(', ')}. Four months to take them.`, 'medal'); SFX.radio(); }
@@ -79,7 +82,7 @@ const Ctl = {
     renderAll();
     animBattles(out.battles || []);
     for (const nb of out.naval || []) navalFX(nb.zone);
-    SFX.thump();
+    SFX.thump(); if (ME && A(ME) && nat(ME).hand.length) setTimeout(() => SFX.draw(), 600);
     monthReport(out);
     if (G.over) { this.save(); setTimeout(() => flushInbox().then(showEnd), 600); }
     else { this.save(); flushInbox(); }
@@ -113,7 +116,7 @@ function passScreen(t) {
 
 /* ---------- starting a game ---------- */
 function startGame(opts) {
-  SFX.init();
+  SFX.init(); setTimeout(() => SFX.shuffle(), 400);
   newGame(opts);
   if (opts.mode === 'hot') { G.hs = activeHumans()[0]; }
   Ctl.mode = opts.mode || 'sp';
