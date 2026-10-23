@@ -115,6 +115,7 @@ function animBattle(r, delay = 0, light) {
   if (!r) return;
   const to = r.tid;
   if (r.rocket != null || r.bomb != null) {
+    if (r.d === ME) setTimeout(() => SFX.siren(), Math.max(0, delay - 600));
     const src = r.a ? owned(r.a).sort((x, y) => dist(x, to) - dist(y, to))[0] : null;
     if (r.bomb != null) { atomic(to, delay); setTimeout(() => { SFX.nuke(); SFX.boom(true); setTimeout(() => SFX.boom(true), 450); }, delay); addFloat(to, r.surrender ? 'Unconditional surrender' : `Atomic strike −${r.bomb}`, '#fff', delay + 900, true); return; }
     rocketArc(src != null ? [PROV[src].x, PROV[src].y] : [PROV[to].x - 200, PROV[to].y], to, delay);
@@ -122,19 +123,19 @@ function animBattle(r, delay = 0, light) {
     addFloat(to, `V-weapon −${r.rocket}`, '#ffb7a3', delay + 1500);
     return;
   }
-  if (r.raid) { const from = r.from && r.from[0]; if (from != null && from >= 0) flyover(r.a, from, to, 'bmb', delay, 4); burst(to, false, delay + 1300); addFloat(to, r.raid.fac ? 'Factory destroyed' : 'Bombed', '#ffd08a', delay + 1500); setTimeout(() => SFX.boom(false), delay + 1300); return; }
+  if (r.raid) { const from = r.from && r.from[0]; if (from != null && from >= 0) flyover(r.a, from, to, 'bmb', delay, 4); burst(to, false, delay + 1300); addFloat(to, r.raid.fac ? 'Factory destroyed' : 'Bombed', '#ffd08a', delay + 1500); setTimeout(() => SFX.boom(false), delay + 1300); if (r.d === ME) setTimeout(() => SFX.siren(), delay); if (r.a === ME || r.d === ME) setTimeout(() => SFX.flyby(), delay + 300); return; }
   const kind = r.naval ? 'naval' : r.para ? 'para' : r.walk ? 'move' : 'attack';
   const main = r.from && r.from[0];
   for (const f of r.from || []) { if (f >= 0) addArrow(f, to, kind === 'para' ? 'naval' : kind, delay); else FX.push({ type:'arrow', from:null, fromXY:[PROV[to].x - 120, PROV[to].y - 90], to, kind:'naval', t0:now_() + delay, dur:900 }); }
   if (r.naval) { landingCraft(main, to, delay); if (r.a === ME || r.d === ME) setTimeout(() => SFX.ship(), delay); }
   if (r.para && main >= 0) flyover(r.a, main, to, 'ftr', delay, 3);
-  if (r.air && r.air.fa > 0 && !r.walk) { const ab = nearestAirbase(r.a, to); if (ab >= 0) { flyover(r.a, ab, to, r.air.ba > 0 ? 'bmb' : 'ftr', delay, 3); if (r.a === ME || r.d === ME) setTimeout(() => SFX.plane(), delay); } }
+  if (r.air && r.air.fa > 0 && !r.walk) { const ab = nearestAirbase(r.a, to); if (ab >= 0) { flyover(r.a, ab, to, r.air.ba > 0 ? 'bmb' : 'ftr', delay, 3); if (r.a === ME || r.d === ME) setTimeout(() => SFX.flyby(), delay); } }
   if (!r.walk) {
     const heavy = r.al + r.dl > 6;
     firefight(to, main, 900, delay + 250, heavy, light);
     if (r.au && r.au.art && !light) { barrage(to, main, Math.min(8, 3 + r.au.art), delay + 150); if (r.a === ME || r.d === ME) setTimeout(() => SFX.artillery(), delay + 450); }
     burst(to, heavy, delay + 700); setTimeout(() => SFX.boom(heavy), delay + 700);
-    setTimeout(() => SFX.gunfire && SFX.gunfire(), delay + 250);
+    setTimeout(() => SFX.gunfire(), delay + 250);
   }
   if (r.win) {
     const k = r.au ? (r.au.arm > r.au.inf ? 'arm' : 'inf') : 'inf';

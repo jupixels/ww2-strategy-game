@@ -32,9 +32,9 @@ const Ctl = {
     if (c.c === 'card' && r.ok) { SFX.card(); toast(CARDS[c.k].ic, `${CARDS[c.k].n} played`, CARDS[c.k].d, ''); }
     if (c.c === 'fleet' && r.ok) SFX.ship();
     if (G.tut) { if (r.raid) G.tut.raided = 1; if (c.c === 'fleet' && r.ok) G.tut.sailed = 1; if (c.c === 'spy' && r.ok) G.tut.spied = 1; }
-    if (r.raid) { animBattle({ tid:c.to, from:[c.from], a:ME, d:G.prov[c.to].o, raid:r.raid }); SFX.plane(); }
+    if (r.raid) { animBattle({ tid:c.to, from:[c.from], a:ME, d:G.prov[c.to].o, raid:r.raid }); }
     if (c.c === 'research' && r.ok) SFX.click();
-    if (c.c === 'ops' && r.ok) { const n = nat(ME); toast('⌖', `Operation ${n.ops.name}`, `Objectives: ${n.ops.tg.map(i => PROV[i].name).join(', ')}. Four months to take them.`, 'medal'); SFX.radio(); }
+    if (c.c === 'ops' && r.ok) { const n = nat(ME); toast('⌖', `Operation ${n.ops.name}`, `Objectives: ${n.ops.tg.map(i => PROV[i].name).join(', ')}. Four months to take them.`, 'medal'); SFX.signal(); }
     if (r.ok && (c.c === 'move' || c.c === 'attack' || c.c === 'declare' || c.c === 'peace' || c.c === 'card' || c.c === 'answer' || c.c === 'fleet' || c.c === 'decision')) markDirty(true); else markDirty(false);
     if (r.move) { addArrow(r.move.from, r.move.to, r.move.kind === 'naval' ? 'naval' : 'move'); slideUnits(r.move.from, r.move.to, ME, r.move.part.arm > r.move.part.inf ? 'arm' : 'inf'); if (r.move.part.arm) SFX.tank(); }
     if (sel) { computeTargets(); rebuildOverlay(); }
