@@ -10,7 +10,7 @@ function endMonth() {
     // 1. simultaneous multiplayer orders
     out.battles.push(...resolveOrders());
     // 2. the AI nations act
-    const order = shuffleR(Object.keys(G.nat).filter(t => A(t) && !(isHuman(t) && !G.humans[t].dead) && !NATDEF[t].off));
+    const order = shuffleR(Object.keys(G.nat).filter(t => A(t) && !liveHuman(t) && !NATDEF[t].off));
     for (const t of order) aiTurn(t, out.battles);
     aiDiplomacy();
     // 3. American expeditionary force

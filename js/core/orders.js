@@ -129,9 +129,9 @@ function doCommand(t, c, mode) {
     case 'hiregen': return R(hireGeneral(t, false, c.name));
     case 'postgen': { const g = G.gens.find(x => x.id === c.id && x.tag === t); if (!g || G.prov[c.pid].o !== t || genAt(c.pid, t) || n.pol < 5) return R(false); n.pol -= 5; g.pid = c.pid; return R(true); }
     case 'declare': { const why = canDeclare(t, c.tag); if (why) return R(false, { why }); n.pol -= warCost(t, c.tag); declareWar(t, c.tag); return R(true); }
-    case 'join': { const why = canJoin(t, c.fk); if (why) return R(false, { why }); n.pol -= 20; joinFaction(t, c.fk); return R(true); }
-    case 'found': return R(createFaction(t, c.name));
-    case 'leave': if (!facOf(t)) return R(false); leaveFaction(t); for (const e of enemiesOf(t)) if (!W(t, e)) endWar(t, e); return R(true);
+    case 'join': if (G.flags.teamLock) return R(false, { why:'Teams are fixed in Team War' }); { const why = canJoin(t, c.fk); if (why) return R(false, { why }); n.pol -= 20; joinFaction(t, c.fk); return R(true); }
+    case 'found': if (G.flags.teamLock) return R(false, { why:'Teams are fixed in Team War' }); return R(createFaction(t, c.name));
+    case 'leave': if (!facOf(t) || G.flags.teamLock) return R(false); leaveFaction(t); for (const e of enemiesOf(t)) if (!W(t, e)) endWar(t, e); return R(true);
     case 'invite': { const fk = facOf(t); if (!fk || G.facs[fk].lead !== t || facOf(c.tag) || W(t, c.tag) || n.pol < 15) return R(false); n.pol -= 15;
       if (isHuman(c.tag)) { sendDecision(c.tag, { kind:'invite', fk, from:t, to:c.tag }); return R(true, { sent:true }); }
       const ok = nat(c.tag).ide === n.ide || G.tension > 50 && rnd() < 0.5 || enemiesOf(c.tag).some(e => W(e, t)); if (ok) joinFaction(c.tag, fk); return R(true, { accepted:ok }); }

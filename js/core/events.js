@@ -329,8 +329,8 @@ function checkEvents() {
     let ok = false; try { ok = e.cond(); } catch (err) { ok = false; }
     if (!ok) continue;
     G.ev[e.id] = 1;
-    const actorHuman = isHuman(e.actor) && !G.humans[e.actor].dead;
-    const tgtHuman = !actorHuman && e.tgt && e.topts && e.tgt.find(t => isHuman(t) && !G.humans[t].dead);
+    const actorHuman = liveHuman(e.actor);
+    const tgtHuman = !actorHuman && e.tgt && e.topts && e.tgt.find(t => liveHuman(t));
     if (actorHuman) pushInbox(e.actor, { type:'event', id:e.id, side:'a' });
     else if (tgtHuman) pushInbox(tgtHuman, { type:'event', id:e.id, side:'t' });
     else { try { e.opts[0].f(e.actor); } catch (err) { console.error(err); } news(e.title.toUpperCase()); log(`<b>${e.title}</b>.`); sendNews('*', { title:e.title, head:e.title, dek:e.dek, text:e.text, plate:e.actor, ev:e.id }); }

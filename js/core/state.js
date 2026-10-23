@@ -16,6 +16,7 @@ const ymNum = (y, m) => y * 12 + m;
 const nowNum = () => ymNum(G.y, G.m);
 const isHuman = t => !!(G.humans && G.humans[t]);
 const humanTags = () => Object.keys(G.humans || {});
+const liveHuman = t => isHuman(t) && !G.humans[t].dead && !G.humans[t].away;
 const hasTech = (t, k) => !!(G.nat[t] && G.nat[t].tech[k]);
 const isWinter = () => G.m === 11 || G.m <= 1;
 const isMud = () => G.m === 2 || G.m === 3 || G.m === 9 || G.m === 10;

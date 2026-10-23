@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Iron Dominion 1936</title>
+<meta name="description" content="A grand strategy game of the Second World War in Europe. Single player, hot-seat and online multiplayer.">
+<meta name="theme-color" content="#0d1418">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23c79b45' d='M12 1.5l3 7 7.5.6-5.7 4.9 1.8 7.4L12 17.4l-6.6 4 1.8-7.4L1.5 9.1 9 8.5z'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Stencil+Display:wght@600;800;900&family=Barlow+Semi+Condensed:wght@400;500;600;700&family=Cormorant+SC:wght@500;600;700&family=Special+Elite&display=swap">
+<link rel="stylesheet" href="css/game.css">
+<link rel="stylesheet" href="css/revamp.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="map" aria-label="Strategic map of Europe"></canvas>
+  <div class="vignette"></div>
+
+  <header id="top" hidden>
+    <div class="nation"><div class="emblem" id="emb"></div><div><div class="nm" id="natName">—</div><div class="sub" id="natSub">—</div></div></div>
+    <div class="res">
+      <div class="stat" title="Production: spent on divisions, aircraft, ships, factories, forts and research"><span class="k">Production</span><span class="v" id="sPP">0</span></div>
+      <div class="stat" title="Manpower in thousands of men"><span class="k">Manpower</span><span class="v" id="sMP">0</span></div>
+      <div class="stat" title="Political power: wars, pacts, alliances, cards, spies and decisions"><span class="k">Politics</span><span class="v" id="sPol">0</span></div>
+      <div class="stat" id="sOilW"><span class="k">Oil</span><span class="v" id="sOil">0</span></div>
+      <div class="stat" title="Steel: heavy equipment, ships, factories and forts"><span class="k">Steel</span><span class="v" id="sSteel">0</span></div>
+      <div class="stat"><span class="k">Stability</span><span class="v" id="sStab">0</span></div>
+      <div class="stat" title="Land divisions · armor"><span class="k">Divisions</span><span class="v" id="sDiv">0</span></div>
+      <div class="stat" title="Share of Europe's victory points you control"><span class="k">Dominion</span><span class="v" id="sDom">0%</span></div>
+      <div class="stat tension" title="World tension: democracies may only declare war cheaply above 50%"><span class="k">Tension <b id="sTenN" style="color:var(--paper)">0%</b></span><div class="tbar"><i id="sTen"></i></div></div>
+    </div>
+    <div class="date"><div class="d" id="sDate">JAN 1936</div><div class="s" id="sSeason">Turn 1</div></div>
+    <div class="tools">
+      <button class="ibtn" id="bSound" title="Sound effects" aria-label="Toggle sound"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg></button>
+      <button class="ibtn" id="bMusic" title="Music" aria-label="Toggle music"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></button>
+      <button class="ibtn" id="bHelp" title="Field manual (H)" aria-label="Help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4.1"/><circle cx="12" cy="17.6" r=".6" fill="currentColor"/></svg></button>
+      <button class="ibtn" id="bMenu" title="Main menu" aria-label="Main menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    </div>
+  </header>
+
+  <nav id="rail" hidden>
+    <button class="tab" data-tab="army" title="High Command (1)"><i class="ico" data-icon="inf"></i><span>Army</span></button>
+    <button class="tab" data-tab="industry" title="Industry (2)"><i class="ico" data-icon="fac"></i><span>Industry</span></button>
+    <button class="tab" data-tab="focus" title="National Focus (3)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg><span>Focus</span><i class="dot" id="dotFocus" hidden></i></button>
+    <button class="tab" data-tab="tech" title="Research (4)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/><path d="M7.5 15h9"/></svg><span>Tech</span><i class="dot" id="dotTech" hidden></i></button>
+    <button class="tab" data-tab="dip" title="The World (5)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span>World</span></button>
+    <button class="tab" data-tab="intel" title="Intelligence (6)"><i class="ico" data-icon="spy"></i><span>Intel</span><i class="dot" id="dotIntel" hidden></i></button>
+    <button class="tab" data-tab="dec" title="Destiny (7)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg><span>Destiny</span><i class="dot" id="dotDec" hidden></i></button>
+    <button class="tab" data-tab="log" title="Ledger (8)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3h11l3 3v15H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg><span>Ledger</span></button>
+  </nav>
+
+  <aside id="drawer" hidden></aside>
+  <section id="card" hidden></section>
+  <div class="zoom" id="zoomCtl" hidden><button id="zIn" aria-label="Zoom in">+</button><button id="zOut" aria-label="Zoom out">−</button><button id="zMode" title="Map mode (M): political, supply, resistance" aria-label="Map mode">◐</button></div>
+  <div class="legend" id="legend" hidden>
+    <div><i style="background:#79b46c"></i>Move</div>
+    <div><i style="background:#d0502f"></i>Attack</div>
+    <div><i style="background:#5aa6d6"></i>Sail · landing</div>
+    <div><i style="background:#be78e6"></i>Airdrop</div>
+  </div>
+  <div id="pickBar" hidden><span></span><button class="btn gold" id="pickGo" hidden>Launch</button><button class="btn" id="pickCancel">Cancel</button></div>
+
+  <div id="ticker" hidden><div class="tag">WIRE</div><div class="run"><span id="tickText"></span></div></div>
+  <div id="miniWrap" hidden><canvas id="mini" aria-label="Minimap: click to move the view"></canvas></div>
+  <div id="hand" hidden></div>
+  <div id="actions" hidden>
+    <button id="inboxBtn" title="Newspapers and decisions waiting" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h13v14H6a2 2 0 0 1-2-2zM17 9h3v8a2 2 0 0 1-2 2"/><path d="M7 9h7M7 13h7"/></svg><b>0</b></button>
+    <button id="nextArmy" title="Next army with orders left (N)"><i class="ico" data-icon="inf"></i><span><b>0</b><small>ready</small></span></button>
+    <button id="endTurn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l9 8-9 8M13 4l9 8-9 8"/></svg><span><span class="l1">END MONTH</span><br><span class="l2" id="etSub">Space</span></span></button>
+  </div>
+  <div id="mpbar" hidden><div class="mpl"></div><span class="mpt"></span><span class="mpc" title="Room code"></span><button class="ibtn" id="chatBtn" title="Chat (T)" aria-label="Chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v11H9l-5 4z"/></svg></button></div>
+  <div id="chat" hidden><div id="chatLog"></div><input id="chatIn" placeholder="Message everyone… (Enter)" maxlength="200"></div>
+  <div id="report" hidden></div>
+  <div id="lapse" hidden><b></b><button class="btn">Stop</button></div>
+  <div id="tip" hidden></div>
+  <div id="tutRing" hidden></div>
+  <div id="tut" hidden><div class="tstep"></div><div class="tprog"><i></i></div><h4></h4><div class="tbody"></div>
+    <div class="tacts"><button class="tskip" data-tskip>Skip tutorial</button><span class="twait">Waiting for you…</span><button class="btn" data-tnext>Next</button></div></div>
+
+  <div id="toasts" aria-live="polite"></div>
+  <div id="pass" hidden></div>
+  <div id="modal" hidden></div>
+  <div id="start"></div>
+</div>
+<script src="data/map.js"></script>
+<script src="js/core/util.js"></script>
+<script src="js/core/data.js"></script>
+<script src="js/core/map.js"></script>
+<script src="js/core/state.js"></script>
+<script src="js/core/economy.js"></script>
+<script src="js/core/military.js"></script>
+<script src="js/core/diplomacy.js"></script>
+<script src="js/core/systems.js"></script>
+<script src="js/core/events.js"></script>
+<script src="js/core/orders.js"></script>
+<script src="js/core/ai.js"></script>
+<script src="js/core/scenario.js"></script>
+<script src="js/core/turn.js"></script>
+<script src="js/ui/render.js"></script>
+<script src="js/ui/icons.js"></script>
+<script src="js/ui/fx.js"></script>
+<script src="js/ui/sound.js"></script>
+<script src="js/ui/hud.js"></script>
+<script src="js/ui/panels.js"></script>
+<script src="js/ui/inbox.js"></script>
+<script src="js/net/net.js"></script>
+<script src="js/ui/input.js"></script>
+<script src="js/ui/tutorial.js"></script>
+<script src="js/ui/menu.js"></script>
+<script src="js/ui/main.js"></script>
+</body>
+</html>
