@@ -118,7 +118,7 @@ function startGame(opts) {
   if (opts.mode === 'hot') { G.hs = activeHumans()[0]; }
   Ctl.mode = opts.mode || 'sp';
   Ctl.setMe(opts.mode === 'hot' ? G.hs : opts.me || humanTags()[0] || null);
-  startPlay(true);
+  startPlay(!opts.noIntro);
   if (Ctl.mode === 'hot') passScreen(G.hs);
 }
 function startPlay(fresh) {

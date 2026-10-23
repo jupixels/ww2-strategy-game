@@ -18,7 +18,7 @@ const TUT = [
   { h:'You have the basics', b:'<ul class="tips">' + TIPS.slice(0, 5).map(t => `<li>${t}</li>`).join('') + '</ul>Finish Austria, then decide what kind of Germany you lead. Press <kbd>H</kbd> any time for the field manual.', next:'Finish' },
 ];
 function startTutorial() {
-  startGame({ humans:{ GER:{ name:'You' } }, diff:'easy', scenario:1936, mode:'sp', seed:1936 });
+  startGame({ humans:{ GER:{ name:'You' } }, diff:'easy', scenario:1936, mode:'sp', seed:1936, noIntro:true });
   G.tutGame = true; G.tut = { i:0 };
   const m = G.prov[ID['Munich']]; m.u.inf = Math.max(m.u.inf, 6); m.u.arm = Math.max(m.u.arm, 1); m.r = { ...m.u };
   G.inbox.GER = []; shownUids.clear();

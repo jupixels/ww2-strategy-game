@@ -28,8 +28,10 @@ function decisionText(it) {
   }
   return { head:'A Message', dek:'', text:'', yes:'Yes', no:'No' };
 }
+let itemResolve = null;
 function showItem(it) {
   return new Promise(res => {
+    itemResolve = res;
     const m = $('#modal'); m.hidden = false;
     let head, dek, text, opts, plate;
     if (it.type === 'event') { const e = EVENT_BY_ID[it.id]; head = e.title; dek = e.dek; text = e.text; opts = (it.side === 't' ? e.topts : e.opts).map((o, k) => ({ t:o.t, e:o.e, k })); plate = e.actor; }
@@ -48,7 +50,7 @@ function showItem(it) {
     m.querySelectorAll('.choice').forEach(b => b.onclick = () => {
       SFX.click();
       const k = +b.dataset.k;
-      m.hidden = true; m.innerHTML = '';
+      m.hidden = true; m.innerHTML = ''; itemResolve = null;
       Ctl.act({ c:'answer', uid:it.uid, choice:k < 0 ? 0 : k });
       res();
     });

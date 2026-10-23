@@ -274,7 +274,7 @@ function pickList(items, title, cb) {
   m.querySelector('[data-x]').onclick = closeModal;
   m.querySelectorAll('[data-id]').forEach(b => b.onclick = () => { closeModal(); cb(isNaN(+b.dataset.id) ? b.dataset.id : +b.dataset.id); });
 }
-function closeModal() { const m = $('#modal'); m.hidden = true; m.innerHTML = ''; m.onclick = null; }
+function closeModal() { const m = $('#modal'); m.hidden = true; m.innerHTML = ''; m.onclick = null; if (typeof itemResolve === 'function') { const r = itemResolve; itemResolve = null; r(); } }
 
 /* ---------- action bar ---------- */
 let armyCycle = 0;
