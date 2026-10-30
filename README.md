@@ -10,6 +10,7 @@ A grand strategy game of the Second World War in Europe, in the browser. Lead an
 - **Oil and steel**, a world market, blockades, stability and war weariness, occupation resistance and partisans.
 - **Strategy cards** (one a month), **spies**, **operations** with objectives, timed **research** in four branches, a **national focus tree** with branches for the great powers, alternate-history **Destiny** decisions, ~50 historical events, peace treaties, pacts, guarantees and ultimatums.
 - **Secret agendas**, medals, a career rank, a daily challenge and an end-of-war timelapse.
+- **Install it as an app**: in Chrome or Edge, use the install icon in the address bar (or "Add to Home screen" on a phone). It opens in its own window and keeps working offline once loaded.
 
 ## Multiplayer
 Host-authoritative over WebRTC (PeerJS, vendored in `js/vendor`), or between tabs of one browser for testing. Modes: Grand Campaign, Team War, Blitz (1939–42), Co-op. Simultaneous turns: everyone plans, attacks are queued and resolved together (armies that march into each other fight a meeting engagement). Dropped players are taken over by the AI until they rejoin.
@@ -18,6 +19,7 @@ Host-authoritative over WebRTC (PeerJS, vendored in `js/vendor`), or between tab
 - `js/core/` — the simulation, DOM-free (it reports through `Hooks`). Runs in Node for tests.
 - `js/ui/` — rendering, effects, sound, panels, menus. `js/net/` — multiplayer.
 - `data/map.js` — map geometry. `assets/sfx/`, `assets/sounds/` — sound effects; `assets/music/` — music.
+- `manifest.webmanifest`, `sw.js`, `icons/` — installable app (network-first service worker; the cache is only used offline).
 - `tests/` — `node tests/sim.js` runs AI-vs-AI campaigns from every start date; the Playwright scripts drive the real page (`tests/play.js`, `tests/mp.js`, `tests/hot.js`).
 
 ## Credits
