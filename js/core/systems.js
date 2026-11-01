@@ -179,7 +179,7 @@ function assignAgendas(t) {
   for (const j of cand) pool.push({ k:'hold', pid:j, y:Math.min(endY, startY + (n.major ? 3 : 4)), pts:3 });
   pool.push({ k:'keepcap', pid:n.capital, pts:2 });
   pool.push({ k:'kills', need:n.major ? 60 : 20, pts:2 });
-  pool.push({ k:'share', need:n.major ? 12 : 3, pts:3 });
+  pool.push({ k:'share', need:WORLD ? (n.major ? 12 : 3) : (n.major ? 25 : 6), pts:3 });
   const D = DECISIONS.find(D => D.who && D.who.includes(t)); if (D) pool.push({ k:'destiny', dec:D.k, pts:4 });
   if (n.major && navyOf(t).cap) pool.push({ k:'navy', need:3, pts:2 });
   pool.push({ k:'oil', need:3, pts:2 });
@@ -193,7 +193,7 @@ function agendaText(a) {
     case 'hold': return `Hold ${PROV[a.pid].name} in January ${a.y}`;
     case 'keepcap': return `Never lose ${PROV[a.pid] ? PROV[a.pid].name : 'your capital'}`;
     case 'kills': return `Destroy ${a.need} enemy divisions`;
-    case 'share': return `Hold ${a.need}% of the world when the war ends`;
+    case 'share': return `Hold ${a.need}% of ${REALM} when the war ends`;
     case 'destiny': return `Enact "${DECISIONS.find(D => D.k === a.dec).n}"`;
     case 'navy': return `Win ${a.need} naval battles`;
     case 'oil': return `Control ${a.need} oil provinces when the war ends`;
@@ -250,8 +250,8 @@ function enactDecision(t, k) {
   n.pol -= 50; n.dec.push(D.k); n.bonus *= 1.15; n.pp += 100; n.stab = Math.min(100, n.stab + 15);
   if (D.name) { n.name = D.name; n.color = D.color; n.adj = D.name.split(' ').pop() === 'Empire' ? D.name.replace(' Empire', '') : n.adj; }
   award(t, 'empire');
-  news(`${D.name ? D.name.toUpperCase() + ' PROCLAIMED' : 'A NEW MASTER OF THE WORLD'}`);
-  sendNews('*', { title:D.n, head:D.name ? `The ${D.name} Is Proclaimed` : 'Masters of the World', dek:D.d, text:'Crowds fill the squares as heralds read the proclamation. Old maps are burned; cartographers work through the night. Its armies fight with new fire: +15% combat strength, +100 production, +15 stability.', plate:t });
+  news(`${D.name ? D.name.toUpperCase() + ' PROCLAIMED' : `A NEW MASTER OF ${REALM.toUpperCase()}`}`);
+  sendNews('*', { title:D.n, head:D.name ? `The ${D.name} Is Proclaimed` : `Masters of ${WORLD ? 'the World' : 'Europe'}`, dek:D.d, text:'Crowds fill the squares as heralds read the proclamation. Old maps are burned; cartographers work through the night. Its armies fight with new fire: +15% combat strength, +100 production, +15 stability.', plate:t });
   Hooks.emit('dirty', { owners:true });
   return true;
 }

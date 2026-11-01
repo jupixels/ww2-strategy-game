@@ -85,7 +85,11 @@
   <div id="modal" hidden></div>
   <div id="start"></div>
 </div>
-<script src="data/map.js"></script>
+<script>
+// which map to play on: the original Europe map (default) or the world map. Chosen in the main menu; ?map=world|europe overrides.
+window.MAPKIND = (() => { try { const q = new URLSearchParams(location.search).get('map'); const v = q || localStorage.getItem('idom-map'); return v === 'world' ? 'world' : 'europe'; } catch (e) { return 'europe'; } })();
+document.write('<script src="data/' + (MAPKIND === 'world' ? 'map.js' : 'map-europe.js') + '"><\/script>');
+</script>
 <script src="js/core/util.js"></script>
 <script src="js/core/data.js"></script>
 <script src="js/core/map.js"></script>
@@ -99,7 +103,7 @@
 <script src="js/core/ai.js"></script>
 <script src="js/core/scenario.js"></script>
 <script src="js/core/turn.js"></script>
-<script src="js/ui/render.js"></script>
+<script>document.write('<script src="js/ui/' + (MAPKIND === 'world' ? 'render.js' : 'render-europe.js') + '"><\/script>');</script>
 <script src="js/ui/icons.js"></script>
 <script src="js/ui/fx.js"></script>
 <script src="js/vendor/sfx.js"></script>

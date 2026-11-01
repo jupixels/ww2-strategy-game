@@ -4,7 +4,7 @@ const { chromium } = require(process.env.PW || '/opt/npm-tools/node_modules/play
   const page = await browser.newPage({ viewport:{ width:1440, height:900 } });
   page.on('console', m => console.log('console.' + m.type() + ': ' + m.text()));
   page.on('pageerror', e => console.log('PAGEERROR: ' + e.message + '\n' + (e.stack||'').split('\n').slice(0,5).join('\n')));
-  await page.goto('http://localhost:8765/index.html');
+  await page.goto('http://localhost:8765/index.html' + (process.env.MAP ? '?map=' + process.env.MAP : ''));
   await page.waitForTimeout(1500);
   const r = await page.evaluate(process.argv[2]);
   console.log('RESULT:', typeof r === 'string' ? r : JSON.stringify(r));

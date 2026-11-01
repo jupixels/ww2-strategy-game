@@ -75,7 +75,7 @@ $('#bMenu').onclick = () => { if (Ctl.mode === 'host' || Ctl.mode === 'client') 
 $('#bMusic').classList.toggle('off', !SFX.music);
 $('#bSound').classList.toggle('off', !SFX.on);
 function cycleMapMode() {
-  setMapMode({ pol:'ter', ter:'sup', sup:'res', res:'pol' }[mapMode]); SFX.mapMode();
+  setMapMode((WORLD ? { pol:'ter', ter:'sup', sup:'res', res:'pol' } : { pol:'sup', sup:'res', res:'pol' })[mapMode]); SFX.mapMode();
   const IC = { pol:'◐', ter:'⛰', sup:'⛟', res:'✊' };
   $('#zMode').textContent = IC[mapMode];
   toast(IC[mapMode], { pol:'Political map', ter:'Terrain map', sup:'Supply map', res:'Resistance map' }[mapMode], { pol:'Nations and alliances.', ter:'Mountains, forests, deserts and jungle: the ground your armies fight on.', sup:'Green: full supply · yellow to red: stretched · dark red: cut off.', res:'Occupied provinces, redder where resistance runs high.' }[mapMode], '');

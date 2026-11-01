@@ -4,7 +4,7 @@ const OUT = process.env.OUT;
   const browser = await chromium.launch({ executablePath:process.env.PW ? undefined : '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome' });
   const page = await browser.newPage({ viewport:{ width:1280, height:800 } });
   const errs = []; page.on('pageerror', e => errs.push(e.message + ' ' + (e.stack||'').split('\n')[1]));
-  await page.goto('http://localhost:8765/index.html'); await page.waitForTimeout(1200);
+  await page.goto('http://localhost:8765/index.html' + (process.env.MAP ? '?map=' + process.env.MAP : '')); await page.waitForTimeout(1200);
   await page.evaluate(() => { startGame({ humans:{ GER:{ name:'You' } }, scenario:1939, mode:'sp', seed:3, noIntro:true }); });
   // a peace offer from Poland
   await page.evaluate(() => { sendDecision('GER', { kind:'peace', from:'POL', terms:'terms', winner:'GER' }); flushInbox(); });

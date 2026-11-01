@@ -1,9 +1,9 @@
 'use strict';
 /* ================= RENDER =================
    A world map in the style of a modern grand-strategy table: terrain-shaded nation colours, relief, rivers, sea lanes,
-   curved country names. The world wraps east–west. Everything static is painted into 512-pixel tiles at five zoom levels
-   and cached; ownership lives in a grid-resolution raster repainted per province, and a capture only invalidates the
-   tiles it touches. Counters, cities and labels are drawn on top each time the view changes. */
+   curved country names. The world wraps east–west. Everything static is painted into 512-pixel tiles at seven zoom
+   levels and cached: a terrain raster underneath, provinces as crisp vector shapes on top, fine ground grain when zoomed
+   in. A capture only invalidates the tiles it touches. Counters, cities and labels are drawn over the tiles. */
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 let ME = null;            // the nation this screen belongs to (null = spectator)
@@ -49,8 +49,6 @@ function runsOf(get, count) {
 }
 // horizontal pixel runs per province [y, x0, x1, ...] and per sea zone
 const RUNS = runsOf(i => GRIDD[i], NP);
-// world-space bounding box of each province, padded
-const PBOX = RUNS.map(R => { let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1; for (let k = 0; k < R.length; k += 3) { y0 = Math.min(y0, R[k]); y1 = Math.max(y1, R[k]); x0 = Math.min(x0, R[k + 1]); x1 = Math.max(x1, R[k + 2]); } return [x0 * GS - 8, y0 * GS - 8, (x1 + 1) * GS + 8, (y1 + 1) * GS + 8]; });
 const ZRUNS = runsOf(i => GRID[i] <= -2 ? -2 - GRID[i] : -1, SEA_IDS.length);
 const BIO = new Uint8Array(N);
 { let k = 0; const r = MAP.bio; for (let i = 0; i < r.length; i += 2) { BIO.fill(r[i], k, k + r[i + 1]); k += r[i + 1]; } }
@@ -92,7 +90,7 @@ const TERR = new Uint8ClampedArray(N * 3);
       const i = y * GW + x, b = BIO[i]; if (!b) continue;
       const c = BC[b], n = (vnoise(x / 11, y / 11) - 0.5) * 22 + (vnoise(x / 3.2, y / 3.2) - 0.5) * 8, s = 1 + shadeAt(x, y);
       let r = c[0] + n, g = c[1] + n, bb = c[2] + n * 0.7;
-      if (b === 4 && shadeAt(x, y) > 0.12 && hash(x, y) > 0.35) { r += 50; g += 52; bb += 58; }   // snowy ridges
+      if (b === 4) { const sn = clamp((shadeAt(x, y) - 0.06) * 5 + (vnoise(x / 2.3, y / 2.3) - 0.5), 0, 1); r += 58 * sn; g += 60 * sn; bb += 66 * sn; }   // snow on the sunlit ridges
       if (b === 2 || b === 1) { r += lat * 30; bb += lat * 10; }                                  // paler toward the poles
       TERR[i * 3] = r * s; TERR[i * 3 + 1] = g * s; TERR[i * 3 + 2] = bb * s;
     }
@@ -175,73 +173,124 @@ const LAND_B = bucketize(MAP.land, true), LAKE_B = bucketize(MAP.lakes, true);
 const LAND_F = bucketFill(MAP.land), LAKE_F = bucketFill(MAP.lakes);
 const SEA_B = bucketize(MAP.seaBorders.map(b => b[2]), false);
 const RIVER_B = [bucketize(MAP.rivers.filter(r => r[0] <= 3).map(r => r[1]), false), bucketize(MAP.rivers.filter(r => r[0] > 3).map(r => r[1]), false)];
+/* ================= PROVINCE SHAPES ================= */
+// Every province is a vector shape linked from the shared boundary chains in MAP.borders (side -1 is open sea), so
+// neighbours meet exactly and fills stay crisp at any zoom. The land raster underneath only carries terrain.
+const PPATH = [], PBOX = [], RBOX = [];   // RBOX: one box per ring (islands can sit on both sides of the date line)
+{
+  const byP = Array.from({ length:NP }, () => []);
+  for (const [a, b, pts] of MAP.borders) { if (a >= 0) byP[a].push(pts); if (b >= 0) byP[b].push(pts); }
+  const key = (x, y) => Math.round(wrapX(x) * 10) % (WW * 10) + ',' + Math.round(y * 10);
+  const rev = s => { const o = []; for (let i = s.length - 2; i >= 0; i -= 2) o.push(s[i], s[i + 1]); return o; };
+  for (let p = 0; p < NP; p++) {
+    const segs = byP[p], used = new Uint8Array(segs.length), ends = new Map(), P = new Path2D(), rb = [];
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    segs.forEach((s, k) => { for (const i of [0, s.length - 2]) { const kk = key(s[i], s[i + 1]); let L = ends.get(kk); if (!L) ends.set(kk, L = []); L.push(k); } });
+    for (let k = 0; k < segs.length; k++) {
+      if (used[k]) continue; used[k] = 1;
+      const ring = segs[k].slice(), sk = key(ring[0], ring[1]);
+      for (let guard = 0; guard < 5000; guard++) {
+        const ek = key(ring[ring.length - 2], ring[ring.length - 1]); if (ek === sk && ring.length > 4) break;
+        const j = (ends.get(ek) || []).find(q => !used[q]); if (j == null) break;
+        used[j] = 1; let s = segs[j]; if (key(s[0], s[1]) !== ek) s = rev(s);
+        const dx = WW * Math.round((ring[ring.length - 2] - s[0]) / WW);
+        for (let i = 2; i < s.length; i += 2) ring.push(s[i] + dx, s[i + 1]);
+      }
+      P.moveTo(ring[0], ring[1]);
+      let a0 = Infinity, b0 = Infinity, a1 = -Infinity, b1 = -Infinity;
+      for (let i = 0; i < ring.length; i += 2) { const x = ring[i], y = ring[i + 1]; if (i) P.lineTo(x, y); if (x < a0) a0 = x; if (x > a1) a1 = x; if (y < b0) b0 = y; if (y > b1) b1 = y; }
+      P.closePath(); rb.push([a0 - 2, b0 - 2, a1 + 2, b1 + 2]);
+      x0 = Math.min(x0, a0); x1 = Math.max(x1, a1); y0 = Math.min(y0, b0); y1 = Math.max(y1, b1);
+    }
+    PPATH[p] = P; PBOX[p] = [x0 - 2, y0 - 2, x1 + 2, y1 + 2]; RBOX[p] = rb;
+  }
+}
+// provinces per bucket, for tiles
+const PROV_B = new Map(), PBW = 100, pkey = (cx, cy) => cx * 128 + cy;
+RBOX.forEach((rs, p) => { for (const b of rs) for (let cx = Math.floor(b[0] / PBW); cx <= Math.floor(b[2] / PBW); cx++) for (let cy = Math.max(0, Math.floor(b[1] / PBW)); cy <= Math.floor(b[3] / PBW); cy++) { const k = pkey(cx, cy); let L = PROV_B.get(k); if (!L) PROV_B.set(k, L = []); if (L[L.length - 1] !== p) L.push(p); } });
+function provsIn(R) { const S = new Set(); for (let cx = Math.floor(R[0] / PBW); cx <= Math.floor(R[2] / PBW); cx++) for (let cy = Math.max(0, Math.floor(R[1] / PBW)); cy <= Math.floor(R[3] / PBW); cy++) { const L = PROV_B.get(pkey(cx, cy)); if (L) for (const p of L) S.add(p); } return S; }
+// borders between provinces, trimmed to land, for the per-frame overlays (selection outline, front lines)
+const LAND_BORDERS = [];
+{
+  const onLand = (x, y) => { let n = 0; for (const [dx, dy] of [[-0.9, -0.9], [0.9, -0.9], [-0.9, 0.9], [0.9, 0.9]]) if (gridAt(x + dx, y + dy, GRID) >= 0) n++; return n >= 2; };
+  for (const [a, b, pts] of MAP.borders) {
+    if (a < 0 || b < 0) continue;
+    let run = [];
+    const flush = () => { if (run.length >= 4) LAND_BORDERS.push([a, b, run]); run = []; };
+    for (let i = 0; i < pts.length; i += 2) { if (onLand(pts[i], pts[i + 1])) run.push(pts[i], pts[i + 1]); else flush(); }
+    flush();
+  }
+}
 let INNER_B = new Map(), NAT_B = new Map(), PLAYER_B = new Map();
 
-/* ================= OWNERSHIP RASTER ================= */
-const polCv = mkCanvas(GW, GH), polCtx = polCv.getContext('2d'), polImg = polCtx.createImageData(GW, GH);
-const painted = new Array(NP).fill('');
-const overCv = mkCanvas(GW, GH), overCtx = overCv.getContext('2d');
-const fogCv = mkCanvas(HW, HH), fogCtx = fogCv.getContext('2d');
-const wxCv = mkCanvas(HW, HH), wxCtx = wxCv.getContext('2d');
+/* ================= TERRAIN RASTER & OWNERSHIP ================= */
+const polCv = mkCanvas(GW, GH), polCtx = polCv.getContext('2d');
+{ // terrain colours, carried a few cells out to sea so the coastline clip never shows the raster's edge
+  const img = polCtx.createImageData(GW, GH), D = img.data, src = Int32Array.from({ length:N }, (_, i) => BIO[i] ? i : -1);
+  for (let pass = 0; pass < 4; pass++) { const s0 = src.slice(); for (let y = 1; y < GH - 1; y++) for (let x = 0; x < GW; x++) { const i = y * GW + x; if (s0[i] >= 0) continue; const v = [y * GW + (x + 1) % GW, y * GW + (x + GW - 1) % GW, i - GW, i + GW].map(j => s0[j]).find(j => j >= 0); if (v != null) src[i] = v; } }
+  for (let i = 0; i < N; i++) { const j = src[i]; if (j < 0) continue; D[i * 4] = TERR[j * 3]; D[i * 4 + 1] = TERR[j * 3 + 1]; D[i * 4 + 2] = TERR[j * 3 + 2]; D[i * 4 + 3] = 255; }
+  polCtx.putImageData(img, 0, 0);
+}
+// fine grain laid over the land when zoomed in, so close-ups read as ground rather than stretched pixels
+const DETAIL = mkCanvas(256, 256);
+{
+  const c = DETAIL.getContext('2d'), img = c.createImageData(256, 256), D = img.data;
+  const tile = (x, y, f) => vnoise((x % 256) * f, (y % 256) * f);
+  for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
+    // periodic noise: blend the four wrapped copies so the pattern tiles seamlessly
+    const u = x / 256, v = y / 256, smp = f => tile(x, y, f) * (1 - u) * (1 - v) + tile(x + 256, y, f) * u * (1 - v) + tile(x, y + 256, f) * (1 - u) * v + tile(x + 256, y + 256, f) * u * v;
+    const n = smp(1 / 24) * 0.45 + smp(1 / 9) * 0.3 + smp(1 / 3.5) * 0.17 + hash(x, y) * 0.08, g = clamp(128 + (n - 0.5) * 150, 0, 255), i = (y * 256 + x) * 4;
+    D[i] = D[i + 1] = D[i + 2] = g; D[i + 3] = 255;
+  }
+  c.putImageData(img, 0, 0);
+}
+const overCv = mkCanvas(HW, HH), overCtx = overCv.getContext('2d');   // sea-zone highlights only
 let frontMine = new Path2D(), frontOther = new Path2D(), hasFront = false, selPath = null;
-let labels = [], worldVersion = 0, worldBuilt = false, fogKey = '', wxKey = '', fogOn = false, wxOn = false;
+let labels = [], worldVersion = 0, worldBuilt = false, fogKey = '', wxKey = '', FOGGED = new Uint8Array(NP), WXCOL = new Array(NP).fill(null);
 let timelapseOwners = null; // when set, paint these owners instead of the live ones
 const ownerOf = i => timelapseOwners ? timelapseOwners[i] : G.prov[i].o;
-const MIX = { pol:0.6, ter:0, sup:0.18, res:0.3 };
+const painted = new Array(NP).fill('');
+const FILL_A = { pol:0.62, ter:0, sup:0.2, res:0.3 };
+const rgba = (hex, a) => { const c = hexRGB(hex); return `rgba(${c[0]},${c[1]},${c[2]},${a})`; };
+// a province's tiles must repaint: its box, and the copies one world-width away
+function invalidateBox(id) { for (const b of RBOX[id]) for (const o of [0, -WW, WW]) invalidateTiles([b[0] + o, b[1], b[2] + o, b[3]]); }
 function paintOwners(force) {
-  const cols = {}, a = MIX[mapMode] ?? 0.6;
-  const col = t => cols[t] || (cols[t] = hexRGB(natColor(t)));
-  const D = polImg.data;
-  let bx0 = GW, by0 = GH, bx1 = -1, by1 = -1;
+  let n = 0;
   for (let id = 0; id < NP; id++) {
-    const p = G.prov[id], o = ownerOf(id);
-    const occ = !timelapseOwners && p.core !== o && A(p.core);
+    const p = G.prov[id], o = ownerOf(id), occ = !timelapseOwners && p.core !== o && A(p.core);
     const key = mapMode + o + natColor(o) + (occ ? p.core + natColor(p.core) : '');
     if (!force && painted[id] === key) continue;
-    painted[id] = key;
-    const c = col(o), cc = occ ? col(p.core) : null, tint = 0.95 + hash(id, 7) * 0.1;
-    const R = RUNS[id];
-    for (let k = 0; k < R.length; k += 3) {
-      const y = R[k], xa = R[k + 1], xb = R[k + 2];
-      if (y < by0) by0 = y; if (y > by1) by1 = y; if (xa < bx0) bx0 = xa; if (xb > bx1) bx1 = xb;
-      for (let x = xa; x <= xb; x++) {
-        const i = y * GW + x, o4 = i * 4, t3 = i * 3;
-        const cl = cc && ((x + y) >> 2) % 3 === 0 ? cc : c;
-        let r = TERR[t3], g = TERR[t3 + 1], b = TERR[t3 + 2];
-        if (!BIO[i]) { r = 150; g = 150; b = 120; }
-        if (a) { const s = 1 + shadeAt(x, y) * 0.7; r += (cl[0] * tint * s - r) * a; g += (cl[1] * tint * s - g) * a; b += (cl[2] * tint * s - b) * a; }
-        D[o4] = r; D[o4 + 1] = g; D[o4 + 2] = b; D[o4 + 3] = 255;
-      }
-    }
+    painted[id] = key; n++;
+    if (!force) invalidateBox(id);
   }
-  if (bx1 < 0) return null;
-  polCtx.putImageData(polImg, 0, 0, bx0, by0, bx1 - bx0 + 1, by1 - by0 + 1);
-  return [bx0 * GS, by0 * GS, (bx1 + 1) * GS, (by1 + 1) * GS];
+  return n;
 }
 function rebuildOwners() {
   ownersDirty = false;
-  const box = paintOwners(!worldBuilt);
+  const force = !worldBuilt;
+  paintOwners(force);
   const inner = [], natl = [], mine = [];
   frontMine = new Path2D(); frontOther = new Path2D(); hasFront = false;
   const add = (P, pts) => { P.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) P.lineTo(pts[i], pts[i + 1]); };
   for (const [a, b, pts] of MAP.borders) {
+    if (a < 0 || b < 0) continue;
     const oa = ownerOf(a), ob = ownerOf(b);
     (oa === ob ? inner : natl).push(pts);
-    if (!timelapseOwners && oa !== ob && W(oa, ob)) { hasFront = true; add(ME && (friendly(oa, ME) || friendly(ob, ME)) ? frontMine : frontOther, pts); }
     if (ME && (oa === ME) !== (ob === ME)) mine.push(pts);
   }
+  for (const [a, b, pts] of LAND_BORDERS) { const oa = ownerOf(a), ob = ownerOf(b); if (!timelapseOwners && oa !== ob && W(oa, ob)) { hasFront = true; add(ME && (friendly(oa, ME) || friendly(ob, ME)) ? frontMine : frontOther, pts); } }
   INNER_B = bucketize(inner, false); NAT_B = bucketize(natl, false); PLAYER_B = bucketize(mine, false);
   computeLabels();
   rebuildFog(); rebuildWeather();
-  if (!worldBuilt || !box) invalidateTiles(null); else invalidateTiles([box[0] - 30, box[1] - 30, box[2] + 30, box[3] + 30]);
+  if (force) invalidateTiles(null);
   worldBuilt = true; worldVersion++;
 }
 
 /* ================= TILES ================= */
 // level lv draws at s = 2^lv pixels per world unit; tiles are square in world units and divide the circumference evenly
-const LV_MIN = -2, LV_MAX = 2;
+const LV_MIN = -2, LV_MAX = 4;
 const TILES = new Map(); let tileClock = 0;
-const TILE_CAP = matchMedia('(pointer: coarse)').matches ? 40 : 90;
+const TILE_CAP = matchMedia('(pointer: coarse)').matches ? 48 : 110;
 const tileWorld = lv => WW / Math.max(1, Math.round(WW * Math.pow(2, lv) / 512));
 function invalidateTiles(R) {
   if (!R) { TILES.clear(); return; }
@@ -264,34 +313,62 @@ function paintWorld(c, R, s) {
     c.strokeStyle = 'rgba(175,220,225,.16)'; c.lineWidth = 3 * px + 1.5; eachBucket(LAND_B, Q, P => c.stroke(P));
     c.restore();
   }
-  // land: the province raster, clipped to the vector coastline
+  // land: terrain, then nation colours as vector shapes, all clipped to the coastline
   c.save();
   const clip = new Path2D(); for (const off of offs) joined(LAND_F, [R[0] - off, R[1], R[2] - off, R[3]], clip, off);
   c.clip(clip, 'evenodd');
-  c.fillStyle = 'rgb(150,150,120)'; c.fillRect(R[0], R[1], R[2] - R[0], R[3] - R[1]);
   c.drawImage(polCv, gx0, gy0, gx1 - gx0, gy1 - gy0, gx0 * GS, gy0 * GS, (gx1 - gx0) * GS, (gy1 - gy0) * GS);
-  // weather and fog of war change once a month, so they are baked into the tiles too
-  if (wxOn) c.drawImage(wxCv, gx0 / 2, gy0 / 2, (gx1 - gx0) / 2, (gy1 - gy0) / 2, gx0 * GS, gy0 * GS, (gx1 - gx0) * GS, (gy1 - gy0) * GS);
-  if (fogOn) c.drawImage(fogCv, gx0 / 2, gy0 / 2, (gx1 - gx0) / 2, (gy1 - gy0) / 2, gx0 * GS, gy0 * GS, (gx1 - gx0) * GS, (gy1 - gy0) * GS);
+  if (s >= 1) { // ground grain at two scales, fading in as you zoom
+    const a = clamp((s - 1) / 3, 0, 1);
+    c.globalCompositeOperation = 'overlay';
+    for (const [k, al] of [[0.25, 0.5], [0.07, 0.38]]) { const pat = c.createPattern(DETAIL, 'repeat'); pat.setTransform(new DOMMatrix([k, 0, 0, k, 0, 0])); c.fillStyle = pat; c.globalAlpha = a * al; c.fillRect(R[0], R[1], R[2] - R[0], R[3] - R[1]); }
+    c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1;
+  }
+  const fa = FILL_A[mapMode] ?? 0.62;
+  for (const off of offs) {
+    const Q = [R[0] - off, R[1], R[2] - off, R[3]], ids = provsIn(Q);
+    c.save(); c.translate(off, 0);
+    for (const id of ids) {
+      const p = G.prov[id], o = ownerOf(id);
+      if (fa) { c.fillStyle = rgba(natColor(o), fa); c.fill(PPATH[id], 'evenodd'); }
+      // occupied land shows its rightful owner in stripes
+      if (fa && !timelapseOwners && p.core !== o && A(p.core)) { c.fillStyle = stripeFill(c, natColor(p.core), s); c.fill(PPATH[id], 'evenodd'); }
+      if (WXCOL[id]) { c.fillStyle = WXCOL[id]; c.fill(PPATH[id], 'evenodd'); }
+      if (FOGGED[id]) { c.fillStyle = hatchFill(c, s); c.fill(PPATH[id], 'evenodd'); }
+    }
+    if (s >= 0.4) {
+      c.strokeStyle = 'rgba(58,118,156,.95)';
+      c.lineWidth = (s >= 4 ? 3 : s >= 1 ? 2.2 : 1.5) * px; eachBucket(RIVER_B[0], Q, P => c.stroke(P));
+      if (s >= 0.9) { c.lineWidth = (s >= 4 ? 2 : 1.3) * px; eachBucket(RIVER_B[1], Q, P => c.stroke(P)); }
+    }
+    if (s >= 0.4) { c.strokeStyle = s >= 4 ? 'rgba(30,22,14,.5)' : 'rgba(30,22,14,.36)'; c.lineWidth = (s >= 8 ? 1.4 : s >= 4 ? 1.1 : 0.75) * px; eachBucket(INNER_B, Q, P => c.stroke(P)); }
+    // national borders: a soft light halo under a dark line
+    const bw = s >= 8 ? 2.4 : s >= 4 ? 1.9 : 1.5;
+    c.strokeStyle = 'rgba(245,236,210,.32)'; c.lineWidth = bw * 2.1 * px; eachBucket(NAT_B, Q, P => c.stroke(P));
+    c.strokeStyle = 'rgba(24,16,8,.88)'; c.lineWidth = bw * px; eachBucket(NAT_B, Q, P => c.stroke(P));
+    if (ME && !timelapseOwners) { c.strokeStyle = 'rgba(236,196,114,.75)'; c.lineWidth = 1.8 * px; c.setLineDash([5 * px, 3.5 * px]); eachBucket(PLAYER_B, Q, P => c.stroke(P)); c.setLineDash([]); }
+    c.restore();
+  }
   c.restore();
   for (const off of offs) {
     const Q = [R[0] - off, R[1], R[2] - off, R[3]];
     c.save(); c.translate(off, 0);
     c.fillStyle = 'rgb(52,104,132)'; c.fill(joined(LAKE_F, Q), 'evenodd');
-    if (s >= 0.4) {
-      c.strokeStyle = 'rgba(62,124,160,.95)';
-      c.lineWidth = (s >= 1 ? 2.2 : 1.5) * px; eachBucket(RIVER_B[0], Q, P => c.stroke(P));
-      if (s >= 0.9) { c.lineWidth = 1.3 * px; eachBucket(RIVER_B[1], Q, P => c.stroke(P)); }
-    }
-    if (s >= 0.4) { c.strokeStyle = 'rgba(30,22,14,.32)'; c.lineWidth = 0.75 * px; eachBucket(INNER_B, Q, P => c.stroke(P)); }
-    // national borders: a soft light halo under a dark line
-    c.strokeStyle = 'rgba(245,236,210,.32)'; c.lineWidth = 3.2 * px; eachBucket(NAT_B, Q, P => c.stroke(P));
-    c.strokeStyle = 'rgba(24,16,8,.88)'; c.lineWidth = 1.5 * px; eachBucket(NAT_B, Q, P => c.stroke(P));
     c.strokeStyle = 'rgba(28,24,18,.75)'; c.lineWidth = 1 * px; eachBucket(LAND_B, Q, P => c.stroke(P));
     c.strokeStyle = 'rgba(28,30,30,.5)'; c.lineWidth = 0.7 * px; eachBucket(LAKE_B, Q, P => c.stroke(P));
-    if (ME && !timelapseOwners) { c.strokeStyle = 'rgba(236,196,114,.75)'; c.lineWidth = 1.8 * px; c.setLineDash([5 * px, 3.5 * px]); eachBucket(PLAYER_B, Q, P => c.stroke(P)); c.setLineDash([]); }
     c.restore();
   }
+}
+// patterns sized in screen pixels whatever the zoom: s is the canvas scale (pixels per world unit)
+const PATCV = {};
+function patCanvas(key, draw) { if (!PATCV[key]) { const c = mkCanvas(8, 8); draw(c.getContext('2d')); PATCV[key] = c; } return PATCV[key]; }
+function stripeFill(c, col, s) {
+  const cv2 = patCanvas('st' + col, x => { x.strokeStyle = rgba(col, 0.9); x.lineWidth = 2.6; x.beginPath(); for (const o of [-8, 0, 8]) { x.moveTo(o, 8); x.lineTo(o + 8, 0); } x.stroke(); });
+  const p = c.createPattern(cv2, 'repeat'); p.setTransform(new DOMMatrix([1 / s, 0, 0, 1 / s, 0, 0])); return p;
+}
+function hatchFill(c, s) {
+  const cv2 = patCanvas('fog', x => { x.fillStyle = 'rgba(16,20,26,.16)'; x.fillRect(0, 0, 8, 8); x.strokeStyle = 'rgba(16,20,26,.22)'; x.lineWidth = 1; x.beginPath(); x.moveTo(0, 8); x.lineTo(8, 0); x.stroke(); });
+  const p = c.createPattern(cv2, 'repeat'); p.setTransform(new DOMMatrix([1 / s, 0, 0, 1 / s, 0, 0])); return p;
 }
 function renderTile(lv, tx, ty) {
   const s = Math.pow(2, lv), T = tileWorld(lv), px = Math.ceil(T * s);
@@ -309,7 +386,7 @@ function renderTile(lv, tx, ty) {
 }
 // draw the visible tiles; returns true if any were missing (they are rendered progressively)
 function drawTiles(c, budgetMs) {
-  const sz = cam.z * DPR, lv = clamp(Math.ceil(Math.log2(sz) - 0.15), LV_MIN, LV_MAX), s = Math.pow(2, lv), T = tileWorld(lv), nx = Math.round(WW / T), ny = Math.ceil(WH / T);
+  const sz = cam.z * DPR, lv = clamp(Math.round(Math.log2(sz) + 0.1), LV_MIN, LV_MAX), s = Math.pow(2, lv), T = tileWorld(lv), nx = Math.round(WW / T), ny = Math.ceil(WH / T);
   const [wx0, wy0] = s2w(0, 0), [wx1, wy1] = s2w(VW, VH);
   const t0 = performance.now(); let missing = false;
   const k = sz / s;   // tile pixels → screen pixels
@@ -398,74 +475,69 @@ function drawLabels(c, z) {
     c.restore();
   }
 }
-/* fog of war: provinces you cannot see are hatched over */
+/* fog of war: provinces you cannot see are hatched over (baked into the tiles) */
 function rebuildFog() {
   if (!G) return;
   const vis = PROV.map((p, i) => !ME || timelapseOwners ? 1 : visibleTo(ME, i) ? 1 : 0).join('');
   if (vis === fogKey) return;
-  // only the tiles around provinces whose visibility changed need repainting
-  if (fogKey.length === vis.length && (fogOn || !ME)) { for (let i = 0; i < NP; i++) if (vis[i] !== fogKey[i]) invalidateTiles(PBOX[i]); }
-  else invalidateTiles(null);
-  fogKey = vis; fogOn = false;
-  fogCtx.setTransform(1, 0, 0, 1, 0, 0); fogCtx.clearRect(0, 0, HW, HH);
-  if (!ME || timelapseOwners) return;
-  fogOn = true;
-  const c = mkCanvas(6, 6), x = c.getContext('2d');
-  x.fillStyle = 'rgba(16,20,26,.16)'; x.fillRect(0, 0, 6, 6); x.strokeStyle = 'rgba(16,20,26,.2)'; x.lineWidth = 1; x.beginPath(); x.moveTo(0, 6); x.lineTo(6, 0); x.stroke();
-  fogCtx.fillStyle = fogCtx.createPattern(c, 'repeat'); fogCtx.setTransform(0.5, 0, 0, 0.5, 0, 0);
-  for (let i = 0; i < NP; i++) if (vis[i] === '0') { const R = RUNS[i]; for (let k = 0; k < R.length; k += 3) fogCtx.fillRect(R[k + 1], R[k], R[k + 2] - R[k + 1] + 1, 1); }
+  for (let i = 0; i < NP; i++) { const f = vis[i] === '0' ? 1 : 0; if (f !== FOGGED[i]) { FOGGED[i] = f; if (worldBuilt) invalidateBox(i); } }
+  fogKey = vis;
 }
 /* weather: snow on cold provinces in winter, mud in spring and autumn */
 function rebuildWeather() {
   if (!G) return;
   const key = G.m + (timelapseOwners ? 'x' : '');
-  if (key === wxKey) return; wxKey = key; wxOn = false; invalidateTiles(null);
-  wxCtx.setTransform(1, 0, 0, 1, 0, 0); wxCtx.clearRect(0, 0, HW, HH);
-  if (timelapseOwners) return;
-  const snow = isWinter(), mud = isMud();
-  if (!snow && !mud) return;
-  wxOn = true;
-  wxCtx.setTransform(0.5, 0, 0, 0.5, 0, 0);
+  if (key === wxKey) return; wxKey = key;
+  const snow = !timelapseOwners && isWinter(), mud = !timelapseOwners && isMud();
   for (let i = 0; i < NP; i++) {
-    const P = PROV[i]; let col = null;
-    if (snow && P.cold) col = 'rgba(245,250,255,.42)'; else if (mud && P.muddy) col = 'rgba(96,70,40,.2)';
-    if (!col) continue; wxCtx.fillStyle = col; const R = RUNS[i]; for (let k = 0; k < R.length; k += 3) wxCtx.fillRect(R[k + 1], R[k], R[k + 2] - R[k + 1] + 1, 1);
+    const P = PROV[i], col = snow && P.cold ? 'rgba(245,250,255,.42)' : mud && P.muddy ? 'rgba(96,70,40,.2)' : null;
+    if (col !== WXCOL[i]) { WXCOL[i] = col; if (worldBuilt) invalidateBox(i); }
   }
 }
-// selection/target overlay painted with striped patterns, run by run
+// selection, targets and map-mode colours: a list of province fills drawn as vectors over the tiles
 const OVPAT = {};
-function stripePat(r, g, b, a) {
+function stripeCanvas(r, g, b, a) {
   const c = mkCanvas(6, 6), x = c.getContext('2d');
   x.fillStyle = `rgba(${r},${g},${b},${a})`; x.fillRect(0, 0, 6, 6);
   x.strokeStyle = `rgba(${r},${g},${b},${Math.min(1, a * 1.7)})`; x.lineWidth = 1.4;
   x.beginPath(); x.moveTo(-1, 7); x.lineTo(7, -1); x.moveTo(5, 7); x.lineTo(7, 5); x.moveTo(-1, 1); x.lineTo(1, -1); x.stroke();
-  return overCtx.createPattern(c, 'repeat');
+  return c;
 }
 function overlayPats() {
   if (OVPAT.sel) return OVPAT;
-  Object.assign(OVPAT, { sel:stripePat(255, 240, 200, 0.38), move:stripePat(110, 205, 95, 0.6), attack:stripePat(225, 70, 40, 0.58), naval:stripePat(90, 166, 214, 0.6), land:stripePat(90, 166, 214, 0.6), para:stripePat(190, 120, 230, 0.6), hover:stripePat(255, 236, 170, 0.5), pick:stripePat(255, 200, 80, 0.55), sea:stripePat(150, 210, 245, 0.32) });
+  Object.assign(OVPAT, { sel:stripeCanvas(255, 240, 200, 0.38), move:stripeCanvas(110, 205, 95, 0.6), attack:stripeCanvas(225, 70, 40, 0.58), naval:stripeCanvas(90, 166, 214, 0.6), land:stripeCanvas(90, 166, 214, 0.6), para:stripeCanvas(190, 120, 230, 0.6), hover:stripeCanvas(255, 236, 170, 0.5), pick:stripeCanvas(255, 200, 80, 0.55), sea:stripeCanvas(150, 210, 245, 0.32) });
   return OVPAT;
 }
-let hoverNat = null, overlayOn = false;
-function fillRuns(R, style) { overCtx.fillStyle = style; for (let k = 0; k < R.length; k += 3) overCtx.fillRect(R[k + 1], R[k], R[k + 2] - R[k + 1] + 1, 1); }
-const fillProv = (id, pat) => fillRuns(RUNS[id], pat), fillProvSolid = (id, col) => fillRuns(RUNS[id], col);
+let hoverNat = null, overlayOn = false, OVL = [], seaOn = false;
 function rebuildOverlay() {
   const P = overlayPats();
-  overCtx.clearRect(0, 0, GW, GH);
+  OVL = []; overCtx.clearRect(0, 0, HW, HH); seaOn = false;
   overlayOn = !!(sel || selFleet || hoverNat || mapMode === 'sup' || mapMode === 'res' || pickMode);
   if (!G) return;
-  if (mapMode === 'sup') for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (ME && !friendly(p.o, ME)) continue; const s = p.sup; fillProvSolid(i, s >= 1 ? 'rgba(90,170,80,.5)' : s >= 0.75 ? 'rgba(190,190,70,.55)' : s > 0.4 ? 'rgba(220,140,50,.6)' : s > 0 ? 'rgba(220,90,40,.65)' : 'rgba(200,30,30,.75)'); }
-  if (mapMode === 'res') for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (p.core === p.o) continue; fillProvSolid(i, `rgba(210,60,30,${0.15 + p.res / 130})`); }
-  if (hoverNat) for (let i = 0; i < NP; i++) if (G.prov[i].o === hoverNat) fillProv(i, P.hover);
-  if (pickMode) for (const id of pickMode.ids || []) fillProv(id, P.pick);
-  if (selFleet) for (const z of fleetTargetsSet) { const k = SEA_IDS.indexOf(z); if (k >= 0) fillRuns(ZRUNS[k], P.sea); }
-  if (sel) { fillProv(sel.id, P.sel); if (sel.multi) for (const id of sel.multi) fillProv(id, P.sel); for (const [id, k] of targets) fillProv(id, P[k]); }
+  if (mapMode === 'sup') for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (ME && !friendly(p.o, ME)) continue; const s = p.sup; OVL.push([i, s >= 1 ? 'rgba(90,170,80,.5)' : s >= 0.75 ? 'rgba(190,190,70,.55)' : s > 0.4 ? 'rgba(220,140,50,.6)' : s > 0 ? 'rgba(220,90,40,.65)' : 'rgba(200,30,30,.75)']); }
+  if (mapMode === 'res') for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (p.core === p.o) continue; OVL.push([i, `rgba(210,60,30,${0.15 + p.res / 130})`]); }
+  if (hoverNat) for (let i = 0; i < NP; i++) if (G.prov[i].o === hoverNat) OVL.push([i, P.hover]);
+  if (pickMode) for (const id of pickMode.ids || []) OVL.push([id, P.pick]);
+  if (selFleet) { overCtx.fillStyle = overCtx.createPattern(P.sea, 'repeat'); for (const z of fleetTargetsSet) { const k = SEA_IDS.indexOf(z); if (k < 0) continue; const R = ZRUNS[k]; for (let q = 0; q < R.length; q += 3) overCtx.fillRect(R[q + 1] / 2, R[q] / 2, (R[q + 2] - R[q + 1] + 1) / 2, 0.5); seaOn = true; } }
+  if (sel) { OVL.push([sel.id, P.sel]); if (sel.multi) for (const id of sel.multi) OVL.push([id, P.sel]); for (const [id, k] of targets) OVL.push([id, P[k]]); }
   selPath = null;
-  if (sel) { selPath = new Path2D(); const S = sel.multi ? new Set([sel.id, ...sel.multi]) : new Set([sel.id]); for (const [a, b, pts] of MAP.borders) if (S.has(a) !== S.has(b)) { selPath.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) selPath.lineTo(pts[i], pts[i + 1]); } }
+  if (sel) { selPath = new Path2D(); const S = sel.multi ? new Set([sel.id, ...sel.multi]) : new Set([sel.id]); for (const [a, b, pts] of LAND_BORDERS) if (S.has(a) !== S.has(b)) { selPath.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) selPath.lineTo(pts[i], pts[i + 1]); } }
   staticDirty = true;
 }
+// draw the overlay fills for the visible provinces, clipped to land
+function drawOverlay(c, off) {
+  if (!OVL.length) return;
+  const [a, b] = s2w(0, 0), [d, e] = s2w(VW, VH), V = [a - off, b, d - off, e], sc = DPR * cam.z;
+  c.save(); c.clip(joined(LAND_F, V), 'evenodd');
+  for (const [id, st] of OVL) {
+    const B = PBOX[id]; if (B[2] < V[0] || B[0] > V[2] || B[3] < V[1] || B[1] > V[3]) continue;
+    if (typeof st === 'string') c.fillStyle = st; else { const p = c.createPattern(st, 'repeat'); p.setTransform(new DOMMatrix([1 / sc, 0, 0, 1 / sc, 0, 0])); c.fillStyle = p; }
+    c.fill(PPATH[id], 'evenodd');
+  }
+  c.restore();
+}
 function markDirty(owners) { staticDirty = true; if (owners) ownersDirty = true; }
-function setMapMode(m) { mapMode = m; painted.fill(''); ownersDirty = true; rebuildOverlay(); staticDirty = true; }
+function setMapMode(m) { mapMode = m; painted.fill(''); TILES.clear(); ownersDirty = true; rebuildOverlay(); staticDirty = true; }
 
 /* ================= CAMERA ================= */
 const shake = { amp:0, t0:0, x:0, y:0 };
@@ -475,7 +547,7 @@ const s2w = (x, y) => [(x - VW / 2) / cam.z + cam.x, (y - VH / 2) / cam.z + cam.
 function gridAt(wx, wy, grid = GRIDD) { const gx = gx2(Math.floor(wx / GS)), gy = Math.floor(wy / GS); if (gy < 0 || gy >= GH) return -1; return grid[gy * GW + gx]; }
 function clampCam() {
   const minZ = Math.max(VW / WW * 1.02, VH / WH * 0.9);
-  cam.z = clamp(cam.z, Math.max(0.12, minZ), 6);
+  cam.z = clamp(cam.z, Math.max(0.12, minZ), 10);
   const hh = VH / 2 / cam.z;
   cam.y = clamp(cam.y, Math.min(hh - 80, WH / 2), Math.max(WH - hh + 80, WH / 2));
   if (!camAnim) cam.x = wrapX(cam.x);
@@ -509,10 +581,8 @@ function drawStatic(allowCache) {
   c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'low';
   for (const off of wrapOffsets()) {
     worldT(c, false, off);
-    if (overlayOn) { // only the visible part of the grid-sized overlay
-      const [a, b] = s2w(0, 0), [d, e] = s2w(VW, VH), gx0 = clamp(Math.floor((a + off) / GS) - 1, 0, GW), gy0 = clamp(Math.floor(b / GS) - 1, 0, GH), gx1 = clamp(Math.ceil((d + off) / GS) + 1, 0, GW), gy1 = clamp(Math.ceil(e / GS) + 1, 0, GH);
-      if (gx1 > gx0 && gy1 > gy0) c.drawImage(overCv, gx0, gy0, gx1 - gx0, gy1 - gy0, gx0 * GS, gy0 * GS, (gx1 - gx0) * GS, (gy1 - gy0) * GS);
-    }
+    if (seaOn) c.drawImage(overCv, 0, 0, WW, WH);
+    drawOverlay(c, off);
     if (selPath) { c.strokeStyle = 'rgba(255,236,170,.95)'; c.lineWidth = 2.6 / z; c.lineJoin = 'round'; c.stroke(selPath); }
   }
   worldT(c);
@@ -687,5 +757,8 @@ function miniSource() {
   if (miniVer === worldVersion) return miniCv;
   const m = miniCv.getContext('2d'); m.imageSmoothingEnabled = true; m.imageSmoothingQuality = 'high';
   m.drawImage(oceanCv, 0, 0, miniCv.width, miniCv.height); m.drawImage(polCv, 0, 0, miniCv.width, miniCv.height);
+  m.save(); m.scale(miniCv.width / WW, miniCv.height / WH);
+  for (let i = 0; i < NP; i++) { m.fillStyle = rgba(natColor(ownerOf(i)), 0.75); m.fill(PPATH[i], 'evenodd'); }
+  m.restore();
   miniVer = worldVersion; return miniCv;
 }

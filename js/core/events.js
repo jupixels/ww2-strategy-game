@@ -290,7 +290,7 @@ function usaJoin() {
     for (const c of ['CHI','PRC']) if (A(c) && W(c,'JAP') && !facOf(c) && !isHuman(c)) joinFaction(c, 'ALLIES', true);
     syncFaction('ALLIES');
   }
-  addFleet('NAT', 'USA', 'cap', 3); addFleet('NAT', 'USA', 'sub', 2);
+  const z = SEA.NAT ? 'NAT' : 'ATL'; addFleet(z, 'USA', 'cap', WORLD ? 3 : 6); addFleet(z, 'USA', 'sub', 2);
   for (const h of humanTags()) if (isAllied(h)) notify(h, '★', 'Lend-Lease begins', 'American convoys add production, oil and steel every month, and an expeditionary force will reach your shores.', 'medal');
 }
 function torch() {

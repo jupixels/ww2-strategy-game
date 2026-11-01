@@ -7,7 +7,7 @@ const OUT = process.env.OUT;
   const errs = [];
   page.on('console', m => { if ((m.type() === 'error' || m.type() === 'warning') && !/404|Failed to load resource/.test(m.text())) errs.push(m.type() + ': ' + m.text()); });
   page.on('pageerror', e => errs.push('PAGEERROR: ' + e.message + '\n' + (e.stack||'').split('\n').slice(0,6).join('\n')));
-  await page.goto('http://localhost:8765/index.html'); await page.waitForTimeout(1500);
+  await page.goto('http://localhost:8765/index.html' + (process.env.MAP ? '?map=' + process.env.MAP : '')); await page.waitForTimeout(1500);
   const sc = +(process.env.SC || 1936), tag = process.env.TAG || 'GER';
   await page.evaluate(([sc, tag]) => startGame({ humans:{ [tag]:{ name:'You' } }, diff:'normal', scenario:sc, mode:'sp', seed:5 }), [sc, tag]);
   await page.waitForTimeout(800);

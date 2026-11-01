@@ -5,7 +5,7 @@ const OUT = process.env.OUT;
   const page = await browser.newPage({ viewport:{ width:+(process.env.W||1280), height:+(process.env.H||800) }, isMobile:!!process.env.MOBILE, hasTouch:!!process.env.MOBILE, deviceScaleFactor:process.env.MOBILE ? 2 : 1 });
   const errs = [];
   page.on('pageerror', e => errs.push('PAGEERROR: ' + e.message + ' ' + (e.stack||'').split('\n')[1]));
-  await page.goto('http://localhost:8765/index.html'); await page.waitForTimeout(1500);
+  await page.goto('http://localhost:8765/index.html' + (process.env.MAP ? '?map=' + process.env.MAP : '')); await page.waitForTimeout(1500);
   if (OUT) await page.screenshot({ path:OUT + '/h0-menu.png' });
   await page.evaluate(() => showHotseat()); await page.waitForTimeout(300);
   if (OUT) await page.screenshot({ path:OUT + '/h1-setup.png' });

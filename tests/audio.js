@@ -9,7 +9,7 @@ const { chromium } = require(process.env.PW || '/opt/npm-tools/node_modules/play
   page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') errs.push(m.type() + ': ' + m.text()); });
   page.on('pageerror', e => errs.push('PAGEERROR: ' + e.message));
   page.on('response', r => { if (/\/assets\//.test(r.url()) && r.status() >= 400) missing.push(r.status() + ' ' + r.url()); });
-  await page.goto('http://localhost:8765/index.html'); await page.waitForTimeout(800);
+  await page.goto('http://localhost:8765/index.html' + (process.env.MAP ? '?map=' + process.env.MAP : '')); await page.waitForTimeout(800);
   await page.mouse.click(10, 10);
   await page.evaluate(() => { try { localStorage.removeItem('idom-sound'); } catch (e) {} SFX.init(); });
   await page.waitForTimeout(4000);

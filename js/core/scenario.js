@@ -43,7 +43,7 @@ function techsByYear(t, count) {
   let c = 0; for (const k of prio) { if (c >= count) break; const T = TECH[k]; if (!T || n.tech[k] || T.y > G.y || (T.req && !n.tech[T.req])) continue; n.tech[k] = 1; c++; }
 }
 const runEv = (id, k = 0) => { const e = EVENT_BY_ID[id]; try { e.opts[k].f(e.actor); } catch (err) { console.error('scenario', id, err); } G.ev[id] = 1; };
-function placeFleet(t, z, c, s) { if (!A(t) && t !== 'USA') return; addFleet(z, t, 'cap', c); addFleet(z, t, 'sub', s); }
+function placeFleet(t, z, c, s) { if (!A(t) && t !== 'USA' || !SEA[z]) return; addFleet(z, t, 'cap', c); addFleet(z, t, 'sub', s); }
 
 function applyScenario(year) {
   if (year >= 1939) {
@@ -61,12 +61,14 @@ function applyScenario(year) {
     { const h = homeProv('GER'); G.prov[h].air.ftr += 6; G.prov[h].air.bmb += 4; }
     hireGeneral('GER', true, 'Heinz Guderian');
     // two years into the war in China: the coast and the northern plain are Japanese
+    if (WORLD) {
     runEv('marcopolo');
     setOwner('JAP', 'Peking,Tientsin,Taiyuan,Jinan,Tsingtao,Xuzhou,Kalgan,Baotou,Shanghai,Nanjing,Hangzhou,Wuhan,Canton,Hainan,Nanchang,Zhengzhou', 2);
     if (A('CHI')) nat('CHI').capital = ID['Chongqing'];
     bolster('JAP', { inf:20, art:4, arm:2 }); bolster('CHI', { inf:20 }); deployToFronts('JAP', 0.4);
     { const n = nat('JAP'); n.pp += 100; n.oil += 30; n.steel += 30; }
     hireGeneral('JAP', true, 'Tomoyuki Yamashita');
+    }
   }
   if (year >= 1941) {
     // Poland divided, Scandinavia and the West overrun, France split, Balkans conquered
@@ -103,12 +105,14 @@ function applyScenario(year) {
     { const h = homeProv('SOV'); G.prov[h].air.ftr += 12; G.prov[h].air.bmb += 6; for (const nm of ['Kiev','Leningrad','Smolensk']) { const p = G.prov[ID[nm]]; if (p.o === 'SOV') p.air.ftr += 3; } }
     hireGeneral('GER', true, 'Erwin Rommel'); hireGeneral('SOV', true, 'Georgy Zhukov'); hireGeneral('ENG', true, 'Archibald Wavell');
     // Asia on the eve of the Pacific war: Japan in the Axis, French Indochina occupied, Changsha holding out
+    if (WORLD) {
     runEv('japaxis'); runEv('indochina');
     setOwner('JAP', 'Fuzhou,Nanning,Yinchuan', 2);
     bolster('JAP', { inf:16, art:4, arm:2 }); bolster('CHI', { inf:16 }); bolster('USA', { inf:10, arm:2 });
     { const n = nat('JAP'); n.pp += 120; n.oil += 40; n.steel += 40; techsByYear('JAP', 4); }
     { const n = nat('USA'); n.pp += 150; techsByYear('USA', 4); }
     placeFleet('JAP', 'PHS', 3, 2);
+    }
   }
   if (year >= 1944) {
     usaJoin(); G.ev.usa = 1; runEv('torch'); G.ev.stalingrad = 1; G.ev.kursk = 1;
@@ -130,6 +134,7 @@ function applyScenario(year) {
     placeFleet('ENG', 'CHN', 6, 2); placeFleet('USA', 'CHN', 6, 0); placeFleet('ENG', 'WMD', 4, 2);
     hireGeneral('ENG', true, 'Bernard Montgomery'); hireGeneral('SOV', true, 'Konstantin Rokossovsky');
     // the Pacific: Japan's perimeter from Burma to the Marianas, already breached in the Solomons and Marshalls
+    if (WORLD) {
     setOwner('JAP', 'Manila,Visayas,Davao,Guam,Wake,Hong Kong,Singapore,Kuala Lumpur,Kota Bharu,Kuching,Brunei,Sandakan,Rangoon,Mandalay,Mergui,Myitkyina', 2);
     setOwner('JAP', 'Batavia,Surabaya,Palembang,Medan,Padang,Balikpapan,Banjarmasin,Pontianak,Makassar,Manado,Ambon,Kupang,Dili,Hollandia,Wewak', 2);
     setOwner('JAP', 'Changsha,Guilin,Guiyang', 3);
@@ -141,6 +146,7 @@ function applyScenario(year) {
     { const h = homeProv('USA'); G.prov[h].air.ftr += 10; G.prov[h].air.bmb += 8; }
     placeFleet('USA', 'CPA', 10, 4); placeFleet('USA', 'MAR', 6, 2); placeFleet('JAP', 'PHS', 4, 3);
     hireGeneral('USA', true, 'Douglas MacArthur');
+    }
     dday(); G.ev.dday = 1;
   }
   // everything older than the start date has already happened

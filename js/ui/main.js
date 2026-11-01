@@ -2,7 +2,8 @@
 /* ================= GAME CONTROLLER =================
    mode: 'sp' single player · 'hot' hot-seat on one device · 'host' / 'client' online · 'watch' spectating.
    Every action goes through Ctl.act(command): run locally (sp, hot, host) or sent to the host (client). */
-const SAVE_KEY = 'iron-dominion-v4';
+// each map keeps its own saves
+const SAVE_KEY = WORLD ? 'iron-dominion-v4-world' : 'iron-dominion-v4';
 const Ctl = {
   mode:'sp',
   canAct() {
@@ -97,7 +98,7 @@ const Ctl = {
 };
 const activeHumans = () => humanTags().filter(t => A(t) && !G.humans[t].dead && !G.humans[t].away);
 function serial() { const o = Object.assign({}, G); delete o.warSet; return JSON.stringify(o); }
-function loadSaved(key = SAVE_KEY) { try { const s = localStorage.getItem(key); if (!s) return null; const g = JSON.parse(s); return g && g.v === 4 ? g : null; } catch (e) { return null; } }
+function loadSaved(key = SAVE_KEY) { try { const s = localStorage.getItem(key); if (!s) return null; const g = JSON.parse(s); return g && g.v === 4 && g.prov && g.prov.length === NP ? g : null; } catch (e) { return null; } }
 function adopt(g) { G = g; rebuildWarSet(); ownersDirty = true; staticDirty = true; painted.fill(''); fogKey = ''; wxKey = ''; }
 
 // instant battles (single player, hot-seat, scripted D-Day) animate as they happen
@@ -136,7 +137,7 @@ function startPlay(fresh) {
   if (fresh && ME && Ctl.mode !== 'hot') {
     Ctl.save();
     const n = nat(ME);
-    sendNews(ME, { title:'A New Year Dawns', head:`${n.name} Prepares for the Storm`, dek:`${dateStr()}: the cabinet meets as the world ${G.y >= 1939 ? 'burns' : 'slides toward war'}`, text:`${NATDEF[ME].brief || SCENARIOS[G.sc].d} Select a province to command its armies, pick a National Focus, start research and play your cards. Press ${Ctl.mode === 'sp' ? 'End Month' : 'Ready'} when done.${n.agendas && n.agendas.length ? ' You have been handed secret agendas — see the Destiny panel.' : ''}`, plate:ME });
+    sendNews(ME, { title:'A New Year Dawns', head:`${n.name} Prepares for the Storm`, dek:`${dateStr()}: the cabinet meets as ${REALM} ${G.y >= 1939 ? 'burns' : 'slides toward war'}`, text:`${NATDEF[ME].brief || SCENARIOS[G.sc].d} Select a province to command its armies, pick a National Focus, start research and play your cards. Press ${Ctl.mode === 'sp' ? 'End Month' : 'Ready'} when done.${n.agendas && n.agendas.length ? ' You have been handed secret agendas — see the Destiny panel.' : ''}`, plate:ME });
     flushInbox();
   } else if (ME && Ctl.mode !== 'hot') { shownUids.clear(); flushInbox(); }
 }

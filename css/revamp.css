@@ -25,6 +25,14 @@
 .rank b{display:block;font-family:var(--f-display);font-size:22px;letter-spacing:.05em}
 .rank span{font-size:13px;color:var(--muted)}
 .mbtns{display:flex;flex-direction:column;gap:8px}
+/* map choice on the main menu: Europe or the world */
+.mapsel{display:flex;align-items:stretch;gap:6px;margin-bottom:10px}
+.mapsel>span{align-self:center;font:700 11px/1 var(--fb,'Barlow Semi Condensed',sans-serif);letter-spacing:.14em;text-transform:uppercase;color:#cdbf98;margin-right:4px}
+.mapsel button{flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:8px 10px;background:rgba(14,18,20,.78);border:1px solid rgba(240,205,127,.22);border-radius:6px;color:#e8dcc0;cursor:pointer;text-align:left}
+.mapsel button b{font:700 15px/1 'Big Shoulders Stencil Display',Impact,sans-serif;letter-spacing:.04em}
+.mapsel button em{font:400 11.5px/1.25 'Barlow Semi Condensed',sans-serif;font-style:normal;color:#a99f86}
+.mapsel button.on{border-color:#f0cd7f;background:rgba(60,48,22,.85);box-shadow:inset 0 0 0 1px rgba(240,205,127,.35)}
+.mapsel button:hover:not(.on){border-color:rgba(240,205,127,.5)}
 .mbtn{text-align:left;padding:13px 16px;border-radius:12px;background:var(--panel);border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:3px;transition:transform .15s,border-color .15s}
 .mbtn:hover{border-color:var(--brass);transform:translateX(3px)}
 .mbtn b{font-family:var(--f-display);font-weight:800;font-size:21px;letter-spacing:.05em;display:flex;align-items:center;gap:8px}

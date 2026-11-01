@@ -92,14 +92,14 @@ function checkVictory() {
       const s = sum(teams[k], share), hum = teams[k].filter(isHuman);
       if (!hum.length) continue;
       const rivals = Object.keys(teams).filter(x => x !== k && teams[x].some(m => nat(m).major));
-      if (s >= 0.6 || (G.turn > 2 && !rivals.some(x => teams[x].some(m => W(m, teams[k][0]))) && caps.filter(c => friendly(O(c), hum[0])).length >= 5)) { G.over = { type:'victory', winners:hum, reason:`${G.facs[k] ? G.facs[k].n : natName(k)} controls the world.` }; return; }
+      if (s >= (WORLD ? 0.6 : 0.75) || (G.turn > 2 && !rivals.some(x => teams[x].some(m => W(m, teams[k][0]))) && caps.filter(c => friendly(O(c), hum[0])).length >= caps.length - 2)) { G.over = { type:'victory', winners:hum, reason:`${G.facs[k] ? G.facs[k].n : natName(k)} controls ${REALM}.` }; return; }
     }
   } else {
-    for (const h of alive) if (share(h) >= 0.5 || caps.every(n => O(n) === h)) { G.over = { type:'victory', winners:[h], reason:`${natName(h)} rules the world.` }; return; }
+    for (const h of alive) if (share(h) >= (WORLD ? 0.5 : 0.75) || caps.every(n => O(n) === h)) { G.over = { type:'victory', winners:[h], reason:`${natName(h)} rules ${REALM}.` }; return; }
   }
   if (nowNum() >= endTurn && !G.flags.endless) {
     let best = null, bs = -1;
     if (G.gm === 'team' || G.gm === 'coop') { const ts = {}; for (const h of hs) { const k = teamOf(h); ts[k] = (ts[k] || 0) + scoreOf(h); } for (const k in ts) if (ts[k] > bs) { bs = ts[k]; best = k; } G.over = { type:'time', winners:hs.filter(h => teamOf(h) === best), reason:'The war ends. Highest team score wins.' }; }
-    else { for (const h of hs) { const s = scoreOf(h); if (s > bs) { bs = s; best = h; } } G.over = { type:'time', winners:hs.length > 1 ? [best] : [], reason:hs.length > 1 ? `${natName(best)} finishes with the highest score.` : `The campaign ends. You hold ${Math.round(share(hs[0]) * 100)}% of the world.` }; }
+    else { for (const h of hs) { const s = scoreOf(h); if (s > bs) { bs = s; best = h; } } G.over = { type:'time', winners:hs.length > 1 ? [best] : [], reason:hs.length > 1 ? `${natName(best)} finishes with the highest score.` : `The campaign ends. You hold ${Math.round(share(hs[0]) * 100)}% of ${REALM}.` }; }
   }
 }

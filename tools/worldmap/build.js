@@ -1,12 +1,12 @@
 // Builds data/map.js: the world map in a Miller projection that wraps east–west.
-// Europe keeps the 234 legacy provinces (resampled from tools/worldmap/legacy_map.js through its fitted conic projection);
+// Europe keeps the 234 legacy provinces (resampled from data/map-europe.js through its fitted conic projection);
 // everything else grows from the seed cities in seeds.js, constrained by modern borders (tidy colonial lines).
 // Usage: node tools/worldmap/build.js <dir with Natural Earth 50m GeoJSON> [preview.png]
 'use strict';
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
 const GEO = process.argv[2]; if (!GEO) { console.error('usage: build.js <geojson dir> [preview.png]'); process.exit(1); }
 const OUT = path.join(__dirname, '..', '..', 'data', 'map.js');
-const OLD = require('./legacy_map.js'), OP = require('./oldproj.json');
+const OLD = require('../../data/map-europe.js'), OP = require('./oldproj.json');
 const { PROVS, RES, SEAS, SEA_LINKS, LAND_LINKS } = require('./seeds.js');
 const LEGACY_SEA = { ARC:['NOR'], NOR:['ARC','NSE','ATL'], NSE:['NOR','CHN','BAL'], CHN:['NSE','ATL'], ATL:['NOR','CHN','WMD'], BAL:['NSE'], WMD:['ATL','EMD'], EMD:['WMD','BLK','IND'], BLK:['EMD'], IND:['EMD'], CAS:[] };
 const LEGACY_COAST = {
@@ -347,16 +347,26 @@ function traceBorders(lab, isPair) {
   return out;
 }
 function smoothLine(pts, closed) {
-  let p = pts;
-  for (let it = 0; it < 2; it++) { const q = closed ? [] : [p[0], p[1]]; const n = p.length / 2;
+  // straighten the grid staircase first (a step is one cell, GS units), then round the corners with Chaikin
+  let p = closed ? simplifyRing(pts.slice(0, -2), GS * 0.6).concat(pts.slice(0, 2)) : simplify(pts, GS * 0.6);
+  if (closed && p.length < 8) p = pts;
+  for (let it = 0; it < 3; it++) { const q = closed ? [] : [p[0], p[1]]; const n = p.length / 2;
     for (let i = 0; i < n - 1; i++) { const x0 = p[i * 2], y0 = p[i * 2 + 1], x1 = p[i * 2 + 2], y1 = p[i * 2 + 3]; q.push(x0 * 0.75 + x1 * 0.25, y0 * 0.75 + y1 * 0.25, x0 * 0.25 + x1 * 0.75, y0 * 0.25 + y1 * 0.75); }
     if (closed) q.push(q[0], q[1]); else q.push(p[p.length - 2], p[p.length - 1]); p = q; }
-  return simplify(p, 0.35).map(r1);
+  return simplify(p, 0.12).map(r1);
 }
-const isLandLand = (a, b, i, j) => LAND[i] === 1 && LAND[j] === 1;
-const borders = traceBorders(ID, isLandLand);
+// Province outlines: trace a label grid where provinces reach a few cells out to sea (water beyond is label -1),
+// so every boundary chain is shared verbatim by the two sides. The client links each province's chains into
+// rings and fills them as crisp vector shapes; chains between two provinces are also the drawn borders.
+const DIL = new Int16Array(N).fill(-1);
+{ const q = []; for (let i = 0; i < N; i++) if (LAND[i] === 1 && ID[i] >= 0) { DIL[i] = ID[i]; q.push(i); }
+  const d = new Uint8Array(N);
+  for (let h = 0; h < q.length; h++) { const i = q[h]; if (d[i] >= 4) continue; nb4(i, j => { if (DIL[j] < 0) { DIL[j] = DIL[i]; d[j] = d[i] + 1; q.push(j); } }); } }
+const SHIFT = Int16Array.from(DIL, v => v + 1);   // water becomes label 0 so it can be traced too
+const chains = traceBorders(SHIFT, () => true).map(([a, b, pts]) => [a - 1, b - 1, pts]);
+const borders = chains;
 const seaBorders = traceBorders(ZONE, () => true).map(([a, b, pts]) => [zones[a].id, zones[b].id, pts]);
-log('borders', borders.length, 'sea borders', seaBorders.length);
+log('chains', borders.length, 'between provinces', borders.filter(c => c[0] >= 0 && c[1] >= 0).length, 'sea borders', seaBorders.length);
 
 /* ---------- rivers ---------- */
 const rivers = [];

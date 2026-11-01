@@ -3,7 +3,7 @@ const { chromium } = require(process.env.PW || '/opt/npm-tools/node_modules/play
   const browser = await chromium.launch({ executablePath:process.env.PW ? undefined : '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome' });
   const page = await browser.newPage({ viewport:{ width:1440, height:900 } });
   page.on('pageerror', e => console.log('PAGEERROR: ' + e.message));
-  await page.goto('http://localhost:8765/index.html'); await page.waitForTimeout(1500);
+  await page.goto('http://localhost:8765/index.html' + (process.env.MAP ? '?map=' + process.env.MAP : '')); await page.waitForTimeout(1500);
   await page.evaluate(() => startGame({ humans:{ SOV:{ name:'You' } }, diff:'normal', scenario:1941, mode:'sp', seed:5 }));
   await page.waitForTimeout(500);
   await page.evaluate(() => { closeModal(); for (const it of [...inboxOf(ME)]) answer(ME, it.uid, 0); });

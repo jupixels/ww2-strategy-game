@@ -118,7 +118,7 @@ const Net = {
   broadcast(m) { if (this.tr) this.tr.broadcast(m); },
   /* ---------- host side ---------- */
   lobbyChanged() {
-    const L = { t:'lobby', code:this.code, players:this.players.map(p => ({ id:p.id, name:p.name, tag:p.tag, host:!!p.host, away:!!p.away })), settings:this.settings, started:this.started };
+    const L = { t:'lobby', map:MAPKIND, code:this.code, players:this.players.map(p => ({ id:p.id, name:p.name, tag:p.tag, host:!!p.host, away:!!p.away })), settings:this.settings, started:this.started };
     this.broadcast(L); this.onLobby && this.onLobby(L);
   },
   onHostMsg(from, d) {
@@ -227,6 +227,8 @@ const Net = {
     if (d.t === 'hb') return;
     if (d.t === 'welcome') { this.myId = d.id; return; }
     if (d.t === 'denied') { this.onError && this.onError(d.why); return; }
+    // the host plays on the other map: reload on that map and rejoin the room
+    if (d.t === 'lobby' && d.map && d.map !== MAPKIND) { const q = '?join=' + d.code + (this.kind === 'local' ? '&local=1' : ''); this.close(); switchMap(d.map, q); return; }
     if (d.t === 'lobby') { this.code = d.code; this.settings = d.settings; this.players = d.players; this.onLobby && this.onLobby(d); return; }
     if (d.t === 'chat') { this.chat.push(d); if (this.chat.length > 80) this.chat.shift(); onChat(d); return; }
     if (d.t === 'toast') { toast(d.ic || '•', d.title || '', d.body || '', d.kind || ''); return; }

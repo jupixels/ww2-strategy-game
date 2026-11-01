@@ -136,7 +136,7 @@ function renderDrawer() {
     const s = n.st;
     h = dh('War Ledger', `${esc(n.name)}, ${dateStr()} · score ${scoreOf(pl)}`);
     h += kv([[s.won, 'Victories'], [s.lost, 'Defeats'], [s.caps, 'Captures'], [s.kills, 'Enemy losses'], [s.losses, 'Our losses'], [s.nav, 'Naval wins'], [medalsOf(pl).length + '/' + Object.keys(ACH).length, 'Medals'], [n.played, 'Cards played'], [scoreOf(pl), 'Score']]);
-    h += `<div class="sect">Share of the world</div><canvas id="vpGraph" class="graph"></canvas><div class="legendrow" id="vpLegend"></div>`;
+    h += `<div class="sect">Share of ${REALM}</div><canvas id="vpGraph" class="graph"></canvas><div class="legendrow" id="vpLegend"></div>`;
     h += `<div class="sect">Medals</div><div class="req">${Object.entries(ACH).map(([k, a]) => `<span class="${medalsOf(pl).includes(k) ? 'ok' : ''}" title="${esc(a.d)}">${medalsOf(pl).includes(k) ? '✪ ' : ''}${a.n}</span>`).join('')}</div>`;
     h += `<div class="sect">Dispatches</div>${G.log.slice(0, 50).map(l => `<div class="logline"><time>${l.d}</time>${l.txt}</div>`).join('')}`;
   }

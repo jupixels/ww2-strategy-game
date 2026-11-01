@@ -1,7 +1,7 @@
-// Recovers the conic projection of the legacy Europe map (tools/worldmap/legacy_map.js) from its graticule:
+// Recovers the conic projection of the legacy Europe map (data/map-europe.js) from its graticule:
 // parallels are concentric circles, meridians are rays from their centre. Writes oldproj.json.
 const fs = require('fs'), path = require('path');
-const OLD = require(path.resolve(process.argv[2] || path.join(__dirname, 'legacy_map.js')));
+const OLD = require(path.resolve(process.argv[2] || path.join(__dirname, '..', '..', 'data', 'map-europe.js')));
 const ptsOf = l => { const r = []; for (let i = 0; i < l.length; i += 2) r.push([l[i], l[i + 1]]); return r; };
 // meridian lines: intersect them pairwise for the apex
 const mer = OLD.grat.slice(0, 11).map(l => { const p = ptsOf(l); return [p[0], p[p.length - 1]]; });

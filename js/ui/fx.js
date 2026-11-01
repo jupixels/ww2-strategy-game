@@ -192,19 +192,10 @@ function whiteCloud() {
   return (SPR.wc = c);
 }
 function drawClouds(c, now, z) {
-  const a = clamp((0.55 - z) / 0.3, 0, 0.6); if (a <= 0 || timelapseOwners) return;
+  const a = clamp((0.55 - z) / 0.3, 0, 0.6); if (a <= 0 || timelapseOwners || !WORLD) return;
   const sp = whiteCloud(); c.globalAlpha = a;
   for (const C of CLOUDS) { const x = nearX(C.x + now * 0.004 * C.v), r = C.r; c.drawImage(sp, x - r, C.y - r * 0.6, r * 2, r * 1.2); }
   c.globalAlpha = 1;
-}
-
-// share of the view that is open water drives the sea / land ambience
-let lastAmbSound = 0;
-function mapAmbience() {
-  if (!G || G.preview || !$('#start').hidden || timelapseOwners) { SFX.stopAmbience(); return; }
-  let sea = 0, n = 0;
-  for (let i = 0; i < 6; i++) for (let j = 0; j < 4; j++) { const [wx, wy] = s2w(VW * (i + 0.5) / 6, VH * (j + 0.5) / 4); if (gridAt(wx, wy, GRID) < 0) sea++; n++; }
-  SFX.ambience(sea / n, cam.z);
 }
 
 /* ---------- the frame loop ---------- */
@@ -237,9 +228,8 @@ function frame(now) {
   if (staticDirty) { drawStatic(!moving && !drift); redraw = true; }
   else if (lastMode === 'fast' && !moving && !drift) { drawStatic(true); redraw = true; }
   ambientSpawn(now);
-  if (now - lastAmbSound > 400) { lastAmbSound = now; mapAmbience(); }
   const busyFx = FX.length || PARTS.length || shake.amp;
-  const ambient = hasFront || sel || selFleet || isWinter() || isMud() || G.orders.length || cam.z < 0.55;
+  const ambient = hasFront || sel || selFleet || isWinter() || isMud() || G.orders.length || WORLD && cam.z < 0.55;
   if (!redraw && !busyFx) { if (!ambient || now - lastAmbient < 40) { tutTick(); return; } }
   lastAmbient = now;
   ctx.setTransform(1, 0, 0, 1, 0, 0);

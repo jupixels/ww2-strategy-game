@@ -8,7 +8,7 @@ const OUT = process.env.OUT || '/tmp/shots';
   const errs = [];
   page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') errs.push(m.type() + ': ' + m.text()); });
   page.on('pageerror', e => errs.push('PAGEERROR: ' + e.message + '\n' + (e.stack||'').split('\n').slice(0,4).join('\n')));
-  await page.goto('http://localhost:8765/index.html');
+  await page.goto('http://localhost:8765/index.html' + (process.env.MAP ? '?map=' + process.env.MAP : ''));
   await page.waitForTimeout(2500);
   await page.screenshot({ path:OUT + '/01-menu.png' });
   const steps = (process.env.STEPS || 'camp').split(',');

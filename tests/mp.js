@@ -7,7 +7,7 @@ const OUT = process.env.OUT;
   const A = await ctx.newPage(), B = await ctx.newPage();
   const errs = [];
   for (const [n, p] of [['A', A], ['B', B]]) { p.on('pageerror', e => errs.push(n + ' PAGEERROR: ' + e.message + ' ' + (e.stack||'').split('\n')[1])); p.on('console', m => { if (m.type() === 'error' && !/404|Failed to load/.test(m.text())) errs.push(n + ' ' + m.text()); }); }
-  await A.goto('http://localhost:8765/index.html'); await B.goto('http://localhost:8765/index.html');
+  await A.goto('http://localhost:8765/index.html' + (process.env.MAP ? '?map=' + process.env.MAP : '')); await B.goto('http://localhost:8765/index.html' + (process.env.MAP ? '?map=' + process.env.MAP : ''));
   await A.waitForTimeout(1200);
   await A.evaluate(() => { netKind = 'local'; myName = 'Alice'; showHost(); });
   await A.waitForTimeout(500);

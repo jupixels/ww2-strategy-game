@@ -1,5 +1,8 @@
 'use strict';
 /* ================= STATIC GAME DATA ================= */
+// true on the world map, false on the original Europe map (the map data decides)
+const WORLD = !!MAP.seas;
+const REALM = WORLD ? 'the world' : 'Europe';
 const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 const MONTHS_L = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const TER = {
@@ -127,7 +130,7 @@ const NATDEF = {
 };
 const MAJORS = ['GER','ENG','FRA','ITA','SOV','USA','JAP'];
 // capitals of the great powers: hold them all to win outright
-const WORLD_CAPS = ['Berlin','London','Paris','Rome','Moscow','Washington','Tokyo'];
+const WORLD_CAPS = WORLD ? ['Berlin','London','Paris','Rome','Moscow','Washington','Tokyo'] : ['Berlin','London','Paris','Rome','Moscow'];
 
 /* ---------- generals ---------- */
 const TRAITS = {
@@ -267,7 +270,8 @@ const DECISIONS = [
   {k:'sphere',who:['JAP'],n:'Greater East Asia Co-Prosperity Sphere',name:'Empire of Japan',color:'#c9a85a',need:['Tokyo','Nanjing','Manila','Singapore','Batavia'],d:'"Asia for the Asiatics" — under the Rising Sun.'},
   {k:'unify',who:['CHI','PRC'],n:'Unify China',name:'United China',color:'#4b5f88',need:['Nanjing','Peking','Canton','Hsinking','Urumqi','Lhasa'],d:'Every warlord, every province, every frontier under one flag.'},
   {k:'monroe',who:['USA'],n:'Pax Americana',name:'American Century',color:'#4f78b0',need:['Washington','London','Paris','Tokyo','Berlin'],d:'The New World remakes the Old.'},
-  {k:'caesar',who:null,n:'Masters of the World',name:null,color:null,need:'45%',d:'Hold 45% of the world\'s victory points to crown your dominion.'},
+  WORLD ? {k:'caesar',who:null,n:'Masters of the World',name:null,color:null,need:'45%',d:'Hold 45% of the world\'s victory points to crown your dominion.'}
+        : {k:'caesar',who:null,n:'Masters of Europe',name:null,color:null,need:'60%',d:'Hold 60% of Europe\'s victory points to crown your dominion.'},
 ];
 
 /* ---------- strategy cards ---------- */
@@ -303,9 +307,36 @@ const HAND_MAX = 4;
 // generated with the map (data/map.js): x,y is where the fleet marker sits; which provinces touch which zone is in MAP.prov.
 // Straits: passage between two zones closes to anyone at war with the strait's owner.
 const SEA = {};
-for (const [k, n, x, y, adj] of MAP.seas) SEA[k] = { n, x, y, adj:adj ? adj.split(' ') : [] };
+if (WORLD) for (const [k, n, x, y, adj] of MAP.seas) SEA[k] = { n, x, y, adj:adj ? adj.split(' ') : [] };
+else Object.assign(SEA, {
+  ARC:{n:'Barents Sea',       x:1520, y:70,   adj:['NOR']},
+  NOR:{n:'Norwegian Sea',     x:900,  y:260,  adj:['ARC','NSE','ATL']},
+  NSE:{n:'North Sea',         x:975,  y:545,  adj:['NOR','CHN','BAL']},
+  CHN:{n:'English Channel',   x:790,  y:722,  adj:['NSE','ATL']},
+  ATL:{n:'Atlantic',          x:500,  y:780,  adj:['NOR','CHN','WMD']},
+  BAL:{n:'Baltic Sea',        x:1225, y:525,  adj:['NSE']},
+  WMD:{n:'Western Mediterranean', x:900, y:1075, adj:['ATL','EMD']},
+  EMD:{n:'Eastern Mediterranean', x:1380, y:1262, adj:['WMD','BLK','IND']},
+  BLK:{n:'Black Sea',         x:1565, y:940,  adj:['EMD']},
+  IND:{n:'Red Sea & Gulf',    x:1965, y:1395, adj:['EMD']},
+  CAS:{n:'Caspian Sea',       x:1890, y:805,  adj:[]},
+});
 const STRAITS = { 'ATL|WMD':'Gibraltar', 'BLK|EMD':'Istanbul', 'EMD|IND':'Cairo', 'BAL|NSE':'Copenhagen', 'CAR|MPA':'Panama', 'BOB|SCS':'Singapore' };
 const SEAKEY = (a, b) => a < b ? a + '|' + b : b + '|' + a;
+// which provinces touch which sea zone on the Europe map (the world map carries this in its data)
+const COAST_ZONES = {
+  ARC:'Murmansk Arkhangelsk Naryan-Mar Pechora',
+  NOR:'Reykjavík Bergen Trondheim Narvik Inverness',
+  NSE:'Hamburg Essen Kiel Groningen Amsterdam Rotterdam Brussels Lille London Norwich Newcastle Inverness Jutland Oslo Gothenburg Bergen',
+  CHN:'Normandy Brest Plymouth London Lille',
+  ATL:'Glasgow Belfast Dublin Cork Cardiff Manchester Plymouth Brest Nantes Bordeaux Bilbao Galicia Porto Lisbon Seville Rabat Marrakesh Spanish_Sahara Reykjavík Gibraltar Tetuán',
+  BAL:'Kiel Stettin Königsberg Bydgoszcz Danzig Copenhagen Malmö Stockholm Sundsvall Kiruna Oulu Tampere Helsinki Viipuri Leningrad Tallinn Riga Kaunas Pskov Novgorod',
+  WMD:'Gibraltar Tetuán Granada Valencia Barcelona Zaragoza Marseille Toulouse Corsica Sardinia Algiers Oran Constantine Tunis Turin Florence Rome Naples Sicily Malta Tripoli Calabria',
+  EMD:'Malta Sicily Calabria Bari Ancona Venice Trieste Split Zagreb Ljubljana Sarajevo Tirana Ioannina Athens Thessaloniki Crete Rhodes Izmir Antalya Adana Cyprus Aleppo Damascus Jerusalem Alexandria Cairo Benghazi Tobruk Tripoli Istanbul Siwa',
+  BLK:'Istanbul Varna Constanța Bessarabia Odessa Sevastopol Krasnodar Rostov Trabzon Erzurum Ankara Tbilisi',
+  IND:'Basra Shiraz Hofuf Medina Tabuk Cairo',
+  CAS:'Baku Astrakhan Guryev Krasnovodsk Makhachkala Tehran Tabriz Grozny',
+};
 
 /* ---------- strategic resources ---------- */
 const RESOURCES = {

@@ -3,7 +3,7 @@ const { chromium } = require(process.env.PW || '/opt/npm-tools/node_modules/play
   const browser = await chromium.launch({ executablePath:process.env.PW ? undefined : '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome' });
   const page = await browser.newPage({ viewport:{ width:1440, height:900 } });
   const errs = []; page.on('pageerror', e => errs.push(e.message + ' ' + (e.stack||'').split('\n')[1]));
-  await page.goto('http://localhost:8765/index.html'); await page.waitForTimeout(1200);
+  await page.goto('http://localhost:8765/index.html' + (process.env.MAP ? '?map=' + process.env.MAP : '')); await page.waitForTimeout(1200);
   await page.evaluate(() => startTutorial()); await page.waitForTimeout(500);
   const step = () => page.evaluate(() => G.tut ? G.tut.i + ':' + TUT[G.tut.i].h : 'DONE');
   const wait = async (ms = 500) => page.waitForTimeout(ms);

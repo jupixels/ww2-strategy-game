@@ -77,6 +77,9 @@ function newGame(opts) {
     facs:{ AXIS:{n:'Axis',lead:'GER',m:['GER']}, ALLIES:{n:'Allies',lead:'ENG',m:['ENG','FRA','CAN','AST','NZL','SAF','RAJ']}, COMINTERN:{n:'Comintern',lead:'SOV',m:['SOV','MON']},
       SPHERE:{n:'Co-Prosperity Sphere',lead:'JAP',m:['JAP','MAN']} },
     fleet:{}, gens:[], genId:1, ev:{}, flags:{}, log:[], news:[], inbox:{}, hist:[], over:false, orders:[], daily:opts.daily || null };
+  // alliances only hold nations that exist on this map
+  for (const k in G.facs) { const f = G.facs[k]; f.m = f.m.filter(t => !NATDEF[t].off); if (!f.m.includes(f.lead)) delete G.facs[k]; }
+  G.map = WORLD ? 'world' : 'europe';
   for (const z in SEA) G.fleet[z] = {};
   for (const t in NATDEF) G.nat[t] = newNation(t);
   for (const p of PROV) {
@@ -103,7 +106,7 @@ function newGame(opts) {
 }
 const START_FORTS = { Strasbourg:3, Metz:3, Sudetenland:2, Viipuri:2, Sevastopol:2, Gibraltar:3, Malta:2, Bern:2, Leningrad:1, Moscow:1, Saarbrücken:1, Brussels:1, Istanbul:1, Bratislava:1, Brno:1,
   Singapore:3, Manila:1, Honolulu:2, 'Hong Kong':1, Vladivostok:2, Truk:1, Panama:1 };
-function addLandAt(name, k, n) { G.prov[ID[name]].u[k] += n; }
+function addLandAt(name, k, n) { if (ID[name] != null) G.prov[ID[name]].u[k] += n; }
 function placeStartingForces(t) {
   const d = NATDEF[t]; if (!d.u) return;
   // colonies get a token garrison of their own; the home army stays at home

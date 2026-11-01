@@ -13,9 +13,11 @@ function aliveAt(sc) {
 const stars = k => '◆'.repeat(6 - k) + '◇'.repeat(k - 1);
 function previewWorld() {
   if (!G || !G.preview) { Hooks.L.toast = Hooks.L.toast; newGame({ humans:{}, seed:42 }); G.preview = true; ME = null; adopt(G); }
-  if (!cam.x && !cam.y) { const B = PROV[ID['Berlin']]; cam.x = B.x + 250; cam.y = B.y + 260; cam.z = 0.45; clampCam(); }
+  if (WORLD && !cam.x && !cam.y) { const B = PROV[ID['Berlin']]; cam.x = B.x + 250; cam.y = B.y + 260; cam.z = 0.45; clampCam(); }
   drift = true;
 }
+// switching maps reloads the page: the map data, the simulation tables and the renderer are all built at load
+function switchMap(m, query = '') { try { localStorage.setItem('idom-map', m); } catch (e) {} location.href = location.pathname + query; }
 function hideGameUI() {
   ['#top', '#rail', '#ticker', '#actions', '#zoomCtl', '#legend', '#miniWrap', '#tut', '#mpbar', '#hand', '#report', '#chat', '#pickBar', '#lapse', '#pass'].forEach(s => { const e = $(s); if (e) e.hidden = true; }); hideTip();
   $('#card').hidden = true; $('#drawer').hidden = true; tab = null; sel = null; selFleet = null; pickMode = null;
@@ -28,11 +30,12 @@ function showStart() {
   const saved = loadSaved(), savedHot = loadSaved(SAVE_KEY + '-hot'), savedMp = loadSaved(SAVE_KEY + '-mp');
   const inGame = G && !G.preview && !G.over;
   st.innerHTML = `<div class="menu">
-    <div class="brand"><div class="eye">A grand strategy game · The world 1936–1950</div>
+    <div class="brand"><div class="eye">A grand strategy game · ${WORLD ? 'The world' : 'Europe'} 1936–1950</div>
       <h1>Iron Dominion<em>1936</em></h1>
       <p>Lead any nation through the Second World War — alone against the AI, around one screen with friends, or online. Follow history's script, or tear it up.</p>
       <div class="rank">${iconSvg('medal')}<div><b>${esc(rk.n)}</b><span>${p.games || 0} campaigns · ${p.wins || 0} victories${p.best ? ' · best score ' + p.best : ''}${rk.next ? ` · ${rk.next - (p.xp || 0)} xp to next rank` : ''}</span></div></div>
     </div>
+    <div class="mapsel" role="group" aria-label="Map"><span>Map</span>${[['europe','Europe','The original theatre: 234 provinces, 31 nations'],['world','The World','Every continent: 687 provinces, 70 nations, the Pacific war']].map(([k, l, d]) => `<button class="${MAPKIND === k ? 'on' : ''}" data-map="${k}" title="${d}"><b>${l}</b><em>${d}</em></button>`).join('')}</div>
     <div class="mbtns">
       ${inGame && Ctl.mode !== 'client' && Ctl.mode !== 'watch' ? `<button class="mbtn gold" data-go="back"><b>Return to the war</b><span>${esc(ME ? natName(ME) : '')}, ${MONTHS_L[G.m]} ${G.y}</span></button>` : ''}
       ${saved && !inGame ? `<button class="mbtn gold" data-go="cont"><b>Continue</b><span>${esc(saved.nat[Object.keys(saved.humans)[0]] ? saved.nat[Object.keys(saved.humans)[0]].name : '')}, ${MONTHS_L[saved.m]} ${saved.y}</span></button>` : ''}
@@ -44,6 +47,7 @@ function showStart() {
       ${savedHot ? `<button class="mbtn small" data-go="conthot"><b>Continue hot-seat</b><span>${MONTHS_L[savedHot.m]} ${savedHot.y} · ${Object.keys(savedHot.humans).length} players</span></button>` : ''}
       ${savedMp ? `<button class="mbtn small" data-go="contmp"><b>Re-host saved online game</b><span>${MONTHS_L[savedMp.m]} ${savedMp.y} · ${Object.keys(savedMp.humans).length} players</span></button>` : ''}
     </div></div>`;
+  st.querySelectorAll('[data-map]').forEach(b => b.onclick = () => { SFX.init(); SFX.click(); if (b.dataset.map !== MAPKIND) { if (G && !G.preview && !G.over) Ctl.save(); switchMap(b.dataset.map); } });
   st.querySelectorAll('[data-go]').forEach(b => b.onclick = () => {
     SFX.init(); SFX.click();
     const g = b.dataset.go;
@@ -159,7 +163,7 @@ function showMultiplayer() {
 function lobbyHTML(L, isHost) {
   const S = L.settings, taken = {}; for (const p of L.players) if (p.tag) taken[p.tag] = p.name;
   const me = isHost ? L.players.find(p => p.host) : L.players.find(p => p.id === Net.myId);
-  const link = location.origin + location.pathname + '?join=' + L.code + (netKind === 'local' ? '&local=1' : '');
+  const link = location.origin + location.pathname + '?join=' + L.code + (netKind === 'local' ? '&local=1' : '') + (WORLD ? '&map=world' : '');
   const sc = S.gm === 'blitz' ? 1939 : +S.scenario;
   const seg = (k, vals) => `<div class="seg">${vals.map(([v, l]) => `<button class="${String(S[k]) === String(v) ? 'on' : ''}" ${isHost ? `data-set="${k}:${v}"` : 'disabled'}>${l}</button>`).join('')}</div>`;
   return `<div class="setup lobby">${backBtn()}<h2>${isHost ? 'Your room' : 'Lobby'}</h2>
