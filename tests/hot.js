@@ -1,7 +1,7 @@
-const { chromium } = require('/opt/npm-tools/node_modules/playwright');
+const { chromium } = require(process.env.PW || '/opt/npm-tools/node_modules/playwright');
 const OUT = process.env.OUT;
 (async () => {
-  const browser = await chromium.launch({ executablePath:'/opt/pw-browsers/chromium-1243/chrome-linux64/chrome' });
+  const browser = await chromium.launch({ executablePath:process.env.PW ? undefined : '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome' });
   const page = await browser.newPage({ viewport:{ width:+(process.env.W||1280), height:+(process.env.H||800) }, isMobile:!!process.env.MOBILE, hasTouch:!!process.env.MOBILE, deviceScaleFactor:process.env.MOBILE ? 2 : 1 });
   const errs = [];
   page.on('pageerror', e => errs.push('PAGEERROR: ' + e.message + ' ' + (e.stack||'').split('\n')[1]));

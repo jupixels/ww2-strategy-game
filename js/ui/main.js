@@ -136,7 +136,7 @@ function startPlay(fresh) {
   if (fresh && ME && Ctl.mode !== 'hot') {
     Ctl.save();
     const n = nat(ME);
-    sendNews(ME, { title:'A New Year Dawns', head:`${n.name} Prepares for the Storm`, dek:`${dateStr()}: the cabinet meets as Europe ${G.y >= 1939 ? 'burns' : 'slides toward war'}`, text:`${NATDEF[ME].brief || SCENARIOS[G.sc].d} Select a province to command its armies, pick a National Focus, start research and play your cards. Press ${Ctl.mode === 'sp' ? 'End Month' : 'Ready'} when done.${n.agendas && n.agendas.length ? ' You have been handed secret agendas — see the Destiny panel.' : ''}`, plate:ME });
+    sendNews(ME, { title:'A New Year Dawns', head:`${n.name} Prepares for the Storm`, dek:`${dateStr()}: the cabinet meets as the world ${G.y >= 1939 ? 'burns' : 'slides toward war'}`, text:`${NATDEF[ME].brief || SCENARIOS[G.sc].d} Select a province to command its armies, pick a National Focus, start research and play your cards. Press ${Ctl.mode === 'sp' ? 'End Month' : 'Ready'} when done.${n.agendas && n.agendas.length ? ' You have been handed secret agendas — see the Destiny panel.' : ''}`, plate:ME });
     flushInbox();
   } else if (ME && Ctl.mode !== 'hot') { shownUids.clear(); flushInbox(); }
 }

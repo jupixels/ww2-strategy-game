@@ -78,6 +78,16 @@ function paintFlag(c, tag, x, y, w, h) {
     case 'cze': c.fillStyle = '#fff'; c.fillRect(x, y, w, h / 2); c.fillStyle = '#d7141a'; c.fillRect(x, y + h / 2, w, h / 2); c.fillStyle = '#11457e'; c.beginPath(); c.moveTo(x, y); c.lineTo(x + w * 0.5, y + h / 2); c.lineTo(x, y + h); c.fill(); break;
     case 'gre': { for (let i = 0; i < 9; i++) { c.fillStyle = i % 2 ? '#fff' : '#0d5eaf'; c.fillRect(x, y + i * h / 9, w, h / 9 + 0.5); } c.fillStyle = '#0d5eaf'; c.fillRect(x, y, h * 5 / 9, h * 5 / 9); c.fillStyle = '#fff'; c.fillRect(x + h * 2 / 9, y, h / 9, h * 5 / 9); c.fillRect(x, y + h * 2 / 9, h * 5 / 9, h / 9); break; }
     case 'usa': { for (let i = 0; i < 13; i++) { c.fillStyle = i % 2 ? '#fff' : '#b22234'; c.fillRect(x, y + i * h / 13, w, h / 13 + 0.5); } c.fillStyle = '#3c3b6e'; c.fillRect(x, y, w * 0.4, h * 7 / 13); c.fillStyle = '#fff'; for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) c.fillRect(x + w * (0.05 + i * 0.09), y + h * (0.07 + j * 0.15), Math.max(0.6, w * 0.025), Math.max(0.6, w * 0.025)); break; }
+    case 'disc': c.fillStyle = F.c[0]; c.fillRect(x, y, w, h); c.fillStyle = F.c[1]; c.beginPath(); c.arc(x + w / 2, y + h / 2, h * 0.3, 0, 7); c.fill(); break;
+    case 'chi': c.fillStyle = '#d0202a'; c.fillRect(x, y, w, h); c.fillStyle = '#12317a'; c.fillRect(x, y, w / 2, h / 2); c.fillStyle = '#fff'; c.beginPath(); c.arc(x + w / 4, y + h / 4, h * 0.13, 0, 7); c.fill(); break;
+    // dominion ensign: a field with the Union Jack in the canton
+    case 'ens': { c.fillStyle = F.c[0]; c.fillRect(x, y, w, h); const cw = w / 2, ch = h / 2;
+      c.fillStyle = '#012169'; c.fillRect(x, y, cw, ch); c.strokeStyle = '#fff'; c.lineWidth = ch * 0.2; c.beginPath(); c.moveTo(x, y); c.lineTo(x + cw, y + ch); c.moveTo(x + cw, y); c.lineTo(x, y + ch); c.stroke();
+      c.fillStyle = '#fff'; c.fillRect(x + cw / 2 - ch * 0.15, y, ch * 0.3, ch); c.fillRect(x, y + ch / 2 - ch * 0.15, cw, ch * 0.3);
+      c.fillStyle = '#c8102e'; c.fillRect(x + cw / 2 - ch * 0.08, y, ch * 0.16, ch); c.fillRect(x, y + ch / 2 - ch * 0.08, cw, ch * 0.16);
+      starAt(c, x + w * 0.75, y + h * 0.62, h * 0.14, '#fff'); break; }
+    case 'bra': c.fillStyle = '#009c3b'; c.fillRect(x, y, w, h); c.fillStyle = '#ffdf00'; c.beginPath(); c.moveTo(x + w * 0.08, y + h / 2); c.lineTo(x + w / 2, y + h * 0.1); c.lineTo(x + w * 0.92, y + h / 2); c.lineTo(x + w / 2, y + h * 0.9); c.closePath(); c.fill();
+      c.fillStyle = '#002776'; c.beginPath(); c.arc(x + w / 2, y + h / 2, h * 0.22, 0, 7); c.fill(); break;
     default: c.fillStyle = n ? n.color : '#888'; c.fillRect(x, y, w, h);
   }
   // nations that rebranded through a Destiny decision fly their new colours on a band

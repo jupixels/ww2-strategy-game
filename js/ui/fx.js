@@ -69,18 +69,18 @@ function flyover(t, fromId, tid, kind, delay, count = 3) {
   const F = PROV[fromId], T = PROV[tid];
   for (let k = 0; k < count; k++) {
     const off = (k - (count - 1) / 2) * 12;
-    const dx = T.x - F.x, dy = T.y - F.y, L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
-    FX.push({ type:'plane', x0:F.x + nx * off, y0:F.y + ny * off, x1:T.x + nx * off + dx / L * 40, y1:T.y + ny * off + dy / L * 40, t0:now_() + delay + k * 70, dur:1100 + L * 1.2, kind, col:natColor(t), bombs:kind === 'bmb' ? { x:T.x, y:T.y } : null });
+    const tx = nearX(T.x, F.x), dx = tx - F.x, dy = T.y - F.y, L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
+    FX.push({ type:'plane', x0:F.x + nx * off, y0:F.y + ny * off, x1:tx + nx * off + dx / L * 40, y1:T.y + ny * off + dy / L * 40, t0:now_() + delay + k * 70, dur:1100 + L * 1.2, kind, col:natColor(t), bombs:kind === 'bmb' ? { x:T.x, y:T.y } : null });
   }
 }
 function landingCraft(fromId, tid, delay) {
   const F = PROV[fromId] || null, T = PROV[tid];
-  const fx = F ? F.x : T.x - 120, fy = F ? F.y : T.y - 90;
-  for (let k = 0; k < 4; k++) FX.push({ type:'boat', x0:fx + (Math.random() - 0.5) * 30, y0:fy + (Math.random() - 0.5) * 30, x1:T.x + (Math.random() - 0.5) * 20, y1:T.y + (Math.random() - 0.5) * 20, t0:now_() + delay + k * 90, dur:1100 });
+  const fx = F ? F.x : T.x - 120, fy = F ? F.y : T.y - 90, tx = nearX(T.x, fx);
+  for (let k = 0; k < 4; k++) FX.push({ type:'boat', x0:fx + (Math.random() - 0.5) * 30, y0:fy + (Math.random() - 0.5) * 30, x1:tx + (Math.random() - 0.5) * 20, y1:T.y + (Math.random() - 0.5) * 20, t0:now_() + delay + k * 90, dur:1100 });
 }
 function rocketArc(fromXY, tid, delay) {
   const T = PROV[tid];
-  FX.push({ type:'rocket', x0:fromXY[0], y0:fromXY[1], x1:T.x, y1:T.y, t0:now_() + delay, dur:1300 });
+  FX.push({ type:'rocket', x0:fromXY[0], y0:fromXY[1], x1:nearX(T.x, fromXY[0]), y1:T.y, t0:now_() + delay, dur:1300 });
 }
 function atomic(tid, delay = 0) {
   const P = PROV[tid], t0 = now_() + delay;
@@ -94,7 +94,7 @@ function atomic(tid, delay = 0) {
 function captureFX(pid, oldOwner, newOwner, fromId, delay) {
   const P = PROV[pid], F = fromId != null && fromId >= 0 ? PROV[fromId] : P;
   const oc = hexRGB(natColor(oldOwner)).map((v, k) => Math.round(PAPER[k] + (v - PAPER[k]) * 0.62));
-  FX.push({ type:'wipe', pid, col:oc, ox:F.x + (P.x - F.x) * 0.45, oy:F.y + (P.y - F.y) * 0.45, t0:now_() + delay, dur:900, R:Math.sqrt(P.area) * GS * 1.8 + 40 });
+  FX.push({ type:'wipe', pid, col:oc, ox:P.x + (nearX(F.x, P.x) - P.x) * 0.55, oy:F.y + (P.y - F.y) * 0.45, t0:now_() + delay, dur:900, R:Math.sqrt(P.area) * GS * 1.8 + 40 });
   FX.push({ type:'flag', pid, tag:newOwner, t0:now_() + delay + 350, dur:2600 });
 }
 function slideUnits(from, to, owner, kind, delay = 0) {
@@ -176,13 +176,35 @@ function drawWeather(c, now, dt) {
     s.y += s.v * (rain ? 0.0009 : 0.00004 * 30) * dt; s.x += rain ? 0.00012 * dt : Math.sin(now / 1000 + s.v * 10) * 0.0003;
     if (s.y > 1) { s.y = 0; s.x = Math.random(); } if (s.x > 1) s.x = 0;
     const x = s.x * VW, y = s.y * VH;
-    const [wx, wy] = s2w(x, y); const gx = Math.floor(wx / GS), gy = Math.floor(wy / GS);
-    if (gx < 0 || gy < 0 || gx >= GW || gy >= GH) continue;
-    const id = GRIDD[gy * GW + gx]; if (id < 0) continue;
+    const [wx, wy] = s2w(x, y); const id = gridAt(wx, wy); if (id < 0) continue;
     if (snow && !PROV[id].cold) continue; if (!snow && !PROV[id].muddy) continue;
     if (snow) { c.moveTo(x + s.s, y); c.arc(x, y, s.s, 0, 7); } else { c.moveTo(x, y); c.lineTo(x - 2, y + 9); }
   }
   if (snow) { c.fillStyle = 'rgba(255,255,255,.8)'; c.fill(); } else { c.strokeStyle = 'rgba(190,210,230,.35)'; c.lineWidth = 1; c.stroke(); }
+}
+
+// high-altitude clouds drift over the map when you zoom out to the whole world
+const CLOUDS = Array.from({ length:70 }, (_, i) => ({ x:Math.random() * WW, y:WH * (0.08 + Math.random() * 0.84), r:110 + Math.random() * 220, v:0.6 + Math.random() * 0.8, k:2 + (i % 4) }));
+function whiteCloud() {
+  if (SPR.wc) return SPR.wc;
+  const c = mkCanvas(128, 128), x = c.getContext('2d');
+  for (let k = 0; k < 7; k++) { const cx = 34 + Math.random() * 60, cy = 44 + Math.random() * 40, r = 22 + Math.random() * 18, g = x.createRadialGradient(cx, cy, 0, cx, cy, r); g.addColorStop(0, 'rgba(255,255,255,.55)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 128, 128); }
+  return (SPR.wc = c);
+}
+function drawClouds(c, now, z) {
+  const a = clamp((0.55 - z) / 0.3, 0, 0.6); if (a <= 0 || timelapseOwners) return;
+  const sp = whiteCloud(); c.globalAlpha = a;
+  for (const C of CLOUDS) { const x = nearX(C.x + now * 0.004 * C.v), r = C.r; c.drawImage(sp, x - r, C.y - r * 0.6, r * 2, r * 1.2); }
+  c.globalAlpha = 1;
+}
+
+// share of the view that is open water drives the sea / land ambience
+let lastAmbSound = 0;
+function mapAmbience() {
+  if (!G || G.preview || !$('#start').hidden || timelapseOwners) { SFX.stopAmbience(); return; }
+  let sea = 0, n = 0;
+  for (let i = 0; i < 6; i++) for (let j = 0; j < 4; j++) { const [wx, wy] = s2w(VW * (i + 0.5) / 6, VH * (j + 0.5) / 4); if (gridAt(wx, wy, GRID) < 0) sea++; n++; }
+  SFX.ambience(sea / n, cam.z);
 }
 
 /* ---------- the frame loop ---------- */
@@ -196,7 +218,7 @@ function frame(now) {
   if (camAnim) {
     const k = clamp((now - camAnim.t0) / camAnim.dur, 0, 1), e = 1 - Math.pow(1 - k, 3);
     cam.x = camAnim.x0 + (camAnim.x1 - camAnim.x0) * e; cam.y = camAnim.y0 + (camAnim.y1 - camAnim.y0) * e; cam.z = camAnim.z0 + (camAnim.z1 - camAnim.z0) * e;
-    clampCam(); if (k >= 1) camAnim = null;
+    clampCam(); if (k >= 1) { camAnim = null; clampCam(); }
   }
   if (KEYS.size) {
     const sp = (KEYS.has('shift') ? 1500 : 750) * dt / 1000 / cam.z;
@@ -215,15 +237,18 @@ function frame(now) {
   if (staticDirty) { drawStatic(!moving && !drift); redraw = true; }
   else if (lastMode === 'fast' && !moving && !drift) { drawStatic(true); redraw = true; }
   ambientSpawn(now);
+  if (now - lastAmbSound > 400) { lastAmbSound = now; mapAmbience(); }
   const busyFx = FX.length || PARTS.length || shake.amp;
-  const ambient = hasFront || sel || selFleet || isWinter() || isMud() || G.orders.length;
+  const ambient = hasFront || sel || selFleet || isWinter() || isMud() || G.orders.length || cam.z < 0.55;
   if (!redraw && !busyFx) { if (!ambient || now - lastAmbient < 40) { tutTick(); return; } }
   lastAmbient = now;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   if (shake.amp) { ctx.fillStyle = '#10283b'; ctx.fillRect(0, 0, cv.width, cv.height); }
+  if (!stat.width || !stat.height) return;
   ctx.drawImage(stat, Math.round(shake.x * DPR), Math.round(shake.y * DPR));
-  worldT(ctx, true);
   const z = cam.z;
+  for (const off of wrapOffsets()) {
+  worldT(ctx, true, off);
   if (hasFront && !timelapseOwners) {
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     const off = -(now / 60) % 12;
@@ -243,13 +268,15 @@ function frame(now) {
   }
   for (let i = PARTS.length - 1; i >= 0; i--) {
     const p = PARTS[i]; const age = now - p.t0; if (age < 0) continue; const k = age / p.life; if (k > 1) { PARTS.splice(i, 1); continue; }
-    if (p.kind === 'spark2') { ctx.setTransform(DPR, 0, 0, DPR, 0, 0); const x = p.sx + p.vx * age * 0.12, y = p.sy + p.vy * age * 0.12 + p.g * age * age * 0.12; ctx.fillStyle = `rgba(${p.col},${1 - k})`; ctx.fillRect(x - 1.5, y - 1.5, 3, 3); worldT(ctx, true); continue; }
+    if (p.kind === 'spark2') { ctx.setTransform(DPR, 0, 0, DPR, 0, 0); const x = p.sx + p.vx * age * 0.12, y = p.sy + p.vy * age * 0.12 + p.g * age * age * 0.12; ctx.fillStyle = `rgba(${p.col},${1 - k})`; ctx.fillRect(x - 1.5, y - 1.5, 3, 3); worldT(ctx, true, off); continue; }
     const px = p.x + p.vx * age * 0.072 / (p.kind === 'smoke' || p.kind === 'cloud' || p.kind === 'ember' ? 1 : z), py = p.y + p.vy * age * 0.072 / (p.kind === 'smoke' || p.kind === 'cloud' || p.kind === 'ember' ? 1 : z) + (p.g ? p.g * age * age * 0.05 / z : 0);
     if (p.kind === 'spark') { ctx.fillStyle = `rgba(255,${200 - k * 150 | 0},${80 - k * 80 | 0},${1 - k})`; ctx.fillRect(px - 1 / z, py - 1 / z, 2.4 / z, 2.4 / z); }
     else if (p.kind === 'debris') { ctx.fillStyle = `rgba(40,30,20,${1 - k})`; ctx.fillRect(px - 1 / z, py - 1 / z, 2 / z, 2 / z); }
     else if (p.kind === 'ember') { ctx.fillStyle = `rgba(255,${150 + Math.random() * 80 | 0},60,${(1 - k) * 0.9})`; ctx.fillRect(px - 0.8, py - 0.8, 1.8, 1.8); }
     else if (p.kind === 'cloud') { const r = p.r0 + (p.r1 - p.r0) * Math.sqrt(k); ctx.globalAlpha = 0.6 * (1 - k); ctx.drawImage(cloudSprite(), px - r, py - r, r * 2, r * 2); ctx.globalAlpha = 1; }
     else { const r = ((p.r0 || 4) + ((p.r1 || 14) - (p.r0 || 4)) * k) / (p.r1 ? 1 : z) * 1.3; ctx.globalAlpha = (p.dark ? 0.5 : 0.4) * (1 - k); ctx.drawImage(puffSprite(p.dark), px - r, py - r, r * 2, r * 2); ctx.globalAlpha = 1; }
+  }
+  if (!off) drawClouds(ctx, now, z);
   }
   drawWeather(ctx, now, dt);
   // the atomic flash washes over the whole screen
@@ -259,7 +286,7 @@ function frame(now) {
   tutTick();
 }
 function drawPlannedArrow(c, from, to, kind, z, now) {
-  const a = [PROV[from].x, PROV[from].y], b = [PROV[to].x, PROV[to].y];
+  const a = [PROV[from].x, PROV[from].y], b = [nearX(PROV[to].x, PROV[from].x), PROV[to].y];
   const col = kind === 'land' || kind === 'para' ? '120,180,230' : '230,90,50';
   c.setLineDash([8 / z, 6 / z]); c.lineDashOffset = -(now / 40) / z;
   c.strokeStyle = `rgba(${col},.95)`; c.lineWidth = 3 / z; c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke(); c.setLineDash([]);
@@ -291,7 +318,7 @@ function drawFX(c, f, k, z, now) {
     }
     case 'slide': {
       const a = PROV[f.from], b = PROV[f.to], e = 1 - Math.pow(1 - k, 3);
-      const x = a.x + (b.x - a.x) * e, y = a.y + (b.y - a.y) * e;
+      const x = a.x + (nearX(b.x, a.x) - a.x) * e, y = a.y + (b.y - a.y) * e;
       c.save(); c.setTransform(DPR, 0, 0, DPR, 0, 0); const [sx, sy] = w2s(x, y);
       c.fillStyle = darkOf(natColor(f.owner)); c.fillRect(sx - 11, sy + 2, 22, 15); c.strokeStyle = '#f0cd7f'; c.lineWidth = 1; c.strokeRect(sx - 10.5, sy + 2.5, 21, 14);
       drawIcon(c, f.k, f.k === 'arm' ? 8 : 11, sx - (f.k === 'arm' ? 8 : 4.5), sy + (f.k === 'arm' ? 5.5 : 4)); c.restore(); break;
@@ -326,7 +353,7 @@ function drawFX(c, f, k, z, now) {
   }
 }
 function drawArrow(c, f, k, z) {
-  const a = f.from != null ? [PROV[f.from].x, PROV[f.from].y] : f.fromXY, b = [PROV[f.to].x, PROV[f.to].y];
+  const a = f.from != null ? [PROV[f.from].x, PROV[f.from].y] : f.fromXY, b = [nearX(PROV[f.to].x, f.from != null ? PROV[f.from].x : f.fromXY[0]), PROV[f.to].y];
   const dx = b[0] - a[0], dy = b[1] - a[1];
   const mx = (a[0] + b[0]) / 2 - dy * 0.22, my = (a[1] + b[1]) / 2 + dx * 0.22;
   const e = 1 - Math.pow(1 - Math.min(1, k * 1.25), 3);
@@ -348,14 +375,13 @@ function drawMinimap() {
   if (!miniCtx || miniEl.offsetParent === null) return;
   const mw = miniBase.width, mh = miniBase.height;
   if (miniEl.width !== mw * DPR) { miniEl.width = mw * DPR; miniEl.height = mh * DPR; miniVersion = -1; }
-  if (miniVersion !== worldVersion) { const m = miniBase.getContext('2d'); m.imageSmoothingQuality = 'high'; m.drawImage(world1, 0, 0, mw, mh); miniVersion = worldVersion; miniKey = ''; }
+  if (miniVersion !== worldVersion) { const m = miniBase.getContext('2d'); m.imageSmoothingQuality = 'high'; m.drawImage(miniSource(), 0, 0, mw, mh); miniVersion = worldVersion; miniKey = ''; }
   const key = cam.x.toFixed(1) + cam.y.toFixed(1) + cam.z.toFixed(3) + miniVersion;
   if (key === miniKey) return; miniKey = key;
   const c = miniCtx; c.setTransform(DPR, 0, 0, DPR, 0, 0);
   c.drawImage(miniBase, 0, 0);
   const s = mw / WW, [x0, y0] = s2w(0, 0), [x1, y1] = s2w(VW, VH);
-  c.strokeStyle = '#f0cd7f'; c.lineWidth = 1.5; c.strokeRect(x0 * s, y0 * s, (x1 - x0) * s, (y1 - y0) * s);
-  c.fillStyle = 'rgba(240,205,127,.12)'; c.fillRect(x0 * s, y0 * s, (x1 - x0) * s, (y1 - y0) * s);
+  for (const off of [0, -mw, mw]) { c.strokeStyle = '#f0cd7f'; c.lineWidth = 1.5; c.strokeRect(x0 * s + off, y0 * s, (x1 - x0) * s, (y1 - y0) * s); c.fillStyle = 'rgba(240,205,127,.12)'; c.fillRect(x0 * s + off, y0 * s, (x1 - x0) * s, (y1 - y0) * s); }
 }
 // newspaper plate: a grayscale map photo
 function renderPlate(canvas, pid) {
@@ -363,7 +389,7 @@ function renderPlate(canvas, pid) {
   const c = canvas.getContext('2d'); const P = PROV[pid] || PROV[0]; const z = 1.6;
   if (ownersDirty) rebuildOwners();
   c.setTransform(z, 0, 0, z, w / 2 - P.x * z, h / 2 - P.y * z);
-  c.drawImage(worldCv, 0, 0, WW, WH);
+  paintWorld(c, [P.x - w / 2 / z, P.y - h / 2 / z, P.x + w / 2 / z, P.y + h / 2 / z], z);
   c.setTransform(1, 0, 0, 1, 0, 0);
   star(c, w / 2, h / 2, 12, '#000', '#fff');
 }

@@ -12,6 +12,7 @@ function setOwner(t, names, garrison = 1) {
 }
 function scKill(d, heir) {
   const n = nat(d); if (!n.alive) return;
+  const ex = colonialExile(d, heir); if (ex) for (const i of ex.ids) G.prov[i].o = ex.heir;
   for (const p of G.prov) if (p.o === d) p.o = heir;
   for (const z in G.fleet) delete G.fleet[z][d];
   G.gens = G.gens.filter(g => g.tag !== d);
@@ -59,6 +60,13 @@ function applyScenario(year) {
     for (const t of ['GER','POL']) deployToFronts(t, 0.5);
     { const h = homeProv('GER'); G.prov[h].air.ftr += 6; G.prov[h].air.bmb += 4; }
     hireGeneral('GER', true, 'Heinz Guderian');
+    // two years into the war in China: the coast and the northern plain are Japanese
+    runEv('marcopolo');
+    setOwner('JAP', 'Peking,Tientsin,Taiyuan,Jinan,Tsingtao,Xuzhou,Kalgan,Baotou,Shanghai,Nanjing,Hangzhou,Wuhan,Canton,Hainan,Nanchang,Zhengzhou', 2);
+    if (A('CHI')) nat('CHI').capital = ID['Chongqing'];
+    bolster('JAP', { inf:20, art:4, arm:2 }); bolster('CHI', { inf:20 }); deployToFronts('JAP', 0.4);
+    { const n = nat('JAP'); n.pp += 100; n.oil += 30; n.steel += 30; }
+    hireGeneral('JAP', true, 'Tomoyuki Yamashita');
   }
   if (year >= 1941) {
     // Poland divided, Scandinavia and the West overrun, France split, Balkans conquered
@@ -94,6 +102,13 @@ function applyScenario(year) {
     { const h = homeProv('GER'); G.prov[h].air.ftr += 8; G.prov[h].air.bmb += 6; }
     { const h = homeProv('SOV'); G.prov[h].air.ftr += 12; G.prov[h].air.bmb += 6; for (const nm of ['Kiev','Leningrad','Smolensk']) { const p = G.prov[ID[nm]]; if (p.o === 'SOV') p.air.ftr += 3; } }
     hireGeneral('GER', true, 'Erwin Rommel'); hireGeneral('SOV', true, 'Georgy Zhukov'); hireGeneral('ENG', true, 'Archibald Wavell');
+    // Asia on the eve of the Pacific war: Japan in the Axis, French Indochina occupied, Changsha holding out
+    runEv('japaxis'); runEv('indochina');
+    setOwner('JAP', 'Fuzhou,Nanning,Yinchuan', 2);
+    bolster('JAP', { inf:16, art:4, arm:2 }); bolster('CHI', { inf:16 }); bolster('USA', { inf:10, arm:2 });
+    { const n = nat('JAP'); n.pp += 120; n.oil += 40; n.steel += 40; techsByYear('JAP', 4); }
+    { const n = nat('USA'); n.pp += 150; techsByYear('USA', 4); }
+    placeFleet('JAP', 'PHS', 3, 2);
   }
   if (year >= 1944) {
     usaJoin(); G.ev.usa = 1; runEv('torch'); G.ev.stalingrad = 1; G.ev.kursk = 1;
@@ -114,6 +129,18 @@ function applyScenario(year) {
     { const h = homeProv('SOV'); G.prov[h].air.ftr += 10; G.prov[h].air.bmb += 6; }
     placeFleet('ENG', 'CHN', 6, 2); placeFleet('USA', 'CHN', 6, 0); placeFleet('ENG', 'WMD', 4, 2);
     hireGeneral('ENG', true, 'Bernard Montgomery'); hireGeneral('SOV', true, 'Konstantin Rokossovsky');
+    // the Pacific: Japan's perimeter from Burma to the Marianas, already breached in the Solomons and Marshalls
+    setOwner('JAP', 'Manila,Visayas,Davao,Guam,Wake,Hong Kong,Singapore,Kuala Lumpur,Kota Bharu,Kuching,Brunei,Sandakan,Rangoon,Mandalay,Mergui,Myitkyina', 2);
+    setOwner('JAP', 'Batavia,Surabaya,Palembang,Medan,Padang,Balikpapan,Banjarmasin,Pontianak,Makassar,Manado,Ambon,Kupang,Dili,Hollandia,Wewak', 2);
+    setOwner('JAP', 'Changsha,Guilin,Guiyang', 3);
+    setOwner('USA', 'Kwajalein', 2); setOwner('AST', 'Lae', 2);
+    if (A('SIA') && !facOf('SIA')) joinFaction('SIA', 'AXIS', true);
+    bolster('USA', { inf:30, arm:10, art:6 }); bolster('JAP', { inf:20, art:4 }); bolster('CHI', { inf:10 });
+    { const n = nat('USA'); n.pp += 200; n.oil += 60; n.steel += 60; techsByYear('USA', 6); }
+    { const n = nat('JAP'); techsByYear('JAP', 4); }
+    { const h = homeProv('USA'); G.prov[h].air.ftr += 10; G.prov[h].air.bmb += 8; }
+    placeFleet('USA', 'CPA', 10, 4); placeFleet('USA', 'MAR', 6, 2); placeFleet('JAP', 'PHS', 4, 3);
+    hireGeneral('USA', true, 'Douglas MacArthur');
     dday(); G.ev.dday = 1;
   }
   // everything older than the start date has already happened

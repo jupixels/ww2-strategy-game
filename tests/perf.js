@@ -1,6 +1,6 @@
-const { chromium } = require('/opt/npm-tools/node_modules/playwright');
+const { chromium } = require(process.env.PW || '/opt/npm-tools/node_modules/playwright');
 (async () => {
-  const browser = await chromium.launch({ executablePath:'/opt/pw-browsers/chromium-1243/chrome-linux64/chrome' });
+  const browser = await chromium.launch({ executablePath:process.env.PW ? undefined : '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome' });
   const page = await browser.newPage({ viewport:{ width:1440, height:900 } });
   page.on('pageerror', e => console.log('PAGEERROR: ' + e.message));
   await page.goto('http://localhost:8765/index.html'); await page.waitForTimeout(1500);

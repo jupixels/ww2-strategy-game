@@ -39,7 +39,7 @@ function showItem(it) {
     else { head = it.head || it.title; dek = it.dek; text = it.text; opts = null; plate = it.plate; }
     const plateId = G.nat[plate] && G.nat[plate].capital >= 0 ? G.nat[plate].capital : homeProv(ME);
     m.innerHTML = `<div class="paper" role="dialog" aria-modal="true" aria-label="${esc(head)}">
-      <div class="mast"><h5>The European Dispatch</h5><span>${dateStr()}<br>${it.type === 'news' ? 'Late edition' : 'Cabinet briefing'} · 2d</span></div>
+      <div class="mast"><h5>The World Dispatch</h5><span>${dateStr()}<br>${it.type === 'news' ? 'Late edition' : 'Cabinet briefing'} · 2d</span></div>
       <div class="head">${esc(head)}</div>
       ${dek ? `<p class="dek">${esc(dek)}</p>` : ''}
       <div class="plate"><canvas></canvas></div>
@@ -99,9 +99,9 @@ function showEnd() {
   const rows = hs.map(t => ({ t, s:scoreOf(t), ag:(nat(t).agendas || []) })).sort((a, b) => b.s - a.s);
   const multi = hs.length > 1;
   recordCareer(won, o.type);
-  m.innerHTML = `<div class="paper final" role="dialog" aria-modal="true"><div class="mast"><h5>The European Dispatch</h5><span>${dateStr()}<br>Special edition</span></div>
+  m.innerHTML = `<div class="paper final" role="dialog" aria-modal="true"><div class="mast"><h5>The World Dispatch</h5><span>${dateStr()}<br>Special edition</span></div>
     <div class="head">${esc(head)}</div><p class="dek">${esc(o.reason)}</p>
-    ${multi ? `<table class="score"><tr><th></th><th>Nation</th><th>Europe</th><th>Agendas</th><th>Score</th></tr>${rows.map((r, i) => `<tr class="${o.winners.includes(r.t) ? 'win' : ''}"><td>${i + 1}</td><td>${flagImg(r.t)} ${esc(natName(r.t))} <small>${esc(G.humans[r.t] ? G.humans[r.t].name || '' : '')}</small></td><td>${Math.round(vpOf(r.t) / totalVP() * 100)}%</td><td>${r.ag.filter(a => a.st === 'done').length}/${r.ag.length}</td><td><b>${r.s}</b></td></tr>`).join('')}</table>`
+    ${multi ? `<table class="score"><tr><th></th><th>Nation</th><th>World</th><th>Agendas</th><th>Score</th></tr>${rows.map((r, i) => `<tr class="${o.winners.includes(r.t) ? 'win' : ''}"><td>${i + 1}</td><td>${flagImg(r.t)} ${esc(natName(r.t))} <small>${esc(G.humans[r.t] ? G.humans[r.t].name || '' : '')}</small></td><td>${Math.round(vpOf(r.t) / totalVP() * 100)}%</td><td>${r.ag.filter(a => a.st === 'done').length}/${r.ag.length}</td><td><b>${r.s}</b></td></tr>`).join('')}</table>`
     : n ? `<p class="copy" style="columns:1">Victories ${n.st.won}, defeats ${n.st.lost}, provinces captured ${n.st.caps}. Enemy divisions destroyed: ${n.st.kills}. Medals: ${medalsOf(ME).length} of ${Object.keys(ACH).length}. Final dominion: ${share}% of Europe. Score: <b>${scoreOf(ME)}</b>.</p>` : ''}
     ${n && n.agendas && n.agendas.length ? `<div class="agendas">${n.agendas.map(a => `<span class="${a.st}">${a.st === 'done' ? '✓' : '✕'} ${esc(agendaText(a))}</span>`).join('')}</div>` : ''}
     <div class="choices">
@@ -164,6 +164,10 @@ const TIPS = [
   'Low stability cuts production and makes you surrender sooner. Win battles, make peace, or play propaganda.',
   'Spies can map an enemy army, sabotage factories, steal tech or stage coups in neutral countries.',
   'Losing? Offer peace from the World panel. Winning? Demand terms and keep what you hold.',
+  'The map spans the whole world and wraps east to west. Japan, China and the Americas fight their own wars — and yours, once Pearl Harbor drags America in.',
+  'Island war: select a coastal army and click a <span class="tg">blue</span> island to land. Japan and America stage their armies at ports facing the enemy.',
+  'Colonies give little manpower. When a homeland falls, colonies the enemy cannot reach overland rally to its strongest ally.',
+  'Press <kbd>M</kbd> for the <b>terrain map</b>: mountains, jungle and marsh slow attackers; plains and desert favour armor.',
 ];
 function showHelp() {
   if (!G || !$('#modal').hidden) return;

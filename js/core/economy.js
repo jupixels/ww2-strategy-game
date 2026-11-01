@@ -23,7 +23,7 @@ function income(t) {
 }
 function mpIncome(t) {
   let s = 0;
-  for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (p.o !== t) continue; s += p.core === t ? 0.9 + 0.3 * PROV[i].vp : 0.25; }
+  for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (p.o !== t) continue; s += p.core !== t ? 0.25 : PROV[i].col ? 0.3 + 0.1 * PROV[i].vp : 0.9 + 0.3 * PROV[i].vp; }
   if (nat(t).tech.mass) s *= 1.2;
   if (G.gm === 'blitz') s *= 1.4;
   return Math.round(s * (isHuman(t) && G.diff === 'easy' ? 1.3 : 1));

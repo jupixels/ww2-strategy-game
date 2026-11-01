@@ -6,7 +6,7 @@
    Effects are decoded up front by sfx.js; music is streamed through <audio> elements (the tracks are minutes long, and
    decoding them would cost tens of MB of memory) and routed into the same music bus so the volume slider still works. */
 const SFX = (() => {
-  let lib = null, on = true, music = false;
+  let lib = null, on = true, music = false, amb = null;
   let vol = { sfx:0.8, music:0.5 };
   try { const s = localStorage.getItem('idom-sound'); if (s) { const o = JSON.parse(s); on = o.on !== false; if (o.vol) vol = Object.assign(vol, o.vol); music = !!o.music; } } catch (e) {}
   const persist = () => { try { localStorage.setItem('idom-sound', JSON.stringify({ on, vol, music })); } catch (e) {} };
@@ -47,6 +47,10 @@ const SFX = (() => {
     victory:{ src:S('jingles/jingle_hit_02'), volume:0.5 },
     defeat:{ src:S('jingles/jingle_hit_06'), volume:0.5 },
     confirm:{ src:S('ui/confirm_01'), volume:0.4 },
+    // world-map ambience and map-mode switch, generated with ElevenLabs for the world map
+    mapmode:{ src:S('map/map_mode'), volume:0.55 },
+    amb_sea:{ src:S('map/ocean_loop'), volume:0.5 },
+    amb_land:{ src:S('map/land_loop'), volume:0.45 },
   };
   // a playlist that alternates the two tracks; both are written to loop cleanly
   const MUSIC = [{ src:'assets/music/war_lament_01.mp3', volume:0.55 }, { src:'assets/music/call_to_war_01.mp3', volume:0.5 }];
@@ -61,7 +65,7 @@ const SFX = (() => {
   const api = {
     init, get on() { return on; }, get music() { return music; }, get vol() { return vol; },
     setVol(k, v) { vol[k] = v; apply(); persist(); },
-    toggle() { on = !on; apply(); persist(); if (!on && music) this.toggleMusic(); return on; },
+    toggle() { on = !on; apply(); persist(); if (!on && music) this.toggleMusic(); if (!on) this.stopAmbience(); return on; },
     play(name, arg) { if (this[name]) this[name](arg); },
     click() { play('click', { vary:0.06, bus:'ui', cooldown:0.04 }); },
     boom(big) { play(big ? 'boom_big' : 'boom_small', { vary:0.1, cooldown:0.12 }); },
@@ -103,6 +107,15 @@ const SFX = (() => {
     fort() { play('fort'); },
     stinger() { play('stinger', { cooldown:0.6 }); },
     confirm() { play('confirm', { bus:'ui' }); },
+    mapMode() { play('mapmode', { bus:'ui', vary:0.04, cooldown:0.15 }); },
+    // the map breathes: waves when the camera is over the sea, wind over land; quieter as you zoom out
+    ambience(sea, z) {
+      if (!ready() || !has('amb_sea') || !has('amb_land')) return;
+      if (!amb) amb = { sea:lib.loop('amb_sea', { volume:0.0001, fadeIn:2 }), land:lib.loop('amb_land', { volume:0.0001, fadeIn:2 }) };
+      const lvl = clamp(0.25 + z * 0.35, 0.2, 0.75);
+      amb.sea.setVolume(Math.max(0.0001, 0.5 * sea * lvl)); amb.land.setVolume(Math.max(0.0001, 0.45 * (1 - sea) * lvl));
+    },
+    stopAmbience() { if (amb) { amb.sea.stop(1); amb.land.stop(1); amb = null; } },
     victory() { play('victory'); setTimeout(() => play('fanfare'), 700); },
     defeat() { play('defeat'); },
     toggleMusic() {

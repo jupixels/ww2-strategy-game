@@ -13,6 +13,7 @@ function aliveAt(sc) {
 const stars = k => '◆'.repeat(6 - k) + '◇'.repeat(k - 1);
 function previewWorld() {
   if (!G || !G.preview) { Hooks.L.toast = Hooks.L.toast; newGame({ humans:{}, seed:42 }); G.preview = true; ME = null; adopt(G); }
+  if (!cam.x && !cam.y) { const B = PROV[ID['Berlin']]; cam.x = B.x + 250; cam.y = B.y + 260; cam.z = 0.45; clampCam(); }
   drift = true;
 }
 function hideGameUI() {
@@ -27,7 +28,7 @@ function showStart() {
   const saved = loadSaved(), savedHot = loadSaved(SAVE_KEY + '-hot'), savedMp = loadSaved(SAVE_KEY + '-mp');
   const inGame = G && !G.preview && !G.over;
   st.innerHTML = `<div class="menu">
-    <div class="brand"><div class="eye">A grand strategy game · Europe 1936–1950</div>
+    <div class="brand"><div class="eye">A grand strategy game · The world 1936–1950</div>
       <h1>Iron Dominion<em>1936</em></h1>
       <p>Lead any nation through the Second World War — alone against the AI, around one screen with friends, or online. Follow history's script, or tear it up.</p>
       <div class="rank">${iconSvg('medal')}<div><b>${esc(rk.n)}</b><span>${p.games || 0} campaigns · ${p.wins || 0} victories${p.best ? ' · best score ' + p.best : ''}${rk.next ? ` · ${rk.next - (p.xp || 0)} xp to next rank` : ''}</span></div></div>
@@ -69,7 +70,7 @@ function nationPicker(sc, cur, taken = {}) {
 }
 function backBtn() { return `<button class="btn back" data-back>← Back</button>`; }
 function wireBack(st) { st.querySelectorAll('[data-back]').forEach(b => b.onclick = () => { SFX.click(); Net.close(); showStart(); }); }
-function camHi(t) { if (G && G.preview && NATDEF[t] && NATDEF[t].cap) { hoverNat = t; rebuildOverlay(); const c = PROV[ID[NATDEF[t].cap]]; camAnim = { x0:cam.x, y0:cam.y, z0:cam.z, x1:c.x + (VW > 820 ? -VW * 0.18 / cam.z : 0), y1:c.y, z1:cam.z, t0:performance.now(), dur:1200 }; } }
+function camHi(t) { if (G && G.preview && NATDEF[t] && NATDEF[t].cap) { hoverNat = t; rebuildOverlay(); const c = PROV[ID[NATDEF[t].cap]], z = Math.max(cam.z, 0.55); animTo(c.x + (VW > 820 ? -VW * 0.18 / z : 0), c.y, z, 1200); } }
 
 /* ---------- single-player campaign ---------- */
 function showCampaign() {

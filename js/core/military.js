@@ -324,6 +324,8 @@ function capitulate(d, w) {
     for (const z in G.fleet) if (G.fleet[z].FRA) { G.fleet[z].VIC = G.fleet[z].FRA; delete G.fleet[z].FRA; }
     if (isHuman('FRA')) { G.humans.VIC = G.humans.FRA; delete G.humans.FRA; Hooks.emit('switch', { from:'FRA', to:'VIC' }); }
   } else {
+    const ex = colonialExile(d, w);
+    if (ex) { for (const i of ex.ids) { const p = G.prov[i]; p.o = ex.heir; p.res = 10; } news(`${n.adj.toUpperCase()} COLONIES RALLY TO ${natName(ex.heir).toUpperCase()}`); }
     for (const p of G.prov) if (p.o === d) {
       const back = p.core !== d && A(p.core) && friendly(p.core, w) ? p.core : w;
       p.o = back; if (back === w) clearLand(p); p.u.arm = 0; clampReady(p);
@@ -345,6 +347,20 @@ function capitulate(d, w) {
     plate:d });
   sfx('fanfare');
   if (isHuman(d) && !vichy) humanDefeated(d);
+}
+// When a nation falls, provinces the conqueror cannot reach overland (an overseas empire) go over to its strongest ally
+// instead — the Dutch Indies stay Allied when Holland falls. Unaligned democracies count the Allies as their friends.
+function colonialExile(d, w) {
+  let fk = facOf(d);
+  if (!fk && nat(d).ide === 'D' && G.facs.ALLIES && membersOf('ALLIES').some(m => W(m, w))) fk = 'ALLIES';
+  if (!fk) return null;
+  const heir = membersOf(fk).filter(t => t !== d && !friendly(t, w) && !W(t, d)).sort((a, b) => vpOf(b) - vpOf(a))[0];
+  if (!heir) return null;
+  const mine = new Set(owned(d)), reach = new Set(), q = [];
+  for (const i of mine) if (PROV[i].adj.some(j => friendly(G.prov[j].o, w) || W(G.prov[j].o, d))) { reach.add(i); q.push(i); }
+  for (let h = 0; h < q.length; h++) for (const j of PROV[q[h]].adj) if (mine.has(j) && !reach.has(j)) { reach.add(j); q.push(j); }
+  const ids = [...mine].filter(i => !reach.has(i));
+  return ids.length ? { heir, ids } : null;
 }
 function killNation(d, w) {
   const n = nat(d); n.alive = false;

@@ -1,9 +1,9 @@
 // Drives the game in headless Chromium: menu, campaign start, some orders, end month. Screenshots + console errors.
-const { chromium } = require('/opt/npm-tools/node_modules/playwright');
+const { chromium } = require(process.env.PW || '/opt/npm-tools/node_modules/playwright');
 const OUT = process.env.OUT || '/tmp/shots';
 (async () => {
   require('fs').mkdirSync(OUT, { recursive:true });
-  const browser = await chromium.launch({ executablePath:'/opt/pw-browsers/chromium-1243/chrome-linux64/chrome' });
+  const browser = await chromium.launch({ executablePath:process.env.PW ? undefined : '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome' });
   const page = await browser.newPage({ viewport:{ width:+(process.env.W||1440), height:+(process.env.H||900) }, deviceScaleFactor:1 });
   const errs = [];
   page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') errs.push(m.type() + ': ' + m.text()); });

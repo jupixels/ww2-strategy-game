@@ -1,9 +1,9 @@
 // Checks the sound bank: every sample decodes, every SFX call runs without errors, and the streamed music plays.
 // sfx.js reports any sample that fails to decode as a console warning, which counts as an error here.
 // Needs the local server (python3 -m http.server 8765).
-const { chromium } = require('/opt/npm-tools/node_modules/playwright');
+const { chromium } = require(process.env.PW || '/opt/npm-tools/node_modules/playwright');
 (async () => {
-  const browser = await chromium.launch({ executablePath:'/opt/pw-browsers/chromium-1243/chrome-linux64/chrome', args:['--autoplay-policy=no-user-gesture-required'] });
+  const browser = await chromium.launch({ executablePath:process.env.PW ? undefined : '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome', args:['--autoplay-policy=no-user-gesture-required'] });
   const page = await browser.newPage();
   const errs = [], missing = [];
   page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') errs.push(m.type() + ': ' + m.text()); });

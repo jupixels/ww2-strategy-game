@@ -72,7 +72,8 @@ function aiCards(t, enemies, fd) {
 function aiBuild(t, atWar, fd, enemies, mine) {
   const n = nat(t);
   const d = divisions(t), total = landN(d);
-  const cap = atWar ? 1e9 : mine.length * 2.5 + (n.major ? 30 : 4) + (G.tension / 10) * (n.major ? 4 : 1);
+  // peacetime army size follows the homeland (colonies and empty steppe count for little)
+  const cap = atWar ? 1e9 : sum(mine, i => PROV[i].col ? 0.3 : PROV[i].vp >= 2 ? 2.5 : PROV[i].vp ? 1.4 : 0.6) + (n.major ? 30 : 4) + (G.tension / 10) * (n.major ? 4 : 1);
   const reserve = atWar ? 0 : 20;
   const air = airOf(t), navy = navyOf(t);
   const home = homeProv(t);
@@ -82,7 +83,7 @@ function aiBuild(t, atWar, fd, enemies, mine) {
   // navy: coastal powers maintain a fleet
   if (n.major && (n.tech.cap1 || n.tech.sub1)) {
     const port = mine.find(i => PROV[i].coast && G.prov[i].core === t && PROV[i].zones.length);
-    const capWant = { ENG:16, ITA:8, FRA:8, GER:4, SOV:3 }[t] || 2, subWant = { GER:14, ITA:10, ENG:4, SOV:8, FRA:6 }[t] || 2;
+    const capWant = { ENG:16, ITA:8, FRA:8, GER:4, SOV:3, USA:16, JAP:14 }[t] || 2, subWant = { GER:14, ITA:10, ENG:4, SOV:8, FRA:6, USA:8, JAP:8 }[t] || 2;
     if (port != null && n.pp - reserve > 90) {
       if (n.tech.cap1 && navy.cap < capWant && rnd() < 0.35) build(t, 'cap', port);
       else if (n.tech.sub1 && navy.sub < subWant && rnd() < 0.45) build(t, 'sub', port);
@@ -102,7 +103,8 @@ function aiBuild(t, atWar, fd, enemies, mine) {
       if (front.length) place = front.reduce((b, i) => { const th = threatAt(t, i) + PROV[i].vp * 0.5 + rnd() * 2; return th > b[0] ? [th, i] : b; }, [-1e9, front[0]])[1];
       else place = home >= 0 ? home : mine[0];
     } else {
-      const border = mine.filter(i => PROV[i].adj.some(j => G.prov[j].o !== t));
+      const border0 = mine.filter(i => PROV[i].adj.some(j => G.prov[j].o !== t)), home0 = border0.filter(i => !PROV[i].col);
+      const border = home0.length ? home0 : border0;
       const pool = border.length ? border : mine;
       place = pool[(rnd() * pool.length) | 0];
       if (rnd() < 0.3 && home >= 0) place = home;
@@ -134,6 +136,14 @@ function aiNavy(t) {
     }
     if (best && rnd() < 0.6) moveFleet(t, z, best[1], f.cap > 2 && rnd() < 0.5 ? 'half' : 'all');
   }
+}
+// powers whose wars are fought across oceans: their idle armies gather at ports in reach of an enemy shore
+const SEA_POWERS = new Set(['USA','JAP']);
+function stagingDistance(t, mine) {
+  const d = new Int16Array(NP).fill(99), q = [];
+  for (const i of mine) if (PROV[i].coast) { for (const k of navalTargets(i, t).values()) if (k === 'land') { d[i] = 0; q.push(i); break; } }
+  for (let h = 0; h < q.length; h++) { const i = q[h]; for (const j of PROV[i].adj) if (G.prov[j].o === t && d[j] > d[i] + 1) { d[j] = d[i] + 1; q.push(j); } }
+  return d;
 }
 function aiTurn(t, battles) {
   const n = nat(t); if (!n.alive) return;
@@ -171,11 +181,13 @@ function aiTurn(t, battles) {
     if (tg.length) launchOperation(t, tg);
   }
   const order = mine.filter(i => readyAt(G.prov[i]) > 0).sort((a, b) => fd[a] - fd[b]);
+  const sd = SEA_POWERS.has(t) ? stagingDistance(t, mine) : null;
   const aggression = (n.major ? 1.05 : 1.2) * (n.stab < 30 ? 1.15 : 1);
-  // amphibious gambles by big coastal stacks
-  if (n.major && G.y >= 1940 && (n.tech.amph || n.tech.blitz) && rnd() < 0.08) {
+  // amphibious gambles by big coastal stacks; the Pacific powers island-hop as a matter of course
+  const pacific = SEA_POWERS.has(t), landings = pacific ? 2 : 1;
+  for (let L = 0; L < landings; L++) if (n.major && (G.y >= 1940 || pacific && G.y >= 1937) && (n.tech.amph || n.tech.blitz) && rnd() < (pacific ? 0.45 : 0.08)) {
     for (const i of order) {
-      const p = G.prov[i]; if (!PROV[i].coast || readyAt(p) < 14) continue;
+      const p = G.prov[i]; if (!PROV[i].coast || readyAt(p) < (pacific ? 6 : 14)) continue;
       let best = null;
       for (const [j, k] of navalTargets(i, t)) { if (k !== 'land') continue; const part = portion(p, 'all'); part.inf = Math.max(0, part.inf - 3); const o = attackValue(t, part, j, { naval:true, from:i }) / Math.max(0.3, defenseValue(j, part, t)); if (o > 2.2 && (!best || PROV[j].vp > PROV[best].vp)) best = j; }
       if (best != null) { const part = portion(p, 'all'); part.inf = Math.max(0, part.inf - 3); const r = battle([{ id:i, u:part }], best, { naval:true }); battles.push(r); if (r.win) news(`${n.adj.toUpperCase()} TROOPS STORM THE BEACHES AT ${PROV[best].name.toUpperCase()}`); break; }
@@ -223,6 +235,10 @@ function aiTurn(t, battles) {
         const nb = PROV[i].adj.filter(j => G.prov[j].o === t && fd[j] === 0 && threatAt(t, j) > threatAt(t, i) + 3);
         if (nb.length) { const j = nb.sort((a, b) => threatAt(t, b) - threatAt(t, a))[0]; const part = portion(p, 'half'); moveLand(p, G.prov[j], part); }
       }
+    } else if (fd[i] === 99 && sd && sd[i] > 0 && sd[i] < 99) {
+      // no land front: make for the ports that face the enemy across the sea
+      const nb = PROV[i].adj.filter(j => G.prov[j].o === t && sd[j] < sd[i]);
+      if (nb.length) { const part = portion(p, 'all'); if (PROV[i].vp >= 6 && part.inf > 0) part.inf--; if (landN(part)) { moveLand(p, G.prov[pickR(nb)], part); if (!unitsAt(p)) moveGeneral(i, nb[0], t); } }
     } else if (fd[i] < 99) {
       // march toward the front, preferring the sector under most pressure
       const nb = PROV[i].adj.filter(j => G.prov[j].o === t && fd[j] < fd[i]);
@@ -236,7 +252,7 @@ function aiTurn(t, battles) {
 }
 function aiDiplomacy() {
   // dictatorships pick new fights from 1942 on
-  if (G.y >= 1942) for (const t of ['GER','ITA','SOV','VIC','SPA','TUR']) {
+  if (G.y >= 1942) for (const t of ['GER','ITA','SOV','VIC','SPA','TUR','JAP']) {
     if (isHuman(t) || !A(t)) continue;
     const n = nat(t); if (n.ide !== 'F' && n.ide !== 'C') continue;
     if (enemiesOf(t).length || rnd() > 0.04) continue;
@@ -261,7 +277,8 @@ function aiDiplomacy() {
     }
     // threatened minors seek protection
     if (!n.major && !facOf(t) && G.tension > 45 && rnd() < 0.03) {
-      const fk = Object.keys(G.facs).find(k => G.facs[k].lead && nat(G.facs[k].lead).ide === n.ide && !membersOf(k).some(m => W(m, t)));
+      // ...but only into an alliance already fighting all of their enemies (no dragging great powers into new wars)
+      const fk = Object.keys(G.facs).find(k => G.facs[k].lead && nat(G.facs[k].lead).ide === n.ide && !membersOf(k).some(m => W(m, t)) && enemiesOf(t).every(e => membersOf(k).some(m => W(m, e))));
       if (fk && !humanTags().some(h => W(h, t))) joinFaction(t, fk);
     }
   }

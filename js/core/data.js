@@ -4,7 +4,7 @@ const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV
 const MONTHS_L = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const TER = {
   p:{n:'Plains',d:1.0}, f:{n:'Forest',d:1.25}, h:{n:'Hills',d:1.3}, m:{n:'Mountains',d:1.6},
-  d:{n:'Desert',d:1.0}, u:{n:'Urban',d:1.35}, s:{n:'Marsh',d:1.35}, t:{n:'Tundra',d:1.2}
+  d:{n:'Desert',d:1.0}, u:{n:'Urban',d:1.35}, s:{n:'Marsh',d:1.35}, t:{n:'Tundra',d:1.2}, j:{n:'Jungle',d:1.45}
 };
 const IDEO = {F:'Fascist',D:'Democratic',C:'Communist',N:'Non-aligned'};
 
@@ -77,9 +77,57 @@ const NATDEF = {
   SAU:{n:'Saudi Arabia',a:'Saudi',c:'#7d9c4c',i:'N',mp:15,cap:'Riyadh',stab:60,stars:5,u:{inf:4},flag:{t:'h',c:['#106b3a']}},
   POR:{n:'Portugal',a:'Portuguese',c:'#2e7a51',i:'N',mp:20,cap:'Lisbon',stab:65,stars:5,u:{inf:5},flag:{t:'v',c:['#046a38','#da291c'],w:[2,3]}},
   VIC:{n:'Vichy France',a:'Vichy',c:'#8794b8',i:'F',mp:10,cap:'Marseille',stab:40,stars:5,hidden:1,flag:{t:'v',c:['#24479a','#f2f2f2','#d6282e']}},
-  USA:{n:'United States',a:'American',c:'#4a6fa0',i:'D',off:1,hidden:1,flag:{t:'usa'}},
+  // ---- the wider world ----
+  USA:{n:'United States',a:'American',c:'#6f93c4',i:'D',mp:200,cap:'Washington',major:1,stab:70,stars:2,
+       u:{inf:26,art:4,arm:2,ftr:6,bmb:4},navy:{WAT:[4,2],EPA:[5,2],CPA:[4,2]},tech:['inf1','art1','ftr1','bmb1','ind1','cap1','sub1','amph'],
+       flag:{t:'usa'},
+       brief:'The arsenal of democracy, still asleep behind two oceans. Wake it early, or let the world come to you.'},
+  JAP:{n:'Japan',a:'Japanese',c:'#d8c48c',i:'F',mp:130,cap:'Tokyo',major:1,stab:65,stars:2,
+       u:{inf:24,art:4,arm:1,mtn:2,ftr:6,bmb:4},navy:{ECS:[4,2],PHS:[5,3],SOJ:[1,2]},tech:['inf1','art1','ftr1','bmb1','cap1','sub1','ind1','amph'],
+       flag:{t:'disc',c:['#f4f1ea','#bc002d']},
+       brief:'An island empire with a great navy and no oil. China is the prize; the Indies are the fuel.'},
+  CHI:{n:'China',a:'Chinese',c:'#5b6b8c',i:'N',mp:300,cap:'Nanjing',stab:35,stars:3,u:{inf:40,art:2,ftr:1},tech:['inf1'],flag:{t:'chi'},brief:'A vast, divided republic with endless manpower and little industry. Hold on long enough and the world will come to your aid.'},
+  PRC:{n:'Communist China',a:'Communist Chinese',c:'#b5392c',i:'C',mp:30,cap:"Yan'an",stab:70,stars:5,u:{inf:6},flag:{t:'h',c:['#c8102e']}},
+  MAN:{n:'Manchukuo',a:'Manchurian',c:'#a06c4a',i:'F',mp:30,cap:'Hsinking',stab:40,stars:5,u:{inf:8},flag:{t:'h',c:['#f2c200','#c8102e','#151515','#f2f2f2','#2a6bb0'],w:[6,1,1,1,1]}},
+  MON:{n:'Mongolia',a:'Mongolian',c:'#8c6a8e',i:'C',mp:10,cap:'Ulan Bator',stab:60,stars:5,u:{inf:4},flag:{t:'v',c:['#c4272f','#015197','#c4272f']}},
+  SIK:{n:'Sinkiang',a:'Sinkiang',c:'#a8936a',i:'N',mp:15,cap:'Urumqi',stab:40,stars:5,u:{inf:4},flag:{t:'h',c:['#2a6bb0','#f2f2f2','#c8102e']}},
+  TIB:{n:'Tibet',a:'Tibetan',c:'#cdb886',i:'N',mp:5,cap:'Lhasa',stab:60,stars:5,u:{inf:2},flag:{t:'disc',c:['#c8102e','#f2c200']}},
+  SIA:{n:'Siam',a:'Siamese',c:'#4f8fb3',i:'N',mp:30,cap:'Bangkok',stab:55,stars:4,u:{inf:8,ftr:1},flag:{t:'h',c:['#a51931','#f4f5f8','#2d2a4a','#f4f5f8','#a51931'],w:[1,1,2,1,1]}},
+  CAN:{n:'Canada',a:'Canadian',c:'#a83f3f',i:'D',mp:45,cap:'Ottawa',stab:75,stars:4,u:{inf:6,ftr:1},navy:{WAT:[1,1]},tech:['inf1','ind1'],flag:{t:'ens',c:['#c8102e']},brief:'A dominion of the Crown with farms, factories and a long Atlantic coast.'},
+  AST:{n:'Australia',a:'Australian',c:'#3e7c6c',i:'D',mp:30,cap:'Canberra',stab:75,stars:4,u:{inf:6,ftr:1},navy:{TAS:[1,1]},tech:['inf1'],flag:{t:'ens',c:['#012169']},brief:'The far end of the Empire. If Singapore falls, Japan is on your doorstep.'},
+  NZL:{n:'New Zealand',a:'New Zealand',c:'#2c5579',i:'D',mp:10,cap:'Wellington',stab:80,stars:5,u:{inf:2},flag:{t:'ens',c:['#012169']}},
+  SAF:{n:'South Africa',a:'South African',c:'#b2774c',i:'D',mp:20,cap:'Pretoria',stab:60,stars:5,u:{inf:4},tech:['inf1'],flag:{t:'h',c:['#e8701a','#f2f2f2','#00247d']}},
+  RAJ:{n:'British Raj',a:'Indian',c:'#d39a45',i:'D',mp:160,cap:'Delhi',stab:50,stars:4,u:{inf:16,art:1},tech:['inf1'],flag:{t:'ens',c:['#c8102e']},brief:'The jewel in the Crown: millions of soldiers, if the independence movement allows it.'},
+  MEX:{n:'Mexico',a:'Mexican',c:'#5f8f46',i:'D',mp:40,cap:'Mexico City',stab:55,stars:4,u:{inf:8},flag:{t:'v',c:['#006847','#f2f2f2','#ce1126']}},
+  GUA:{n:'Guatemala',a:'Guatemalan',c:'#4f9ec4',i:'N',mp:6,cap:'Guatemala',stab:50,stars:5,u:{inf:2},flag:{t:'v',c:['#4997d0','#f2f2f2','#4997d0']}},
+  HON:{n:'Honduras',a:'Honduran',c:'#5aa0b8',i:'N',mp:5,cap:'Tegucigalpa',stab:45,stars:5,u:{inf:2},flag:{t:'h',c:['#0073cf','#f2f2f2','#0073cf']}},
+  ELS:{n:'El Salvador',a:'Salvadoran',c:'#3c5fa8',i:'N',mp:5,cap:'San Salvador',stab:45,stars:5,u:{inf:2},flag:{t:'h',c:['#0f47af','#f2f2f2','#0f47af']}},
+  NIC:{n:'Nicaragua',a:'Nicaraguan',c:'#6fa2d6',i:'N',mp:5,cap:'Managua',stab:45,stars:5,u:{inf:2},flag:{t:'h',c:['#0067c6','#f2f2f2','#0067c6']}},
+  COS:{n:'Costa Rica',a:'Costa Rican',c:'#7f6aa8',i:'D',mp:4,cap:'San José',stab:65,stars:5,u:{inf:1},flag:{t:'h',c:['#002b7f','#f2f2f2','#ce1126','#f2f2f2','#002b7f'],w:[1,1,2,1,1]}},
+  PAN:{n:'Panama',a:'Panamanian',c:'#9c4f6a',i:'D',mp:4,cap:'Panama',stab:55,stars:5,u:{inf:1},flag:{t:'v',c:['#f2f2f2','#d21034']}},
+  CUB:{n:'Cuba',a:'Cuban',c:'#4a74a8',i:'N',mp:12,cap:'Havana',stab:45,stars:5,u:{inf:3},flag:{t:'h',c:['#002a8f','#f2f2f2','#002a8f','#f2f2f2','#002a8f']}},
+  HAI:{n:'Haiti',a:'Haitian',c:'#7b5b9a',i:'N',mp:6,cap:'Port-au-Prince',stab:40,stars:5,u:{inf:2},flag:{t:'h',c:['#00209f','#d21034']}},
+  DOM:{n:'Dominican Republic',a:'Dominican',c:'#c35b5b',i:'N',mp:6,cap:'Santo Domingo',stab:50,stars:5,u:{inf:2},flag:{t:'h',c:['#002d62','#ce1126']}},
+  COL:{n:'Colombia',a:'Colombian',c:'#d9c045',i:'D',mp:25,cap:'Bogotá',stab:55,stars:5,u:{inf:5},flag:{t:'h',c:['#fcd116','#fcd116','#003893','#ce1126']}},
+  VEN:{n:'Venezuela',a:'Venezuelan',c:'#b98a3c',i:'N',mp:18,cap:'Caracas',stab:50,stars:5,u:{inf:4},flag:{t:'h',c:['#f4c300','#00247d','#cf142b']}},
+  ECU:{n:'Ecuador',a:'Ecuadorian',c:'#c4b25a',i:'N',mp:10,cap:'Quito',stab:40,stars:5,u:{inf:3},flag:{t:'h',c:['#ffdd00','#ffdd00','#034ea2','#ed1c24']}},
+  PRU:{n:'Peru',a:'Peruvian',c:'#c26a6a',i:'N',mp:18,cap:'Lima',stab:50,stars:5,u:{inf:5},flag:{t:'v',c:['#d91023','#f2f2f2','#d91023']}},
+  BOL:{n:'Bolivia',a:'Bolivian',c:'#a8a04c',i:'N',mp:10,cap:'La Paz',stab:40,stars:5,u:{inf:3},flag:{t:'h',c:['#d52b1e','#f9e300','#007934']}},
+  PAR:{n:'Paraguay',a:'Paraguayan',c:'#6f86b8',i:'N',mp:8,cap:'Asunción',stab:45,stars:5,u:{inf:3},flag:{t:'h',c:['#d52b1e','#f2f2f2','#0038a8']}},
+  URG:{n:'Uruguay',a:'Uruguayan',c:'#7fb0d8',i:'D',mp:6,cap:'Montevideo',stab:65,stars:5,u:{inf:2},flag:{t:'h',c:['#f2f2f2','#0038a8','#f2f2f2','#0038a8','#f2f2f2']}},
+  ARG:{n:'Argentina',a:'Argentine',c:'#8fc3e3',i:'N',mp:40,cap:'Buenos Aires',stab:55,stars:4,u:{inf:8,ftr:1},navy:{PAT:[2,1]},flag:{t:'h',c:['#74acdf','#f2f2f2','#74acdf']}},
+  CHL:{n:'Chile',a:'Chilean',c:'#b4456a',i:'D',mp:15,cap:'Santiago',stab:60,stars:5,u:{inf:4},navy:{SEP:[1,1]},flag:{t:'h',c:['#f2f2f2','#d52b1e']}},
+  BRA:{n:'Brazil',a:'Brazilian',c:'#3f9e5a',i:'N',mp:80,cap:'Rio de Janeiro',stab:50,stars:4,u:{inf:12,ftr:1},navy:{BRZ:[1,0]},flag:{t:'bra'},brief:'A giant of coffee and rubber under the Estado Novo. Which way will Vargas lean?'},
+  LIB:{n:'Liberia',a:'Liberian',c:'#8e6aa0',i:'N',mp:5,cap:'Monrovia',stab:45,stars:5,u:{inf:1},flag:{t:'h',c:['#bf0a30','#f2f2f2','#bf0a30','#f2f2f2','#bf0a30']}},
+  ETH:{n:'Ethiopia',a:'Ethiopian',c:'#6e9a46',i:'N',mp:30,cap:'Addis Ababa',stab:40,stars:5,u:{inf:8},flag:{t:'h',c:['#078930','#fcdd09','#da121a']},brief:'The last free empire of Africa, already at war with Italy.'},
+  YEM:{n:'Yemen',a:'Yemeni',c:'#9c7a5a',i:'N',mp:8,cap:"Sana'a",stab:50,stars:5,u:{inf:2},flag:{t:'h',c:['#c8102e']}},
+  OMN:{n:'Oman',a:'Omani',c:'#b07a5f',i:'N',mp:4,cap:'Muscat',stab:55,stars:5,u:{inf:1},flag:{t:'h',c:['#c8102e']}},
+  AFG:{n:'Afghanistan',a:'Afghan',c:'#7a8f5f',i:'N',mp:20,cap:'Kabul',stab:45,stars:5,u:{inf:4,mtn:1},flag:{t:'v',c:['#151515','#c8102e','#007a36']}},
+  NEP:{n:'Nepal',a:'Nepalese',c:'#a65b6e',i:'N',mp:8,cap:'Kathmandu',stab:60,stars:5,u:{inf:2,mtn:1},flag:{t:'h',c:['#dc143c','#003893']}},
 };
-const MAJORS = ['GER','ENG','FRA','ITA','SOV'];
+const MAJORS = ['GER','ENG','FRA','ITA','SOV','USA','JAP'];
+// capitals of the great powers: hold them all to win outright
+const WORLD_CAPS = ['Berlin','London','Paris','Rome','Moscow','Washington','Tokyo'];
 
 /* ---------- generals ---------- */
 const TRAITS = {
@@ -104,6 +152,12 @@ const GENERALS = {
   ROM:[['Ion Antonescu','defensive',1936]], TUR:[['Fevzi Çakmak','mountain',1936]], SWI:[['Henri Guisan','mountain',1936]],
   YUG:[['Draža Mihailović','mountain',1936]], HUN:[['Gusztáv Jány','defensive',1936]], CZE:[['Ludvík Krejčí','defensive',1936]],
   SWE:[['Olof Thörnell','winter',1936]], NOR:[['Otto Ruge','winter',1936]], BUL:[['Konstantin Lukash','defensive',1936]],
+  USA:[['Douglas MacArthur','amphib',1936],['George Marshall','logistics',1936],['George Patton','panzer',1939],['Dwight Eisenhower','logistics',1941],['Omar Bradley','defensive',1942],['Alexander Vandegrift','amphib',1942]],
+  JAP:[['Tomoyuki Yamashita','offensive',1936],['Masaharu Homma','amphib',1937],['Hitoshi Imamura','defensive',1938],['Tadamichi Kuribayashi','defensive',1941],['Renya Mutaguchi','offensive',1942]],
+  CHI:[['Chiang Kai-shek','defensive',1936],['Bai Chongxi','offensive',1936],['Xue Yue','defensive',1937]], PRC:[['Zhu De','offensive',1936],['Peng Dehuai','offensive',1936]],
+  CAN:[['Harry Crerar','defensive',1936]], AST:[['Thomas Blamey','defensive',1936]], NZL:[['Bernard Freyberg','offensive',1936]], RAJ:[['Claude Auchinleck','defensive',1936]],
+  SAF:[['Dan Pienaar','desert',1936]], MAN:[['Zhang Jinghui','defensive',1936]], SIA:[['Plaek Phibunsongkhram','offensive',1936]], BRA:[['João Batista Mascarenhas','mountain',1936]],
+  ETH:[['Ras Imru Haile Selassie','mountain',1936]], MEX:[['Lázaro Cárdenas','defensive',1936]],
 };
 const GEN_NAMES = ['Col. Varga','Gen. Novak','Gen. Petrov','Gen. Haas','Gen. Moreau','Gen. Silva','Gen. Kowal','Gen. Dimitrov','Gen. Lindqvist','Gen. Rossi','Gen. Brennan','Gen. Popescu'];
 const GEN_TRAITS = Object.keys(TRAITS);
@@ -210,7 +264,10 @@ const DECISIONS = [
   {k:'redstar',who:['SOV'],n:'Union of European Republics',name:'Union of Soviet Europe',color:'#a3201f',need:['Moscow','Berlin','Paris','Rome','Warsaw'],d:'Workers of the world have united — at bayonet point.'},
   {k:'balkan',who:['YUG','BUL','ROM'],n:'Balkan Federation',name:'Balkan Federation',color:'#5b4a9e',need:['Belgrade','Sofia','Bucharest','Athens','Tirana'],d:'One flag from the Danube to the Aegean.'},
   {k:'scand',who:['FIN'],n:'Greater Finland',name:'Greater Finland',color:'#c9c4a6',need:['Helsinki','Petrozavodsk','Murmansk','Tallinn'],d:'Karelia, the Kola and the Gulf are Finnish at last.'},
-  {k:'caesar',who:null,n:'Masters of Europe',name:null,color:null,need:'60%',d:'Hold 60% of Europe\'s victory points to crown your dominion.'},
+  {k:'sphere',who:['JAP'],n:'Greater East Asia Co-Prosperity Sphere',name:'Empire of Japan',color:'#c9a85a',need:['Tokyo','Nanjing','Manila','Singapore','Batavia'],d:'"Asia for the Asiatics" — under the Rising Sun.'},
+  {k:'unify',who:['CHI','PRC'],n:'Unify China',name:'United China',color:'#4b5f88',need:['Nanjing','Peking','Canton','Hsinking','Urumqi','Lhasa'],d:'Every warlord, every province, every frontier under one flag.'},
+  {k:'monroe',who:['USA'],n:'Pax Americana',name:'American Century',color:'#4f78b0',need:['Washington','London','Paris','Tokyo','Berlin'],d:'The New World remakes the Old.'},
+  {k:'caesar',who:null,n:'Masters of the World',name:null,color:null,need:'45%',d:'Hold 45% of the world\'s victory points to crown your dominion.'},
 ];
 
 /* ---------- strategy cards ---------- */
@@ -243,35 +300,12 @@ const CARDS = {
 const HAND_MAX = 4;
 
 /* ---------- sea zones ---------- */
-// x,y: where the fleet marker sits. Straits: passage between two zones closes to anyone at war with the strait's owner.
-const SEA = {
-  ARC:{n:'Barents Sea',       x:1520, y:70,   adj:['NOR']},
-  NOR:{n:'Norwegian Sea',     x:900,  y:260,  adj:['ARC','NSE','ATL']},
-  NSE:{n:'North Sea',         x:975,  y:545,  adj:['NOR','CHN','BAL']},
-  CHN:{n:'English Channel',   x:790,  y:722,  adj:['NSE','ATL']},
-  ATL:{n:'Atlantic',          x:500,  y:780,  adj:['NOR','CHN','WMD']},
-  BAL:{n:'Baltic Sea',        x:1225, y:525,  adj:['NSE']},
-  WMD:{n:'Western Mediterranean', x:900, y:1075, adj:['ATL','EMD']},
-  EMD:{n:'Eastern Mediterranean', x:1380, y:1262, adj:['WMD','BLK','IND']},
-  BLK:{n:'Black Sea',         x:1565, y:940,  adj:['EMD']},
-  IND:{n:'Red Sea & Gulf',    x:1965, y:1395, adj:['EMD']},
-  CAS:{n:'Caspian Sea',       x:1890, y:805,  adj:[]},
-};
-const STRAITS = { 'ATL|WMD':'Gibraltar', 'BLK|EMD':'Istanbul', 'EMD|IND':'Cairo', 'BAL|NSE':'Copenhagen' };
+// generated with the map (data/map.js): x,y is where the fleet marker sits; which provinces touch which zone is in MAP.prov.
+// Straits: passage between two zones closes to anyone at war with the strait's owner.
+const SEA = {};
+for (const [k, n, x, y, adj] of MAP.seas) SEA[k] = { n, x, y, adj:adj ? adj.split(' ') : [] };
+const STRAITS = { 'ATL|WMD':'Gibraltar', 'BLK|EMD':'Istanbul', 'EMD|IND':'Cairo', 'BAL|NSE':'Copenhagen', 'CAR|MPA':'Panama', 'BOB|SCS':'Singapore' };
 const SEAKEY = (a, b) => a < b ? a + '|' + b : b + '|' + a;
-const COAST_ZONES = {
-  ARC:'Murmansk Arkhangelsk Naryan-Mar Pechora',
-  NOR:'Reykjavík Bergen Trondheim Narvik Inverness',
-  NSE:'Hamburg Essen Kiel Groningen Amsterdam Rotterdam Brussels Lille London Norwich Newcastle Inverness Jutland Oslo Gothenburg Bergen',
-  CHN:'Normandy Brest Plymouth London Lille',
-  ATL:'Glasgow Belfast Dublin Cork Cardiff Manchester Plymouth Brest Nantes Bordeaux Bilbao Galicia Porto Lisbon Seville Rabat Marrakesh Spanish_Sahara Reykjavík Gibraltar Tetuán',
-  BAL:'Kiel Stettin Königsberg Bydgoszcz Danzig Copenhagen Malmö Stockholm Sundsvall Kiruna Oulu Tampere Helsinki Viipuri Leningrad Tallinn Riga Kaunas Pskov Novgorod',
-  WMD:'Gibraltar Tetuán Granada Valencia Barcelona Zaragoza Marseille Toulouse Corsica Sardinia Algiers Oran Constantine Tunis Turin Florence Rome Naples Sicily Malta Tripoli Calabria',
-  EMD:'Malta Sicily Calabria Bari Ancona Venice Trieste Split Zagreb Ljubljana Sarajevo Tirana Ioannina Athens Thessaloniki Crete Rhodes Izmir Antalya Adana Cyprus Aleppo Damascus Jerusalem Alexandria Cairo Benghazi Tobruk Tripoli Istanbul Siwa',
-  BLK:'Istanbul Varna Constanța Bessarabia Odessa Sevastopol Krasnodar Rostov Trabzon Erzurum Ankara Tbilisi',
-  IND:'Basra Shiraz Hofuf Medina Tabuk Cairo',
-  CAS:'Baku Astrakhan Guryev Krasnovodsk Makhachkala Tehran Tabriz Grozny',
-};
 
 /* ---------- strategic resources ---------- */
 const RESOURCES = {

@@ -74,7 +74,8 @@ function newGame(opts) {
   const seed = opts.seed != null ? opts.seed >>> 0 : (Math.random() * 4294967296) >>> 0;
   G = { v:4, seed, rs:seed, mode:opts.mode || 'sp', gm:opts.gm || 'grand', sc:opts.scenario || 1936, diff:opts.diff || 'normal',
     humans:opts.humans || {}, turn:0, y:1936, m:0, tension:8, prov:[], nat:{}, wars:[], warStart:{}, truce:{}, pacts:{},
-    facs:{ AXIS:{n:'Axis',lead:'GER',m:['GER']}, ALLIES:{n:'Allies',lead:'ENG',m:['ENG','FRA']}, COMINTERN:{n:'Comintern',lead:'SOV',m:['SOV']} },
+    facs:{ AXIS:{n:'Axis',lead:'GER',m:['GER']}, ALLIES:{n:'Allies',lead:'ENG',m:['ENG','FRA','CAN','AST','NZL','SAF','RAJ']}, COMINTERN:{n:'Comintern',lead:'SOV',m:['SOV','MON']},
+      SPHERE:{n:'Co-Prosperity Sphere',lead:'JAP',m:['JAP','MAN']} },
     fleet:{}, gens:[], genId:1, ev:{}, flags:{}, log:[], news:[], inbox:{}, hist:[], over:false, orders:[], daily:opts.daily || null };
   for (const z in SEA) G.fleet[z] = {};
   for (const t in NATDEF) G.nat[t] = newNation(t);
@@ -84,6 +85,9 @@ function newGame(opts) {
   }
   for (const t in NATDEF) placeStartingForces(t);
   addLandAt('Gibraltar', 'inf', 2); addLandAt('Malta', 'inf', 1); addLandAt('Strasbourg', 'inf', 3); addLandAt('Metz', 'inf', 3); addLandAt('Viipuri', 'inf', 2);
+  // the Kwantung Army, the Philippine garrison and the fortress of Singapore
+  addLandAt('Dairen', 'inf', 3); addLandAt('Heijo', 'inf', 2); addLandAt('Chongjin', 'inf', 2); addLandAt('Manila', 'inf', 2); addLandAt('Singapore', 'inf', 2); addLandAt('Honolulu', 'inf', 2);
+  addLandAt('Vladivostok', 'inf', 4); addLandAt('Khabarovsk', 'inf', 3); addLandAt('Chita', 'inf', 2);
   rebuildWarSet();
   for (const t in G.nat) { const n = G.nat[t]; n.pp = Math.round(income(t) * 1.5); n.oil = 15 + oilIncome(t) * 3; n.steel = 15 + steelIncome(t) * 3; }
   for (const t of humanTags()) { if (G.diff === 'easy') nat(t).pp += 60; else nat(t).pp += 20; }
@@ -97,11 +101,14 @@ function newGame(opts) {
   Hooks.emit('newgame', {});
   return G;
 }
-const START_FORTS = { Strasbourg:3, Metz:3, Sudetenland:2, Viipuri:2, Sevastopol:2, Gibraltar:3, Malta:2, Bern:2, Leningrad:1, Moscow:1, Saarbrücken:1, Brussels:1, Istanbul:1, Bratislava:1, Brno:1 };
+const START_FORTS = { Strasbourg:3, Metz:3, Sudetenland:2, Viipuri:2, Sevastopol:2, Gibraltar:3, Malta:2, Bern:2, Leningrad:1, Moscow:1, Saarbrücken:1, Brussels:1, Istanbul:1, Bratislava:1, Brno:1,
+  Singapore:3, Manila:1, Honolulu:2, 'Hong Kong':1, Vladivostok:2, Truk:1, Panama:1 };
 function addLandAt(name, k, n) { G.prov[ID[name]].u[k] += n; }
 function placeStartingForces(t) {
   const d = NATDEF[t]; if (!d.u) return;
-  const mine = PROV.filter(p => p.owner0 === t);
+  // colonies get a token garrison of their own; the home army stays at home
+  for (const p of PROV) if (p.owner0 === t && p.col && (p.vp >= 1 || p.adj.some(j => PROV[j].owner0 !== t))) G.prov[p.id].u.inf++;
+  const mine = PROV.filter(p => p.owner0 === t && !p.col);
   if (!mine.length) return;
   const border = p => p.adj.some(j => PROV[j].owner0 !== t);
   const cap = ID[d.cap];

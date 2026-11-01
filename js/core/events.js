@@ -16,11 +16,21 @@ const EVENTS = [
     text:'In open defiance of Versailles and Locarno, the Wehrmacht has reoccupied the demilitarised Rhineland. Officers carried sealed orders to withdraw at the first sign of French resistance. None came.',
     opts:[{ t:'March in', e:'+1 fort on the Rhine, +20 politics', f(){ ['Cologne','Essen','Saarbrücken'].forEach(n => { const p = G.prov[ID[n]]; if (p.o === 'GER') p.fort++; }); nat('GER').pol += 20; tension(4); } },
           { t:'Hold back', e:'+5 stability', f(){ nat('GER').stab += 5; } }] },
-  { id:'ethiopia', y:1936, m:4, actor:'ITA', cond:() => A('ITA'),
+  { id:'ethiopia', y:1936, m:4, actor:'ITA', tgt:['ETH'], cond:() => A('ITA') && (!A('ETH') || !isHuman('ETH') || W('ITA','ETH')),
     title:'Victory in Abyssinia', dek:'Marshal Badoglio enters Addis Ababa; the King of Italy becomes an Emperor',
     text:'The League of Nations protests, imposes half-hearted sanctions and then quietly lifts them. In Rome the crowds cheer a new empire in the Horn of Africa.',
-    opts:[{ t:'Proclaim the Empire', e:'+10 stability, +20 politics, tension rises', f(){ const n = nat('ITA'); n.stab += 10; n.pol += 20; tension(3); } },
-          { t:'Keep it quiet', e:'+40 production', f(){ nat('ITA').pp += 40; } }] },
+    opts:[{ t:'Proclaim the Empire', e:'Ethiopia becomes Italian · +10 stability, +20 politics, tension rises', f(){ conquerEthiopia(); const n = nat('ITA'); n.stab += 10; n.pol += 20; tension(3); } },
+          { t:'Keep it quiet', e:'Ethiopia becomes Italian · +40 production', f(){ conquerEthiopia(); nat('ITA').pp += 40; } }],
+    topts:[{ t:'Fight on from the highlands', e:'The war with Italy goes on', f(){ declareWar('ITA','ETH'); } }] },
+  { id:'ethwar', y:1936, m:0, actor:'ITA', cond:() => A('ITA') && A('ETH') && isHuman('ETH') && !W('ITA','ETH'),
+    title:'The Abyssinian War', dek:'Italian columns advance from Eritrea and Somaliland with aircraft and poison gas',
+    text:'Emperor Haile Selassie appeals to the League of Nations. The world listens politely and does nothing. Ethiopia will have to defend itself.',
+    opts:[{ t:'Press the invasion', e:'War with Ethiopia', f(){ declareWar('ITA','ETH'); } }] },
+  { id:'marcopolo', y:1937, m:6, actor:'JAP', tgt:['CHI'], cond:() => A('JAP') && A('CHI') && !W('JAP','CHI'),
+    title:'The Marco Polo Bridge Incident', dek:'Shots in the dark outside Peking become a full-scale war for China',
+    text:'A Japanese private goes missing during night manoeuvres; by morning the two armies are exchanging fire across the old stone bridge. Tokyo promises a war of three months. Chiang Kai-shek and the Communists agree to a united front.',
+    opts:[{ t:'Punish China', e:'War with China and the Chinese Communists', f(){ declareWar('JAP','CHI'); if (A('PRC') && !W('JAP','PRC')) declareWar('JAP','PRC', { quiet:true }); } }, { t:'Not yet', e:'Ask again in four months', retry:4, f(){} }],
+    topts:[{ t:'Resist to the end', e:'Total war with Japan', f(){ declareWar('JAP','CHI'); if (A('PRC') && !W('JAP','PRC')) declareWar('JAP','PRC', { quiet:true }); } }] },
   { id:'spain', y:1936, m:6, actor:'SPA', cond:() => A('SPA') && enemiesOf('SPA').length === 0,
     title:'Civil War in Spain', dek:'Generals rise in Morocco; Madrid hands rifles to the workers',
     text:'The Republic and the Nationalists are tearing Spain apart. Volunteers pour in from across Europe, and foreign air forces test their newest bombers over Spanish towns. Whoever wins will inherit a ruined country.',
@@ -169,10 +179,23 @@ const EVENTS = [
     title:'The Siberian Divisions', dek:'Fresh troops from the Far East detrain in Moscow in white winter coats',
     text:'A spy in Tokyo reports that Japan will strike south, not north. Stalin strips the Manchurian border: eighteen divisions, a thousand tanks and fifteen hundred aircraft head west across the steppe.',
     opts:[{ t:'Bring them west', e:'+14 infantry, 4 tanks and 6 fighter wings at Moscow', f(){ reinforce('SOV','Moscow',{ inf:14, arm:4 }); const m = G.prov[ID['Moscow']]; if (m.o === 'SOV') m.air.ftr += 6; nat('SOV').stab += 10; } }] },
-  { id:'usa', y:1941, m:11, actor:'USA', cond:() => !G.flags.usa && G.facs.ALLIES && membersOf('ALLIES').some(m => enemiesOf(m).some(e => isAxis(e))),
+  { id:'japaxis', y:1940, m:8, actor:'JAP', cond:() => A('JAP') && A('GER') && facOf('GER') === 'AXIS' && !isAxis('JAP') && !W('JAP','GER'),
+    title:'The Tripartite Pact', dek:'Berlin, Rome and Tokyo divide the world into spheres of influence',
+    text:'Ribbentrop, Ciano and Ambassador Kurusu sign in the Reich Chancellery. Each power promises to come to the aid of the others if attacked by a nation not yet at war — everyone knows which nation they mean.',
+    opts:[{ t:'Sign the pact', e:'Japan and Manchukuo join the Axis', f(){ joinFaction('JAP','AXIS'); if (A('MAN') && facOf('MAN') !== 'AXIS' && !isHuman('MAN')) joinFaction('MAN','AXIS', true); } }, { t:'Keep our own sphere', e:'Japan stays outside the Axis', f(){} }] },
+  { id:'indochina', y:1941, m:6, actor:'JAP', cond:() => A('JAP') && A('VIC') && !W('JAP','VIC') && at('VIC','Hanoi'),
+    title:'Japan Moves into Indochina', dek:'Vichy bows to Tokyo; Japanese troops land at Saigon and Cam Ranh Bay',
+    text:'The French administration stays at its desks, but the airfields and harbours now serve the Imperial Army. Washington answers with an oil embargo that leaves Japan with eighteen months of fuel.',
+    opts:[{ t:'Occupy Indochina', e:'Take French Indochina · America embargoes oil', f(){ transfer(['Hanoi','Hué','Saigon','Phnom Penh','Vientiane'].filter(n => O(n) === 'VIC'), 'JAP', 2); G.flags.embargo = 1; tension(5); } }, { t:'Not yet', e:'Ask again in three months', retry:3, f(){} }] },
+  { id:'usa', y:1941, m:11, actor:'USA', cond:() => !G.flags.usa && !isHuman('USA') && (G.facs.ALLIES && membersOf('ALLIES').some(m => enemiesOf(m).some(e => isAxis(e))) || A('JAP') && W('JAP','CHI') && G.flags.embargo),
     title:'America Enters the War', dek:'Japanese carriers strike Pearl Harbor; Germany declares war on the United States',
     text:'"A date which will live in infamy." The sleeping giant is awake. American factories turn to bombers and tanks, and Lend-Lease convoys begin crossing the Atlantic to every Allied port.',
     opts:[{ t:'Arsenal of Democracy', e:'USA joins the Allies · Lend-Lease begins', f(){ usaJoin(); } }] },
+  { id:'pearl', y:1941, m:11, actor:'JAP', tgt:['USA'], cond:() => A('JAP') && A('USA') && isHuman('USA') && !W('JAP','USA') && (W('JAP','CHI') || isAxis('JAP')),
+    title:'Tora! Tora! Tora!', dek:'Six carriers launch at dawn against the Pacific Fleet at anchor in Pearl Harbor',
+    text:'The battleships of the Pacific Fleet burn along Battleship Row. In the same hours Japanese troops land in Malaya, bomb the Philippines and storm Hong Kong. America is at war.',
+    opts:[{ t:'Strike the Americans', e:'War with the United States and the British Empire', f(){ pearlHarbor(); usaJoin(); } }, { t:'Not yet', e:'Ask again in three months', retry:3, f(){} }],
+    topts:[{ t:'Remember Pearl Harbor', e:'America enters the war', f(){ pearlHarbor(); usaJoin(); } }] },
   { id:'stalingrad', y:1942, m:10, actor:'SOV', cond:() => A('SOV') && W('GER','SOV') && at('SOV','Stalingrad') && PROV[ID['Stalingrad']].adj.concat(ID['Stalingrad']).some(j => isAxis(G.prov[j].o) || hops(ID['Stalingrad'])[j] <= 2 && isAxis(G.prov[j].o)),
     title:'Operation Uranus', dek:'Two Soviet fronts break the Romanian lines and close a ring around Stalingrad',
     text:'For three months the city has been fought over house by house. Now the trap is sprung: the Sixth Army is surrounded on the Volga, and the Red Army learns how to win.',
@@ -242,13 +265,32 @@ function barbarossa() {
   if (facOf('SOV') !== 'ALLIES' && G.facs.ALLIES && membersOf('ALLIES').some(m => W(m,'GER'))) { joinFaction('SOV','ALLIES'); news('THE GRAND ALLIANCE: MOSCOW JOINS THE ALLIES'); }
   tension(10);
 }
+function conquerEthiopia() {
+  if (!A('ETH') || isHuman('ETH')) return;
+  for (const p of G.prov) if (p.o === 'ETH') { clearLand(p); p.o = 'ITA'; p.u.inf = 1; p.res = 30; }
+  killNation('ETH', 'ITA');
+}
+// the Pacific Fleet loses battleships at anchor; Japan strikes the Western colonies on the same day
+function pearlHarbor() {
+  G.flags.pearl = 1;
+  for (const z of ['CPA','EPA']) { const f = G.fleet[z] && G.fleet[z].USA; if (f && f.cap) { f.cap = Math.max(0, f.cap - 3); break; } }
+}
 function usaJoin() {
+  if (G.flags.usa) return;
   G.flags.usa = 1; nat('USA').alive = true;
   if (!G.facs.ALLIES) G.facs.ALLIES = { n:'Allies', lead:'USA', m:[] };
-  G.facs.ALLIES.m.push('USA');
+  if (facOf('USA') !== 'ALLIES') { leaveFaction('USA'); G.facs.ALLIES.m.push('USA'); }
   syncFaction('ALLIES');
   for (const t of membersOf('AXIS')) setWar('USA', t);
-  addFleet('ATL', 'USA', 'cap', 6); addFleet('ATL', 'USA', 'sub', 2);
+  // Japan goes south: war with America and the British Empire; China becomes an Allied power
+  if (A('JAP') && (isAxis('JAP') || W('JAP','CHI') || G.flags.pearl)) {
+    if (!G.flags.pearl && !isHuman('USA')) pearlHarbor();
+    for (const t of sideOf('JAP')) for (const a of membersOf('ALLIES')) setWar(t, a);
+    if (A('HOL') && !friendly('HOL','JAP')) for (const t of sideOf('JAP')) setWar(t, 'HOL');
+    for (const c of ['CHI','PRC']) if (A(c) && W(c,'JAP') && !facOf(c) && !isHuman(c)) joinFaction(c, 'ALLIES', true);
+    syncFaction('ALLIES');
+  }
+  addFleet('NAT', 'USA', 'cap', 3); addFleet('NAT', 'USA', 'sub', 2);
   for (const h of humanTags()) if (isAllied(h)) notify(h, '★', 'Lend-Lease begins', 'American convoys add production, oil and steel every month, and an expeditionary force will reach your shores.', 'medal');
 }
 function torch() {

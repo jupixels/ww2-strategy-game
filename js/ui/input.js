@@ -24,7 +24,7 @@ cv.addEventListener('pointerup', endPtr); cv.addEventListener('pointercancel', e
 cv.addEventListener('contextmenu', e => e.preventDefault());
 cv.addEventListener('wheel', e => { e.preventDefault(); camAnim = null; zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0016)); }, { passive:false });
 function zoomAt(sx, sy, f) { camMovedTotal += 25; const r = cv.getBoundingClientRect(); const [wx, wy] = s2w(sx - r.left, sy - r.top); cam.z *= f; clampCam(); const [nx, ny] = s2w(sx - r.left, sy - r.top); cam.x += wx - nx; cam.y += wy - ny; clampCam(); staticDirty = true; }
-function pickAt(sx, sy) { const r = cv.getBoundingClientRect(); const [wx, wy] = s2w(sx - r.left, sy - r.top); const gx = Math.floor(wx / GS), gy = Math.floor(wy / GS); if (gx < 0 || gy < 0 || gx >= GW || gy >= GH) return -1; return GRIDD[gy * GW + gx]; }
+function pickAt(sx, sy) { const r = cv.getBoundingClientRect(); const [wx, wy] = s2w(sx - r.left, sy - r.top); return gridAt(wx, wy); }
 function click(sx, sy, right, shift) {
   if (!G || G.preview || !$('#start').hidden || busy || !$('#modal').hidden || !$('#pass').hidden || timelapseOwners) return;
   // fleets first: their markers sit on the sea
@@ -75,15 +75,15 @@ $('#bMenu').onclick = () => { if (Ctl.mode === 'host' || Ctl.mode === 'client') 
 $('#bMusic').classList.toggle('off', !SFX.music);
 $('#bSound').classList.toggle('off', !SFX.on);
 function cycleMapMode() {
-  mapMode = mapMode === 'pol' ? 'sup' : mapMode === 'sup' ? 'res' : 'pol';
-  rebuildOverlay(); SFX.click();
-  $('#zMode').textContent = { pol:'◐', sup:'⛟', res:'✊' }[mapMode];
-  toast({ pol:'◐', sup:'⛟', res:'✊' }[mapMode], { pol:'Political map', sup:'Supply map', res:'Resistance map' }[mapMode], { pol:'Nations and alliances.', sup:'Green: full supply · yellow to red: stretched · dark red: cut off.', res:'Occupied provinces, redder where resistance runs high.' }[mapMode], '');
+  setMapMode({ pol:'ter', ter:'sup', sup:'res', res:'pol' }[mapMode]); SFX.mapMode();
+  const IC = { pol:'◐', ter:'⛰', sup:'⛟', res:'✊' };
+  $('#zMode').textContent = IC[mapMode];
+  toast(IC[mapMode], { pol:'Political map', ter:'Terrain map', sup:'Supply map', res:'Resistance map' }[mapMode], { pol:'Nations and alliances.', ter:'Mountains, forests, deserts and jungle: the ground your armies fight on.', sup:'Green: full supply · yellow to red: stretched · dark red: cut off.', res:'Occupied provinces, redder where resistance runs high.' }[mapMode], '');
 }
 /* minimap */
 {
   const mm = $('#mini'); let down = false;
-  const go = e => { const r = mm.getBoundingClientRect(); cam.x = (e.clientX - r.left) / r.width * WW; cam.y = (e.clientY - r.top) / r.height * WH; camAnim = null; drift = false; clampCam(); };
+  const go = e => { const r = mm.getBoundingClientRect(); cam.x = wrapX((e.clientX - r.left) / r.width * WW); cam.y = (e.clientY - r.top) / r.height * WH; camAnim = null; drift = false; clampCam(); };
   mm.addEventListener('pointerdown', e => { down = true; mm.setPointerCapture(e.pointerId); go(e); });
   mm.addEventListener('pointermove', e => { if (down) go(e); });
   mm.addEventListener('pointerup', () => down = false);

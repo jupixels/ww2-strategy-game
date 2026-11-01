@@ -1,8 +1,8 @@
 // Two tabs: host + client over the local transport. Lobby, start, commands, ready-up, month resolution, chat.
-const { chromium } = require('/opt/npm-tools/node_modules/playwright');
+const { chromium } = require(process.env.PW || '/opt/npm-tools/node_modules/playwright');
 const OUT = process.env.OUT;
 (async () => {
-  const browser = await chromium.launch({ executablePath:'/opt/pw-browsers/chromium-1243/chrome-linux64/chrome' });
+  const browser = await chromium.launch({ executablePath:process.env.PW ? undefined : '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome' });
   const ctx = await browser.newContext({ viewport:{ width:1280, height:800 } });
   const A = await ctx.newPage(), B = await ctx.newPage();
   const errs = [];

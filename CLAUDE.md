@@ -1,6 +1,6 @@
 # CLAUDE.md — Iron Dominion 1936
 
-Browser grand-strategy game of WWII Europe (1936–1950). Static site, no build step, served by GitHub Pages from `main`. Single player, hot-seat, and online multiplayer (PeerJS). See `README.md` for the player-facing overview.
+Browser grand-strategy game of WWII on a world map (1936–1950). Static site, no build step, served by GitHub Pages from `main`. Single player, hot-seat, and online multiplayer (PeerJS). See `README.md` for the player-facing overview.
 
 ## Working with the owner
 - Push finished, tested work **straight to `main`** (the owner asked for this; the live site updates from it). Ship in playable steps, never leave `main` broken.
@@ -15,18 +15,18 @@ node tests/sim.js 1936,1939,1941,1944 168 7   # AI-vs-AI campaigns: crashes, inv
 node tests/trace.js 1941 60 7 GER,SOV,ENG     # month-by-month national stats
 node tests/play.js | tests/mp.js | tests/hot.js | tests/tutorial.js | tests/end.js | tests/audio.js   # Playwright, needs the server running
 ```
-Playwright scripts use `/opt/npm-tools/node_modules/playwright` and Chromium at `/opt/pw-browsers/chromium-1243/chrome-linux64/chrome`; adjust the paths if your environment differs. Env: `SC=1941 TAG=SOV MONTHS=4 node tests/play.js`, `OUT=<dir>` saves screenshots, `MOBILE=1 W=390 H=844` for phone layout. Before pushing, at minimum run `sim.js` and `play.js`, plus `mp.js` if you touched networking, `tutorial.js` if you touched the UI or tutorial, and `audio.js` if you touched sound. Missing-sound 404s are not errors; page errors are.
+Playwright scripts use `/opt/npm-tools/node_modules/playwright` and Chromium at `/opt/pw-browsers/chromium-1243/chrome-linux64/chrome`; elsewhere set `PW=<path to node_modules/playwright>` and they use its bundled browser. Env: `SC=1941 TAG=SOV MONTHS=4 node tests/play.js`, `OUT=<dir>` saves screenshots, `MOBILE=1 W=390 H=844` for phone layout. Before pushing, at minimum run `sim.js` and `play.js`, plus `mp.js` if you touched networking, `tutorial.js` if you touched the UI or tutorial, and `audio.js` if you touched sound. Missing-sound 404s are not errors; page errors are.
 
 ## Architecture
 Classic `<script>` files sharing one global scope, loaded in the order listed in `index.html` (order matters — later files use earlier globals). No modules, no bundler.
 
-- `data/map.js` — generated map geometry (`MAP`: 234 provinces, adjacency, borders, RLE id raster). Don't hand-edit.
+- `data/map.js` — generated world map (`MAP`: 687 provinces, adjacency, province and sea-zone borders, coast/lake/river polylines, sea zones, RLE rasters for province ids (sea zones are ≤ −2) and biomes). Don't hand-edit: regenerate with `node tools/worldmap/build.js <dir of Natural Earth 50m GeoJSON> [preview.png]` (land, admin_0_countries, lakes, rivers_lake_centerlines, geography_regions_polys, glaciated_areas from github.com/nvkelso/natural-earth-vector `geojson/`). Projection: Miller cylindrical, 20 world units per degree of longitude, wrapping east–west at 169°W (`WW` is the circumference). The first `MAP.nlegacy` = 234 provinces are the old Europe map (`tools/worldmap/legacy_map.js`), resampled through its fitted conic projection (`oldproj.json`) so names, ids, events and scenarios are unchanged; everything else grows from the seed cities in `tools/worldmap/seeds.js` (owner, VP, factories, `c` colony, `b` island blob), along with sea zones, resources and strait links.
 - `js/core/` — **the simulation. Must stay DOM-free** so it runs in Node (`tests/load.js` concatenates these files into a VM).
   - `util.js` seeded `rnd()` (state in `G.rs`), `Hooks` event bus, `notify()`/`sfx()`.
   - `data.js` all static catalogs: `NATDEF`, `UNIT`, `TECHS`, `FOCUS`, `CARDS`, `GENERALS`, `SEA`, `RESOURCES`, `ACH`, `SCENARIOS`, `MODES`.
-  - `map.js` `PROV`/`ID`/sea zones/resources/weather flags. `state.js` `G`, accessors, unit-stack helpers, `newGame()`.
+  - `map.js` `PROV`/`ID`/sea zones/resources/weather flags (by latitude), `dist()` (wraps round the globe), `inEurope(tag)`. `state.js` `G`, accessors, unit-stack helpers, `newGame()`.
   - `economy.js` income, oil/steel, building, research, focus. `military.js` sea control, supply, air, generals, `battle()`, capture/capitulation, naval war. `diplomacy.js` war, factions, peace, pacts, inbox. `systems.js` medals, visibility, cards, spies, home front, agendas, decisions. `events.js` historical events. `orders.js` **`doCommand(tag, cmd, mode)`** — the single entry point for every player action. `ai.js`, `scenario.js` (1939/41/44 starts replay history), `turn.js` `endMonth()` + victory.
-- `js/ui/` — `render.js` (canvas map, counters, fog, weather), `icons.js` (SVG icons + flags), `fx.js` (VFX + frame loop), `sound.js`, `hud.js` (top bar, dossier, cards, selection, tooltips), `panels.js` (8 drawer tabs), `inbox.js` (newspapers/decisions, reports, end screen, timelapse, help), `input.js`, `tutorial.js`, `menu.js` (menus, setup, lobby), `main.js` (**`Ctl` controller**, save/load, boot).
+- `js/ui/` — `render.js` (tiled world map: five zoom levels of 512-px tiles cached in `TILES`, vector layers cut into 300-unit buckets, ownership raster `polCv` repainted per province; captures invalidate only nearby tiles; fog and weather are baked into tiles; counters are cached sprites; `nearX`/`w2s` handle the wrap), `icons.js` (SVG icons + flags), `fx.js` (VFX + frame loop), `sound.js`, `hud.js` (top bar, dossier, cards, selection, tooltips), `panels.js` (8 drawer tabs), `inbox.js` (newspapers/decisions, reports, end screen, timelapse, help), `input.js`, `tutorial.js`, `menu.js` (menus, setup, lobby), `main.js` (**`Ctl` controller**, save/load, boot).
 - `manifest.webmanifest` + `sw.js` + `icons/` — installable app. `sw.js` is network-first (cache only when offline), skips range requests (streamed music) and anything off-site except the font/CDN hosts, so PeerJS is untouched.
 - `js/net/net.js` — multiplayer. `js/vendor/` — `peerjs.min.js`, `sfx.js` (third-party; don't edit).
 
@@ -48,9 +48,11 @@ Host-authoritative. Transports: `'p2p'` (PeerJS, room id `iron-dominion-v4-<CODE
 - **Unit type:** `UNIT` + `LAND`/`AIR`/`NAVY` in `data.js`, strength in `unitStrength()` (`military.js`), icon in `icons.js`, counter/dossier display, AI build mix in `aiBuild()`.
 - **Tech / focus / card / spy op / decision / achievement:** add to its catalog in `data.js` (or `SPY_OPS` in `systems.js`), then its effect in `grantTech`-consumers / `completeFocus()` / `playCard()` / `spyOp()` / `enactDecision()`, and teach the AI to use it (`ai.js`).
 - **Historical event:** append to `EVENTS` in `events.js` (`actor`, optional `tgt` + `topts`, `cond`, `opts[{t,e,f(chooser)}]`). Option functions must only mutate `G` through core helpers. If it predates a later start date, `applyScenario()` marks it done automatically.
-- **Nation:** `NATDEF` needs `mp` (manpower — a past bug left every nation at 10k), `stab`, `u`, `flag`, `cap`; its provinces come from the map data.
+- **Nation:** `NATDEF` needs `mp` (manpower — a past bug left every nation at 10k), `stab`, `u`, `flag`, `cap`; its provinces come from the map data (`seeds.js` for anything outside Europe; rebuild the map). Flag types live in `paintFlag` (`icons.js`).
+- **Province outside Europe:** add a seed line to `tools/worldmap/seeds.js` and rebuild; new straits go in `LAND_LINKS`/`SEA_LINKS`. Colonies (`c`) give little manpower and start with a token garrison.
 
 ## Balance notes
+World map additions: the Commonwealth (CAN, AST, NZL, SAF, RAJ) starts in the Allies, Mongolia in the Comintern, Japan and Manchukuo in their own `SPHERE` faction until the Tripartite Pact. Minors only join an alliance that is already fighting all their enemies (stops chain-reaction world wars). Japan and the USA are `SEA_POWERS` in `ai.js`: idle armies march to ports facing the enemy and land often. Pacific outcomes vary a lot by seed; Japan usually expands in China and falls around 1945, sometimes earlier.
 Tune with `tests/sim.js` / `trace.js` across several seeds. Current shape (seeds 3, 7): from 1936/1939 the Axis usually falls by ~1945; from 1941 the Eastern Front swings back and forth (graded supply, "Not one step back", General Winter, Siberian divisions); occasional Axis wins are fine. Key levers: loss rates in `battle()`, `supLevel()`, `OIL_BASE`, scenario `bolster()` numbers, AI `aggression`, partisan rates in `tickResistance()`.
 
 ## UI notes
@@ -60,6 +62,8 @@ Tune with `tests/sim.js` / `trace.js` across several seeds. Current shape (seeds
 - Phone layout (≤820 px) is a supported target: rail moves to the bottom, resource labels hide, the card hand hides while a sheet is open. Check `MOBILE=1` screenshots after UI changes.
 
 ## Sound
+Exception to the rule below: the user asked for new sounds to come from the ElevenLabs MCP. The world-map ambience and map-mode sound in `assets/sounds/map/` were generated that way (`SFX.ambience()` crossfades sea and land loops by how much water is on screen).
+
 `js/ui/sound.js` wraps `window.SFX` from `js/vendor/sfx.js` (copied unchanged from jupixels/game-sounds `lib/sfx.js`). Library files used live in `assets/sounds/<category>/` (copy only the MP3s you use, using `sounds.json` volumes as a guide); the original set is `assets/sfx/`. Library: `git clone --depth 1 https://github.com/jupixels/game-sounds` — read its `CATALOG.md` "Quick picks" first. War sounds (gunfire, rifles, MG, artillery, howitzer, siren, warplane, tank, ship horn, morse radio) are real recordings from the library's `ww2/` family in `assets/sounds/ww2/`; music is its `music/` family in `assets/music/`, **streamed** through `<audio>` elements into the music bus (decoding minutes of audio would cost tens of MB), alternating the two tracks. Nothing is synthesized any more. Some ww2 recordings are CC-BY: anything you add from that family must get a credit line in the README (each entry in the library's `sounds.json` has `license`, `author`, `source_url`). Kenney sounds need only the general Kenney.nl credit. To re-cut a clip, edit `CLIPS` in the library's `tools/build/add_recorded.py` and re-copy the MP3.
 
 ## Ideas not yet built

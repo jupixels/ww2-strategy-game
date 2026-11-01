@@ -1,202 +1,341 @@
 'use strict';
 /* ================= RENDER =================
-   Everything static is baked once; ownership is painted into a low-res raster incrementally (only provinces
-   that changed), and a full-world composite is rebuilt only when the map changes. While the camera moves we
-   blit that composite; once it rests at high zoom, one crisp vector pass replaces it. */
+   A world map in the style of a modern grand-strategy table: terrain-shaded nation colours, relief, rivers, sea lanes,
+   curved country names. The world wraps east–west. Everything static is painted into 512-pixel tiles at five zoom levels
+   and cached; ownership lives in a grid-resolution raster repainted per province, and a capture only invalidates the
+   tiles it touches. Counters, cities and labels are drawn on top each time the view changes. */
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 let ME = null;            // the nation this screen belongs to (null = spectator)
 const cv = $('#map'), ctx = cv.getContext('2d');
 const stat = document.createElement('canvas'), sctx = stat.getContext('2d');
 let VW = 1, VH = 1, DPR = 1;
-const cam = { x:WW * 0.47, y:WH * 0.42, z:1 };
+const cam = { x:0, y:0, z:1 };
 let staticDirty = true, ownersDirty = true, busy = false;
 let sel = null;               // {id, amt, multi:Set}
 let selFleet = null;          // {z}
 let targets = new Map();      // id -> kind
 let fleetTargetsSet = new Set();
-let mapMode = 'pol';          // pol | sup | res
+let mapMode = 'pol';          // pol | ter | sup | res
 let pickMode = null;          // {kind:'card'|'raid'|'ops'|'spy', ...} — choosing a target on the map
-const PAPER = [233, 222, 191];
+const PAPER = [196, 186, 150];   // the neutral land tone nation colours are mixed into
+const OCEAN = '#173f5c';
 const hexRGB = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 const FONT_MAP = "'Cormorant SC',Georgia,serif", FONT_BODY = "'Barlow Semi Condensed','Arial Narrow',sans-serif", FONT_DISP = "'Big Shoulders Stencil Display',Impact,sans-serif";
 const mkCanvas = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
-function pathFrom(rings, close) { const p = new Path2D(); for (const r of rings) { p.moveTo(r[0], r[1]); for (let i = 2; i < r.length; i += 2) p.lineTo(r[i], r[i + 1]); if (close) p.closePath(); } return p; }
-const landPath = pathFrom(MAP.land, true);
-const coastPath = pathFrom(MAP.land.filter(r => !(r.length === 8 && r[0] === -40)), true);
-const lakePath = pathFrom(MAP.lakes, true);
-const gratPath = pathFrom(MAP.grat, false);
-const addLine = (P, pts) => { P.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) P.lineTo(pts[i], pts[i + 1]); };
+const N = GW * GH;
+const wrapX = x => ((x % WW) + WW) % WW;
+const gx2 = x => ((x % GW) + GW) % GW;
+// world x of the copy of x nearest to `ref` (the camera, or the other end of an arrow)
+const nearX = (x, ref = cam.x) => x + WW * Math.round((ref - x) / WW);
 
-// dilated id grid for rendering & picking
-const GRIDD = new Int16Array(GRID);
+/* ================= STATIC DATA ================= */
+// province raster dilated a few cells into the water, so fills reach the vector coastline it is clipped to
+const GRIDD = new Int16Array(N);
+for (let i = 0; i < N; i++) GRIDD[i] = GRID[i] >= 0 ? GRID[i] : -1;
 for (let pass = 0; pass < 3; pass++) {
   const src = new Int16Array(GRIDD);
-  for (let y = 1; y < GH - 1; y++) for (let x = 1; x < GW - 1; x++) {
+  for (let y = 1; y < GH - 1; y++) for (let x = 0; x < GW; x++) {
     const i = y * GW + x; if (src[i] >= 0) continue;
-    const v = src[i - 1] >= 0 ? src[i - 1] : src[i + 1] >= 0 ? src[i + 1] : src[i - GW] >= 0 ? src[i - GW] : src[i + GW];
+    const l = y * GW + (x + GW - 1) % GW, r = y * GW + (x + 1) % GW;
+    const v = src[l] >= 0 ? src[l] : src[r] >= 0 ? src[r] : src[i - GW] >= 0 ? src[i - GW] : src[i + GW];
     if (v >= 0) GRIDD[i] = v;
   }
 }
-// horizontal pixel runs per province: [y, x0, x1, ...]
-const RUNS = [];
-{
-  const tmp = Array.from({ length:NP }, () => []);
-  for (let y = 0; y < GH; y++) { let x = 0; while (x < GW) { const id = GRIDD[y * GW + x]; if (id < 0) { x++; continue; } let x1 = x; while (x1 + 1 < GW && GRIDD[y * GW + x1 + 1] === id) x1++; tmp[id].push(y, x, x1); x = x1 + 1; } }
-  for (let i = 0; i < NP; i++) RUNS.push(Int32Array.from(tmp[i]));
+function runsOf(get, count) {
+  const tmp = Array.from({ length:count }, () => []);
+  for (let y = 0; y < GH; y++) { let x = 0; while (x < GW) { const id = get(y * GW + x); if (id < 0) { x++; continue; } let x1 = x; while (x1 + 1 < GW && get(y * GW + x1 + 1) === id) x1++; tmp[id].push(y, x, x1); x = x1 + 1; } }
+  return tmp.map(a => Int32Array.from(a));
 }
+// horizontal pixel runs per province [y, x0, x1, ...] and per sea zone
+const RUNS = runsOf(i => GRIDD[i], NP);
+// world-space bounding box of each province, padded
+const PBOX = RUNS.map(R => { let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1; for (let k = 0; k < R.length; k += 3) { y0 = Math.min(y0, R[k]); y1 = Math.max(y1, R[k]); x0 = Math.min(x0, R[k + 1]); x1 = Math.max(x1, R[k + 2]); } return [x0 * GS - 8, y0 * GS - 8, (x1 + 1) * GS + 8, (y1 + 1) * GS + 8]; });
+const ZRUNS = runsOf(i => GRID[i] <= -2 ? -2 - GRID[i] : -1, SEA_IDS.length);
+const BIO = new Uint8Array(N);
+{ let k = 0; const r = MAP.bio; for (let i = 0; i < r.length; i += 2) { BIO.fill(r[i], k, k + r[i + 1]); k += r[i + 1]; } }
 function hash(x, y) { let h = x * 374761393 + y * 668265263; h = (h ^ (h >> 13)) * 1274126177; return ((h ^ (h >> 16)) & 0xffff) / 0xffff; }
 function vnoise(x, y) { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi; const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf); const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1); return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v; }
-// relief shading (baked once)
-const SHADE = new Float32Array(GW * GH);
+
+/* relief: an elevation guess from the terrain (mountains high and ridged, plains flat), lit from the north-west.
+   Computed at half the grid resolution and sampled back up. */
+const HW = GW >> 1, HH = GH >> 1;
+const SHADE = new Float32Array(HW * HH);
 {
-  const AMP = { m:1, h:0.42, f:0.16, t:0.2, u:0.06, s:0.05, p:0.08, d:0.22 };
-  const amp = new Float32Array(GW * GH);
-  for (let i = 0; i < GW * GH; i++) { const id = GRIDD[i]; amp[i] = id >= 0 ? AMP[PROV[id].ter] : 0.1; }
+  const AMP = [0, 0.06, 0.16, 0.45, 1, 0.22, 0.04, 0.2, 0.18, 0.35, 0.08];
+  const amp = new Float32Array(HW * HH);
+  for (let y = 0; y < HH; y++) for (let x = 0; x < HW; x++) amp[y * HW + x] = AMP[BIO[(y * 2) * GW + x * 2]];
   const blur = (a, r) => {
     const t = new Float32Array(a.length);
-    for (let y = 0; y < GH; y++) { let s = 0; for (let x = -r; x <= r; x++) s += a[y * GW + clamp(x, 0, GW - 1)]; for (let x = 0; x < GW; x++) { t[y * GW + x] = s / (2 * r + 1); s += a[y * GW + Math.min(GW - 1, x + r + 1)] - a[y * GW + Math.max(0, x - r)]; } }
-    for (let x = 0; x < GW; x++) { let s = 0; for (let y = -r; y <= r; y++) s += t[clamp(y, 0, GH - 1) * GW + x]; for (let y = 0; y < GH; y++) { a[y * GW + x] = s / (2 * r + 1); s += t[Math.min(GH - 1, y + r + 1) * GW + x] - t[Math.max(0, y - r) * GW + x]; } }
+    for (let y = 0; y < HH; y++) { let s = 0; for (let x = -r; x <= r; x++) s += a[y * HW + ((x + HW) % HW)]; for (let x = 0; x < HW; x++) { t[y * HW + x] = s / (2 * r + 1); s += a[y * HW + (x + r + 1) % HW] - a[y * HW + (x - r + HW) % HW]; } }
+    for (let x = 0; x < HW; x++) { let s = 0; for (let y = -r; y <= r; y++) s += t[clamp(y, 0, HH - 1) * HW + x]; for (let y = 0; y < HH; y++) { a[y * HW + x] = s / (2 * r + 1); s += t[Math.min(HH - 1, y + r + 1) * HW + x] - t[Math.max(0, y - r) * HW + x]; } }
   };
-  blur(amp, 6); blur(amp, 6);
-  const h = new Float32Array(GW * GH);
-  for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) { const i = y * GW + x; const a = amp[i]; if (a < 0.01) continue; let n = 0, f = 1 / 26, w = 1, ws = 0; for (let o = 0; o < 3; o++) { const r = vnoise(x * f, y * f); n += (1 - Math.abs(2 * r - 1)) * w; ws += w; f *= 2.1; w *= 0.5; } h[i] = a * n / ws; }
-  for (let y = 1; y < GH - 1; y++) for (let x = 1; x < GW - 1; x++) { const i = y * GW + x; SHADE[i] = clamp((h[i - GW - 1] - h[i + GW + 1]) * 3.2 + (hash(x, y) - 0.5) * 0.03, -0.32, 0.3); }
+  blur(amp, 3); blur(amp, 3);
+  const h = new Float32Array(HW * HH);
+  for (let y = 0; y < HH; y++) for (let x = 0; x < HW; x++) { const i = y * HW + x; const a = amp[i]; if (a < 0.01) continue; let n = 0, f = 1 / 13, w = 1, ws = 0; for (let o = 0; o < 4; o++) { const r = vnoise(x * f, y * f); n += (1 - Math.abs(2 * r - 1)) * w; ws += w; f *= 2.1; w *= 0.5; } h[i] = a * n / ws; }
+  for (let y = 1; y < HH - 1; y++) for (let x = 0; x < HW; x++) { const i = y * HW + x; SHADE[i] = clamp((h[i - HW - 1 + (x ? 0 : HW)] - h[i + HW + (x < HW - 1 ? 1 : 1 - HW)]) * 3.4, -0.36, 0.32); }
 }
-// ocean bathymetry (baked once)
-const oceanCv = mkCanvas(GW, GH);
+// bilinear, so the half-resolution relief never shows its blocks
+const shadeAt = (gx, gy) => {
+  const fx = gx / 2 - 0.25, fy = clamp(gy / 2 - 0.25, 0, HH - 1.001), x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0;
+  const a = (x0 + HW) % HW, b = (x0 + 1) % HW, r0 = y0 * HW, r1 = Math.min(HH - 1, y0 + 1) * HW;
+  return (SHADE[r0 + a] * (1 - tx) + SHADE[r0 + b] * tx) * (1 - ty) + (SHADE[r1 + a] * (1 - tx) + SHADE[r1 + b] * tx) * ty;
+};
+// terrain colours per cell (the land under the nation colours)
+const TERR = new Uint8ClampedArray(N * 3);
 {
-  const dist = new Uint8Array(GW * GH).fill(255); const q = new Int32Array(GW * GH); let qh = 0, qt = 0;
-  const tc = mkCanvas(GW, GH).getContext('2d');
-  tc.scale(1 / GS, 1 / GS); tc.fillStyle = '#fff'; tc.fill(landPath, 'evenodd');
-  const ld = tc.getImageData(0, 0, GW, GH).data;
-  for (let i = 0; i < GW * GH; i++) if (GRID[i] >= 0 || ld[i * 4] > 128) { dist[i] = 0; q[qt++] = i; }
-  while (qh < qt) { const i = q[qh++], d = dist[i]; if (d >= 90) continue; const x = i % GW;
-    if (x > 0 && dist[i - 1] > d + 1) { dist[i - 1] = d + 1; q[qt++] = i - 1; } if (x < GW - 1 && dist[i + 1] > d + 1) { dist[i + 1] = d + 1; q[qt++] = i + 1; }
-    if (i >= GW && dist[i - GW] > d + 1) { dist[i - GW] = d + 1; q[qt++] = i - GW; } if (i + GW < GW * GH && dist[i + GW] > d + 1) { dist[i + GW] = d + 1; q[qt++] = i + GW; } }
-  const oc = oceanCv.getContext('2d'); const img = oc.createImageData(GW, GH); const D = img.data;
-  const shallow = [64, 118, 138], mid = [33, 75, 99], deep = [16, 40, 60];
-  for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
-    const i = y * GW + x, d = dist[i]; const t = Math.min(1, Math.pow(d / 70, 0.55));
-    const c = t < 0.4 ? shallow.map((v, k) => v + (mid[k] - v) * t / 0.4) : mid.map((v, k) => v + (deep[k] - v) * (t - 0.4) / 0.6);
-    const nz = (vnoise(x / 18, y / 18) - 0.5) * 14 + (hash(x, y) - 0.5) * 4;
-    let k = 1; if (d === 7 || d === 19 || d === 38) k = 0.86; if (d > 0 && d < 3) k = 1.12;
-    D[i * 4] = clamp(c[0] * k + nz, 0, 255); D[i * 4 + 1] = clamp(c[1] * k + nz, 0, 255); D[i * 4 + 2] = clamp(c[2] * k + nz * 1.2, 0, 255); D[i * 4 + 3] = 255;
+  //            -   plains        forest       hills          mountains      desert         marsh         tundra         jungle       ice            steppe
+  const BC = [[0,0,0],[150,158,96],[78,108,62],[152,140,100],[132,122,108],[214,190,140],[104,122,94],[164,162,140],[56,98,52],[236,240,244],[182,170,114]];
+  for (let y = 0; y < GH; y++) {
+    const lat = Math.abs(y / GH - 0.36);
+    for (let x = 0; x < GW; x++) {
+      const i = y * GW + x, b = BIO[i]; if (!b) continue;
+      const c = BC[b], n = (vnoise(x / 11, y / 11) - 0.5) * 22 + (vnoise(x / 3.2, y / 3.2) - 0.5) * 8, s = 1 + shadeAt(x, y);
+      let r = c[0] + n, g = c[1] + n, bb = c[2] + n * 0.7;
+      if (b === 4 && shadeAt(x, y) > 0.12 && hash(x, y) > 0.35) { r += 50; g += 52; bb += 58; }   // snowy ridges
+      if (b === 2 || b === 1) { r += lat * 30; bb += lat * 10; }                                  // paler toward the poles
+      TERR[i * 3] = r * s; TERR[i * 3 + 1] = g * s; TERR[i * 3 + 2] = bb * s;
+    }
+  }
+}
+// ocean: deep blue with lighter shelves near the coasts (half resolution)
+const oceanCv = mkCanvas(HW, HH);
+{
+  const dist = new Uint8Array(HW * HH).fill(255), q = new Int32Array(HW * HH); let qh = 0, qt = 0;
+  for (let y = 0; y < HH; y++) for (let x = 0; x < HW; x++) { const i = y * HW + x; if (GRID[(y * 2) * GW + x * 2] >= 0 || GRID[(y * 2) * GW + x * 2] === -1 && BIO[(y * 2) * GW + x * 2]) { dist[i] = 0; q[qt++] = i; } }
+  while (qh < qt) { const i = q[qh++], d = dist[i]; if (d >= 60) continue; const x = i % HW;
+    const l = i - x + (x + HW - 1) % HW, r = i - x + (x + 1) % HW;
+    for (const j of [l, r, i - HW, i + HW]) if (j >= 0 && j < HW * HH && dist[j] > d + 1) { dist[j] = d + 1; q[qt++] = j; } }
+  const oc = oceanCv.getContext('2d'); const img = oc.createImageData(HW, HH); const D = img.data;
+  const shallow = [70, 132, 150], mid = [36, 88, 118], deep = [20, 54, 84];
+  for (let y = 0; y < HH; y++) for (let x = 0; x < HW; x++) {
+    const i = y * HW + x, d = dist[i]; const t = Math.min(1, Math.pow(d / 45, 0.6));
+    const c = t < 0.35 ? shallow.map((v, k) => v + (mid[k] - v) * t / 0.35) : mid.map((v, k) => v + (deep[k] - v) * (t - 0.35) / 0.65);
+    const nz = (vnoise(x / 14, y / 14) - 0.5) * 12 + (hash(x, y) - 0.5) * 3, pole = Math.max(0, Math.abs(y / HH - 0.42) - 0.3) * 60;
+    D[i * 4] = c[0] + nz + pole * 0.6; D[i * 4 + 1] = c[1] + nz + pole * 0.7; D[i * 4 + 2] = c[2] + nz * 1.2 + pole * 0.5; D[i * 4 + 3] = 255;
   }
   oc.putImageData(img, 0, 0);
 }
-const paperCv = mkCanvas(256, 256);
-{ const pc = paperCv.getContext('2d'); const img = pc.createImageData(256, 256); for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) { const n = vnoise(x / 9, y / 9) * 0.5 + vnoise(x / 2.5, y / 2.5) * 0.3 + Math.random() * 0.2; const v = 200 + n * 55; const i = (y * 256 + x) * 4; img.data[i] = v; img.data[i + 1] = v * 0.96; img.data[i + 2] = v * 0.86; img.data[i + 3] = 255; } pc.putImageData(img, 0, 0); }
-// terrain glyphs
-const DECOR = new Path2D();
-PROV.forEach((p, i) => {
-  const L = MAP.decor[i], P = DECOR;
-  for (let k = 0; k < L.length; k += 2) {
-    const x = L[k], y = L[k + 1], j = hash(x, y);
-    if (p.ter === 'm') { const s = 7 + j * 4; P.moveTo(x - s, y + s * 0.5); P.lineTo(x - s * 0.15, y - s * 0.7); P.lineTo(x + s * 0.35, y + s * 0.05); P.lineTo(x + s * 0.6, y - s * 0.3); P.lineTo(x + s * 1.1, y + s * 0.5); }
-    else if (p.ter === 'h') { P.moveTo(x - 7, y + 2); P.quadraticCurveTo(x - 2, y - 5, x + 3, y + 2); P.moveTo(x + 1, y + 1); P.quadraticCurveTo(x + 5, y - 3, x + 9, y + 2); }
-    else if (p.ter === 'f') { for (const [dx, dy] of [[0, 0], [6, 3], [-5, 4]]) { P.moveTo(x + dx + 2.8, y + dy - 2); P.arc(x + dx, y + dy - 2, 2.8, 0, Math.PI * 2); P.moveTo(x + dx, y + dy + 0.8); P.lineTo(x + dx, y + dy + 3.5); } }
-    else if (p.ter === 'd') { P.moveTo(x - 8, y); P.quadraticCurveTo(x - 4, y - 3.5, x, y); P.moveTo(x + 2, y + 4); P.quadraticCurveTo(x + 6, y + 0.5, x + 10, y + 4); }
-    else if (p.ter === 's') { for (const dx of [-5, 0, 5]) { P.moveTo(x + dx - 2.5, y + 2); P.lineTo(x + dx + 2.5, y + 2); P.moveTo(x + dx, y + 2); P.lineTo(x + dx, y - 2); } }
-    else if (p.ter === 't') { P.moveTo(x - 6, y); P.lineTo(x - 2, y - 2); P.lineTo(x + 2, y); P.lineTo(x + 6, y - 2); }
+
+/* ================= VECTOR LAYERS, BUCKETED ================= */
+// Lines are cut into per-bucket pieces (300×300 world units) so a tile only strokes geometry near it; a segment lives
+// in the bucket of its first point, and tiles look one bucket beyond their edges. Filled shapes (land, lakes) are
+// clipped to each bucket, so a tile's clip path holds only local pieces of the continents.
+const BW = 300, BCOLS = Math.ceil(WW / BW), BROWS = Math.ceil(WH / BW);
+const bkey = (cx, cy) => cx * 64 + cy;
+function bucketize(lines, close) {
+  const B = new Map();
+  const seg = (k, pts, a, b) => { let P = B.get(k); if (!P) B.set(k, P = new Path2D()); P.moveTo(pts[a], pts[a + 1]); for (let i = a + 2; i <= b; i += 2) P.lineTo(pts[i], pts[i + 1]); };
+  for (let pts of lines) {
+    if (close) pts = pts.concat(pts[0], pts[1]);
+    let a = 0, k = bkey(Math.floor(pts[0] / BW), Math.floor(pts[1] / BW));
+    for (let i = 2; i < pts.length; i += 2) {
+      const k2 = bkey(Math.floor(pts[i] / BW), Math.floor(pts[i + 1] / BW));
+      if (k2 !== k) { seg(k, pts, a, i); a = i; k = k2; }
+    }
+    if (a < pts.length - 2) seg(k, pts, a, pts.length - 2);
   }
-});
-// ownership raster (grid resolution), painted per province
-const ownerCv = mkCanvas(GW, GH), ownerCtx = ownerCv.getContext('2d'), ownerImg = ownerCtx.createImageData(GW, GH);
+  return B;
+}
+// clip a closed ring to an axis-aligned rect (Sutherland–Hodgman)
+function clipRing(r, x0, y0, x1, y1) {
+  let p = r;
+  const pass = (inside, cut) => { const o = [], n = p.length / 2; for (let i = 0; i < n; i++) { const ax = p[i * 2], ay = p[i * 2 + 1], j = (i + 1) % n, bx = p[j * 2], by = p[j * 2 + 1], ia = inside(ax, ay), ib = inside(bx, by); if (ia) o.push(ax, ay); if (ia !== ib) o.push(...cut(ax, ay, bx, by)); } p = o; };
+  pass((x) => x >= x0, (ax, ay, bx, by) => [x0, ay + (by - ay) * (x0 - ax) / (bx - ax)]); if (p.length < 6) return null;
+  pass((x) => x <= x1, (ax, ay, bx, by) => [x1, ay + (by - ay) * (x1 - ax) / (bx - ax)]); if (p.length < 6) return null;
+  pass((x, y) => y >= y0, (ax, ay, bx, by) => [ax + (bx - ax) * (y0 - ay) / (by - ay), y0]); if (p.length < 6) return null;
+  pass((x, y) => y <= y1, (ax, ay, bx, by) => [ax + (bx - ax) * (y1 - ay) / (by - ay), y1]);
+  return p.length >= 6 ? p : null;
+}
+function bucketFill(rings) {
+  const B = new Map();
+  for (const r of rings) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let i = 0; i < r.length; i += 2) { if (r[i] < x0) x0 = r[i]; if (r[i] > x1) x1 = r[i]; if (r[i + 1] < y0) y0 = r[i + 1]; if (r[i + 1] > y1) y1 = r[i + 1]; }
+    for (let cx = Math.floor(x0 / BW); cx <= Math.floor(x1 / BW); cx++) for (let cy = Math.max(0, Math.floor(y0 / BW)); cy <= Math.floor(y1 / BW); cy++) {
+      const inBox = x0 >= cx * BW && x1 <= (cx + 1) * BW && y0 >= cy * BW && y1 <= (cy + 1) * BW;
+      const p = inBox ? r : clipRing(r, cx * BW, cy * BW, (cx + 1) * BW, (cy + 1) * BW); if (!p) continue;
+      const k = bkey(cx, cy); let P = B.get(k); if (!P) B.set(k, P = new Path2D());
+      P.moveTo(p[0], p[1]); for (let i = 2; i < p.length; i += 2) P.lineTo(p[i], p[i + 1]); P.closePath();
+    }
+  }
+  return B;
+}
+// call f(path) for every bucket path of layer B near world rect R
+function eachBucket(B, R, f) {
+  for (let cx = Math.floor(R[0] / BW) - 1; cx <= Math.floor(R[2] / BW) + 1; cx++) for (let cy = Math.max(0, Math.floor(R[1] / BW) - 1); cy <= Math.floor(R[3] / BW) + 1; cy++) { const P = B.get(bkey(cx, cy)); if (P) f(P); }
+}
+// the filled pieces covering rect R as one path (pieces from different buckets never overlap, so even-odd holds)
+function joined(B, R, P = new Path2D(), off = 0) {
+  const m = off ? new DOMMatrix([1, 0, 0, 1, off, 0]) : undefined;
+  for (let cx = Math.floor(R[0] / BW); cx <= Math.floor(R[2] / BW); cx++) for (let cy = Math.max(0, Math.floor(R[1] / BW)); cy <= Math.floor(R[3] / BW); cy++) { const q = B.get(bkey(cx, cy)); if (q) P.addPath(q, m); }
+  return P;
+}
+const LAND_B = bucketize(MAP.land, true), LAKE_B = bucketize(MAP.lakes, true);
+const LAND_F = bucketFill(MAP.land), LAKE_F = bucketFill(MAP.lakes);
+const SEA_B = bucketize(MAP.seaBorders.map(b => b[2]), false);
+const RIVER_B = [bucketize(MAP.rivers.filter(r => r[0] <= 3).map(r => r[1]), false), bucketize(MAP.rivers.filter(r => r[0] > 3).map(r => r[1]), false)];
+let INNER_B = new Map(), NAT_B = new Map(), PLAYER_B = new Map();
+
+/* ================= OWNERSHIP RASTER ================= */
+const polCv = mkCanvas(GW, GH), polCtx = polCv.getContext('2d'), polImg = polCtx.createImageData(GW, GH);
 const painted = new Array(NP).fill('');
 const overCv = mkCanvas(GW, GH), overCtx = overCv.getContext('2d');
-const fogCv = mkCanvas(GW, GH), fogCtx = fogCv.getContext('2d');
-const wxCv = mkCanvas(GW, GH), wxCtx = wxCv.getContext('2d');
-const COARSE = matchMedia('(pointer: coarse)').matches;
-const WS = COARSE ? 1.5 : 2;
-const worldCv = mkCanvas(Math.round(WW * WS), Math.round(WH * WS)), worldCtx = worldCv.getContext('2d');
-const world1 = mkCanvas(WW, WH), world1Ctx = world1.getContext('2d');
-let innerPath = new Path2D(), natPath = new Path2D(), frontMine = new Path2D(), frontOther = new Path2D(), hasFront = false, selPath = null, playerPath = new Path2D();
-let labels = [], worldVersion = 0, worldBuilt = false, fogKey = '', wxKey = '';
-const provTint = id => 0.94 + hash(id, 7) * 0.12;
-let paperPat = null;
+const fogCv = mkCanvas(HW, HH), fogCtx = fogCv.getContext('2d');
+const wxCv = mkCanvas(HW, HH), wxCtx = wxCv.getContext('2d');
+let frontMine = new Path2D(), frontOther = new Path2D(), hasFront = false, selPath = null;
+let labels = [], worldVersion = 0, worldBuilt = false, fogKey = '', wxKey = '', fogOn = false, wxOn = false;
 let timelapseOwners = null; // when set, paint these owners instead of the live ones
 const ownerOf = i => timelapseOwners ? timelapseOwners[i] : G.prov[i].o;
+const MIX = { pol:0.6, ter:0, sup:0.18, res:0.3 };
 function paintOwners(force) {
-  const cols = {};
-  const col = t => cols[t] || (cols[t] = (() => { const c = hexRGB(natColor(t)); return c.map((v, k) => PAPER[k] + (v - PAPER[k]) * 0.62); })());
-  const D = ownerImg.data;
+  const cols = {}, a = MIX[mapMode] ?? 0.6;
+  const col = t => cols[t] || (cols[t] = hexRGB(natColor(t)));
+  const D = polImg.data;
   let bx0 = GW, by0 = GH, bx1 = -1, by1 = -1;
   for (let id = 0; id < NP; id++) {
     const p = G.prov[id], o = ownerOf(id);
     const occ = !timelapseOwners && p.core !== o && A(p.core);
-    const key = o + natColor(o) + (occ ? p.core + natColor(p.core) : '') + (o === ME ? '*' : '');
+    const key = mapMode + o + natColor(o) + (occ ? p.core + natColor(p.core) : '');
     if (!force && painted[id] === key) continue;
     painted[id] = key;
-    const tt = provTint(id), c0 = col(o), c = [c0[0] * tt, c0[1] * tt, c0[2] * tt], cc = occ ? col(p.core) : null;
+    const c = col(o), cc = occ ? col(p.core) : null, tint = 0.95 + hash(id, 7) * 0.1;
     const R = RUNS[id];
     for (let k = 0; k < R.length; k += 3) {
       const y = R[k], xa = R[k + 1], xb = R[k + 2];
       if (y < by0) by0 = y; if (y > by1) by1 = y; if (xa < bx0) bx0 = xa; if (xb > bx1) bx1 = xb;
-      for (let x = xa; x <= xb; x++) { const i = y * GW + x, o4 = i * 4, s = 1 + SHADE[i]; const cl = cc && ((x + y) >> 2) % 3 === 0 ? cc : c; D[o4] = cl[0] * s; D[o4 + 1] = cl[1] * s; D[o4 + 2] = cl[2] * s; D[o4 + 3] = 255; }
+      for (let x = xa; x <= xb; x++) {
+        const i = y * GW + x, o4 = i * 4, t3 = i * 3;
+        const cl = cc && ((x + y) >> 2) % 3 === 0 ? cc : c;
+        let r = TERR[t3], g = TERR[t3 + 1], b = TERR[t3 + 2];
+        if (!BIO[i]) { r = 150; g = 150; b = 120; }
+        if (a) { const s = 1 + shadeAt(x, y) * 0.7; r += (cl[0] * tint * s - r) * a; g += (cl[1] * tint * s - g) * a; b += (cl[2] * tint * s - b) * a; }
+        D[o4] = r; D[o4 + 1] = g; D[o4 + 2] = b; D[o4 + 3] = 255;
+      }
     }
   }
   if (bx1 < 0) return null;
-  ownerCtx.putImageData(ownerImg, 0, 0, bx0, by0, bx1 - bx0 + 1, by1 - by0 + 1);
+  polCtx.putImageData(polImg, 0, 0, bx0, by0, bx1 - bx0 + 1, by1 - by0 + 1);
   return [bx0 * GS, by0 * GS, (bx1 + 1) * GS, (by1 + 1) * GS];
 }
 function rebuildOwners() {
   ownersDirty = false;
   const box = paintOwners(!worldBuilt);
-  innerPath = new Path2D(); natPath = new Path2D(); frontMine = new Path2D(); frontOther = new Path2D(); playerPath = new Path2D(); hasFront = false;
+  const inner = [], natl = [], mine = [];
+  frontMine = new Path2D(); frontOther = new Path2D(); hasFront = false;
+  const add = (P, pts) => { P.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) P.lineTo(pts[i], pts[i + 1]); };
   for (const [a, b, pts] of MAP.borders) {
     const oa = ownerOf(a), ob = ownerOf(b);
-    addLine(oa === ob ? innerPath : natPath, pts);
-    if (!timelapseOwners && oa !== ob && W(oa, ob)) { hasFront = true; addLine(ME && (friendly(oa, ME) || friendly(ob, ME)) ? frontMine : frontOther, pts); }
-    if (ME && (oa === ME) !== (ob === ME)) addLine(playerPath, pts);
+    (oa === ob ? inner : natl).push(pts);
+    if (!timelapseOwners && oa !== ob && W(oa, ob)) { hasFront = true; add(ME && (friendly(oa, ME) || friendly(ob, ME)) ? frontMine : frontOther, pts); }
+    if (ME && (oa === ME) !== (ob === ME)) mine.push(pts);
   }
+  INNER_B = bucketize(inner, false); NAT_B = bucketize(natl, false); PLAYER_B = bucketize(mine, false);
   computeLabels();
   rebuildFog(); rebuildWeather();
-  if (!worldBuilt) buildWorld(null);
-  else if (box) buildWorld([box[0] - 24, box[1] - 24, box[2] + 24, box[3] + 24]);
-}
-function paintMap(c, rect) {
-  c.save();
-  if (rect) { c.beginPath(); c.rect(rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1]); c.clip(); }
-  c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
-  c.drawImage(oceanCv, 0, 0, WW, WH);
-  c.strokeStyle = 'rgba(190,220,235,.09)'; c.lineWidth = 0.8; c.stroke(gratPath);
-  c.lineJoin = 'round'; c.lineCap = 'round';
-  c.strokeStyle = 'rgba(160,205,215,.10)'; c.lineWidth = 18; c.stroke(coastPath);
-  c.strokeStyle = 'rgba(170,215,220,.12)'; c.lineWidth = 8; c.stroke(coastPath);
-  c.strokeStyle = 'rgba(200,230,230,.16)'; c.lineWidth = 3; c.stroke(coastPath);
-  c.fillStyle = 'rgb(222,209,174)'; c.fill(landPath, 'evenodd');
-  c.save(); c.clip(landPath, 'evenodd');
-  c.drawImage(ownerCv, 0, 0, WW, WH);
-  if (!paperPat) paperPat = c.createPattern(paperCv, 'repeat');
-  c.globalCompositeOperation = 'multiply'; c.globalAlpha = 0.38; c.fillStyle = paperPat;
-  if (rect) c.fillRect(rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1]); else c.fillRect(0, 0, WW, WH);
-  c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
-  c.lineWidth = 0.7; c.strokeStyle = 'rgba(48,34,18,.3)'; c.stroke(DECOR);
-  c.restore();
-  c.fillStyle = 'rgba(44,96,122,.95)'; c.fill(lakePath, 'evenodd');
-  strokeLines(c);
-  c.restore();
-}
-function strokeLines(c) {
-  c.lineJoin = 'round'; c.lineCap = 'round';
-  c.strokeStyle = 'rgba(48,34,20,.30)'; c.lineWidth = 0.6; c.stroke(innerPath);
-  c.strokeStyle = 'rgba(250,240,215,.35)'; c.lineWidth = 2.6; c.stroke(natPath);
-  c.strokeStyle = 'rgba(32,22,12,.85)'; c.lineWidth = 1.25; c.stroke(natPath);
-  c.strokeStyle = 'rgba(42,30,18,.8)'; c.lineWidth = 0.9; c.stroke(coastPath);
-  c.strokeStyle = 'rgba(42,30,18,.55)'; c.lineWidth = 0.6; c.stroke(lakePath);
-  c.strokeStyle = 'rgba(236,196,114,.65)'; c.lineWidth = 1.7; c.setLineDash([4.5, 3]); c.stroke(playerPath); c.setLineDash([]);
-}
-function buildWorld(rect) {
-  const c = worldCtx;
-  c.setTransform(WS, 0, 0, WS, 0, 0);
-  if (rect) rect = [Math.max(0, rect[0]), Math.max(0, rect[1]), Math.min(WW, rect[2]), Math.min(WH, rect[3])];
-  paintMap(c, rect);
-  const R = rect || [0, 0, WW, WH];
-  world1Ctx.imageSmoothingEnabled = true; world1Ctx.imageSmoothingQuality = 'high';
-  world1Ctx.drawImage(worldCv, R[0] * WS, R[1] * WS, (R[2] - R[0]) * WS, (R[3] - R[1]) * WS, R[0], R[1], R[2] - R[0], R[3] - R[1]);
+  if (!worldBuilt || !box) invalidateTiles(null); else invalidateTiles([box[0] - 30, box[1] - 30, box[2] + 30, box[3] + 30]);
   worldBuilt = true; worldVersion++;
 }
+
+/* ================= TILES ================= */
+// level lv draws at s = 2^lv pixels per world unit; tiles are square in world units and divide the circumference evenly
+const LV_MIN = -2, LV_MAX = 2;
+const TILES = new Map(); let tileClock = 0;
+const TILE_CAP = matchMedia('(pointer: coarse)').matches ? 40 : 90;
+const tileWorld = lv => WW / Math.max(1, Math.round(WW * Math.pow(2, lv) / 512));
+function invalidateTiles(R) {
+  if (!R) { TILES.clear(); return; }
+  for (const [k, t] of TILES) { const r = t.rect; const hit = r[0] < R[2] && r[2] > R[0] && r[1] < R[3] && r[3] > R[1]; if (hit) TILES.delete(k); }
+}
+function paintWorld(c, R, s) {
+  // R: world rect; s: pixels per world unit (line widths stay a constant number of pixels)
+  const px = 1 / s;
+  c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+  const gx0 = Math.max(0, Math.floor(R[0] / GS) - 1), gy0 = Math.max(0, Math.floor(R[1] / GS) - 1), gx1 = Math.min(GW, Math.ceil(R[2] / GS) + 1), gy1 = Math.min(GH, Math.ceil(R[3] / GS) + 1);
+  c.drawImage(oceanCv, gx0 / 2, gy0 / 2, (gx1 - gx0) / 2, (gy1 - gy0) / 2, gx0 * GS, gy0 * GS, (gx1 - gx0) * GS, (gy1 - gy0) * GS);
+  const offs = [0]; if (R[0] < 60) offs.push(-WW); if (R[2] > WW - 60) offs.push(WW);
+  c.lineJoin = 'round'; c.lineCap = 'round';
+  for (const off of offs) {
+    const Q = [R[0] - off, R[1], R[2] - off, R[3]];
+    c.save(); c.translate(off, 0);
+    if (s >= 0.4) { c.strokeStyle = 'rgba(190,225,240,.16)'; c.lineWidth = 1 * px; c.setLineDash([4 * px, 3 * px]); eachBucket(SEA_B, Q, P => c.stroke(P)); c.setLineDash([]); }
+    // shallow-water rim along the coast
+    c.strokeStyle = 'rgba(150,205,215,.13)'; c.lineWidth = 9 * px + 4; eachBucket(LAND_B, Q, P => c.stroke(P));
+    c.strokeStyle = 'rgba(175,220,225,.16)'; c.lineWidth = 3 * px + 1.5; eachBucket(LAND_B, Q, P => c.stroke(P));
+    c.restore();
+  }
+  // land: the province raster, clipped to the vector coastline
+  c.save();
+  const clip = new Path2D(); for (const off of offs) joined(LAND_F, [R[0] - off, R[1], R[2] - off, R[3]], clip, off);
+  c.clip(clip, 'evenodd');
+  c.fillStyle = 'rgb(150,150,120)'; c.fillRect(R[0], R[1], R[2] - R[0], R[3] - R[1]);
+  c.drawImage(polCv, gx0, gy0, gx1 - gx0, gy1 - gy0, gx0 * GS, gy0 * GS, (gx1 - gx0) * GS, (gy1 - gy0) * GS);
+  // weather and fog of war change once a month, so they are baked into the tiles too
+  if (wxOn) c.drawImage(wxCv, gx0 / 2, gy0 / 2, (gx1 - gx0) / 2, (gy1 - gy0) / 2, gx0 * GS, gy0 * GS, (gx1 - gx0) * GS, (gy1 - gy0) * GS);
+  if (fogOn) c.drawImage(fogCv, gx0 / 2, gy0 / 2, (gx1 - gx0) / 2, (gy1 - gy0) / 2, gx0 * GS, gy0 * GS, (gx1 - gx0) * GS, (gy1 - gy0) * GS);
+  c.restore();
+  for (const off of offs) {
+    const Q = [R[0] - off, R[1], R[2] - off, R[3]];
+    c.save(); c.translate(off, 0);
+    c.fillStyle = 'rgb(52,104,132)'; c.fill(joined(LAKE_F, Q), 'evenodd');
+    if (s >= 0.4) {
+      c.strokeStyle = 'rgba(62,124,160,.95)';
+      c.lineWidth = (s >= 1 ? 2.2 : 1.5) * px; eachBucket(RIVER_B[0], Q, P => c.stroke(P));
+      if (s >= 0.9) { c.lineWidth = 1.3 * px; eachBucket(RIVER_B[1], Q, P => c.stroke(P)); }
+    }
+    if (s >= 0.4) { c.strokeStyle = 'rgba(30,22,14,.32)'; c.lineWidth = 0.75 * px; eachBucket(INNER_B, Q, P => c.stroke(P)); }
+    // national borders: a soft light halo under a dark line
+    c.strokeStyle = 'rgba(245,236,210,.32)'; c.lineWidth = 3.2 * px; eachBucket(NAT_B, Q, P => c.stroke(P));
+    c.strokeStyle = 'rgba(24,16,8,.88)'; c.lineWidth = 1.5 * px; eachBucket(NAT_B, Q, P => c.stroke(P));
+    c.strokeStyle = 'rgba(28,24,18,.75)'; c.lineWidth = 1 * px; eachBucket(LAND_B, Q, P => c.stroke(P));
+    c.strokeStyle = 'rgba(28,30,30,.5)'; c.lineWidth = 0.7 * px; eachBucket(LAKE_B, Q, P => c.stroke(P));
+    if (ME && !timelapseOwners) { c.strokeStyle = 'rgba(236,196,114,.75)'; c.lineWidth = 1.8 * px; c.setLineDash([5 * px, 3.5 * px]); eachBucket(PLAYER_B, Q, P => c.stroke(P)); c.setLineDash([]); }
+    c.restore();
+  }
+}
+function renderTile(lv, tx, ty) {
+  const s = Math.pow(2, lv), T = tileWorld(lv), px = Math.ceil(T * s);
+  const x0 = tx * T, y0 = ty * T, R = [x0, y0, x0 + T, Math.min(WH, y0 + T)];
+  const t = TILES.get(lv + '|' + tx + '|' + ty) || { cv:mkCanvas(px, Math.ceil((R[3] - R[1]) * s)) };
+  const c = t.cv.getContext('2d');
+  c.setTransform(s, 0, 0, s, -x0 * s, -y0 * s);
+  c.save(); c.beginPath(); c.rect(R[0], R[1], R[2] - R[0], R[3] - R[1]); c.clip();
+  paintWorld(c, R, s);
+  c.restore();
+  t.rect = R; t.used = ++tileClock; t.lv = lv;
+  TILES.set(lv + '|' + tx + '|' + ty, t);
+  if (TILES.size > TILE_CAP) { let old = null; for (const [k, v] of TILES) if (!old || v.used < old[1].used) old = [k, v]; if (old) TILES.delete(old[0]); }
+  return t;
+}
+// draw the visible tiles; returns true if any were missing (they are rendered progressively)
+function drawTiles(c, budgetMs) {
+  const sz = cam.z * DPR, lv = clamp(Math.ceil(Math.log2(sz) - 0.15), LV_MIN, LV_MAX), s = Math.pow(2, lv), T = tileWorld(lv), nx = Math.round(WW / T), ny = Math.ceil(WH / T);
+  const [wx0, wy0] = s2w(0, 0), [wx1, wy1] = s2w(VW, VH);
+  const t0 = performance.now(); let missing = false;
+  const k = sz / s;   // tile pixels → screen pixels
+  for (let ty = Math.max(0, Math.floor(wy0 / T)); ty <= Math.min(ny - 1, Math.floor(wy1 / T)); ty++) for (let tx = Math.floor(wx0 / T); tx <= Math.floor(wx1 / T); tx++) {
+    const ix = ((tx % nx) + nx) % nx, key = lv + '|' + ix + '|' + ty;
+    let t = TILES.get(key);
+    if (!t && performance.now() - t0 < budgetMs) t = renderTile(lv, ix, ty);
+    const sx = (tx * T - cam.x) * cam.z * DPR + VW * DPR / 2, sy = (ty * T - cam.y) * cam.z * DPR + VH * DPR / 2;
+    if (t) { t.used = ++tileClock; c.drawImage(t.cv, Math.floor(sx), Math.floor(sy), Math.ceil(t.cv.width * k) + 1, Math.ceil(t.cv.height * k) + 1); continue; }
+    missing = true;
+    // stand-in: any cached tile from another level covering this spot, stretched
+    for (const d of [-1, 1, -2, 2]) {
+      const l2 = lv + d; if (l2 < LV_MIN || l2 > LV_MAX) continue;
+      const T2 = tileWorld(l2), n2 = Math.round(WW / T2), wx = wrapX(tx * T + T / 2), wy = ty * T + T / 2;
+      const t2 = TILES.get(l2 + '|' + Math.floor(wx / T2) % n2 + '|' + Math.floor(wy / T2)); if (!t2) continue;
+      const s2 = Math.pow(2, l2), ox = Math.floor(wx / T2) * T2, oy = Math.floor(wy / T2) * T2;
+      const X = wrapX(tx * T), Y = ty * T, qx = Math.max(ox, X), qy = Math.max(oy, Y), qw = Math.min(X + T, ox + T2) - qx, qh = Math.min(Y + T, oy + T2) - qy;
+      if (qw <= 0 || qh <= 0) continue;
+      c.drawImage(t2.cv, (qx - ox) * s2, (qy - oy) * s2, qw * s2, qh * s2, Math.floor(sx + (qx - wrapX(tx * T)) * sz), Math.floor(sy + (qy - ty * T) * sz), Math.ceil(qw * sz) + 1, Math.ceil(qh * sz) + 1);
+      break;
+    }
+  }
+  return missing;
+}
+
+/* ================= LABELS: country names along the lie of the land ================= */
 function computeLabels() {
   labels = [];
   const seen = new Uint8Array(NP), comps = {};
@@ -211,41 +350,85 @@ function computeLabels() {
     const list = comps[t].sort((a, b) => b.area - a.area);
     const home = list.find(c => c.comp.includes(cap)) || list[0];
     for (const C of list) {
-      if (C !== home && !(C.area >= 1500 && C.area >= home.area * 0.5)) continue;
-      const { area, comp } = C;
-      let sx = 0, sy = 0; for (const k of comp) { sx += PROV[k].cx * PROV[k].area; sy += PROV[k].cy * PROV[k].area; }
-      let x = sx / area, y = sy / area;
-      const gi = Math.round(y / GS) * GW + Math.round(x / GS);
-      if (!(GRID[gi] >= 0 && ownerOf(GRID[gi]) === t)) { const b = comp.reduce((b, k) => PROV[k].area > PROV[b].area ? k : b, comp[0]); x = PROV[b].cx; y = PROV[b].cy; }
+      if (C !== home && !(C.area >= 2500 && C.area >= home.area * 0.35)) continue;
+      // principal axis of the provinces (area-weighted, the short way round the globe)
+      const ref = PROV[C.comp[0]].cx; let W8 = 0, mx = 0, my = 0;
+      const pts = C.comp.map(k => { const P = PROV[k]; return [nearX(P.cx, ref), P.cy, P.area]; });
+      for (const [x, y, w] of pts) { W8 += w; mx += x * w; my += y * w; } mx /= W8; my /= W8;
+      let sxx = 0, syy = 0, sxy = 0; for (const [x, y, w] of pts) { sxx += (x - mx) ** 2 * w; syy += (y - my) ** 2 * w; sxy += (x - mx) * (y - my) * w; }
+      sxx /= W8; syy /= W8; sxy /= W8;
+      let ang = 0.5 * Math.atan2(2 * sxy, sxx - syy); if (ang > Math.PI / 2) ang -= Math.PI; if (ang < -Math.PI / 2) ang += Math.PI;
+      // round countries read level; only long thin ones follow their axis
+      const tr = sxx + syy, det = sxx * syy - sxy * sxy, d = Math.sqrt(Math.max(0, tr * tr / 4 - det)), l1 = tr / 2 + d, l2 = Math.max(1e-6, tr / 2 - d);
+      ang = clamp(ang * clamp((Math.sqrt(l1 / l2) - 1.3) / 1.5, 0, 1), -0.55, 0.55);
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      // extent along the axis and a gentle bend: fit v = a·u² over the provinces
+      let umin = 0, umax = 0, su4 = 0, su2v = 0;
+      for (const [x, y, w] of pts) { const u = (x - mx) * ca + (y - my) * sa, v = -(x - mx) * sa + (y - my) * ca; umin = Math.min(umin, u); umax = Math.max(umax, u); su4 += u ** 4 * w; su2v += u * u * v * w; }
+      const cell = Math.sqrt(C.area) * GS;
+      const len = Math.max(cell * 0.9, Math.min((umax - umin) + cell * 0.5, cell * 2.6)) * 0.82;
+      let bend = su4 > 0 ? su2v / su4 : 0;
+      bend = clamp(bend, -0.25 / len, 0.25 / len);
       const nm = G.nat[t].name.toUpperCase();
-      labels.push({ t, x, y, nm, fs:clamp(Math.sqrt(area) * GS * 0.95 / (nm.length * 0.78), 9, C === home ? 64 : 40) });
+      const fs = clamp(len / (nm.length * 0.78 + 1), 7, C === home ? 120 : 70);
+      // the centre must sit on the country itself
+      let x = mx, y = my; const gi = Math.round(y / GS) * GW + gx2(Math.round(x / GS));
+      if (!(GRID[gi] >= 0 && ownerOf(GRID[gi]) === t)) { const b = C.comp.reduce((b, k) => PROV[k].area > PROV[b].area ? k : b, C.comp[0]); x = nearX(PROV[b].cx, mx); y = PROV[b].cy; }
+      labels.push({ t, x:wrapX(x), y, nm, fs, ang, bend, len:Math.min(len, nm.length * fs * 1.05) });
     }
+  }
+}
+function drawLabels(c, z) {
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  for (const L of labels) {
+    const sz = L.fs * z; if (sz < 7) continue;
+    const a = clamp(1.25 - sz / 150, 0, 0.62); if (a <= 0.02) continue;
+    const x = nearX(L.x);
+    c.font = `700 ${L.fs}px ${FONT_MAP}`;
+    const n = L.nm.length, ws = L.ws || (L.ws = [...L.nm].map(ch => c.measureText(ch).width)), tw = ws.reduce((p, q) => p + q, 0);
+    const gap = n > 1 ? Math.max(0, (L.len - tw) / (n - 1)) : 0, total = tw + gap * (n - 1);
+    c.save(); c.translate(x, L.y); c.rotate(L.ang);
+    c.fillStyle = `rgba(28,20,10,${a})`; c.strokeStyle = `rgba(240,232,210,${a * 0.35})`; c.lineWidth = L.fs * 0.06;
+    let u = -total / 2;
+    for (let i = 0; i < n; i++) {
+      const cu = u + ws[i] / 2, v = L.bend * cu * cu, slope = Math.atan(2 * L.bend * cu);
+      c.save(); c.translate(cu, v); c.rotate(slope); c.strokeText(L.nm[i], 0, 0); c.fillText(L.nm[i], 0, 0); c.restore();
+      u += ws[i] + gap;
+    }
+    c.restore();
   }
 }
 /* fog of war: provinces you cannot see are hatched over */
 function rebuildFog() {
   if (!G) return;
   const vis = PROV.map((p, i) => !ME || timelapseOwners ? 1 : visibleTo(ME, i) ? 1 : 0).join('');
-  if (vis === fogKey) return; fogKey = vis;
-  fogCtx.clearRect(0, 0, GW, GH);
+  if (vis === fogKey) return;
+  // only the tiles around provinces whose visibility changed need repainting
+  if (fogKey.length === vis.length && (fogOn || !ME)) { for (let i = 0; i < NP; i++) if (vis[i] !== fogKey[i]) invalidateTiles(PBOX[i]); }
+  else invalidateTiles(null);
+  fogKey = vis; fogOn = false;
+  fogCtx.setTransform(1, 0, 0, 1, 0, 0); fogCtx.clearRect(0, 0, HW, HH);
   if (!ME || timelapseOwners) return;
-  const c = mkCanvas(8, 8), x = c.getContext('2d');
-  x.fillStyle = 'rgba(20,24,28,.11)'; x.fillRect(0, 0, 8, 8); x.strokeStyle = 'rgba(20,24,28,.17)'; x.lineWidth = 1; x.beginPath(); x.moveTo(0, 8); x.lineTo(8, 0); x.stroke();
-  fogCtx.fillStyle = fogCtx.createPattern(c, 'repeat');
+  fogOn = true;
+  const c = mkCanvas(6, 6), x = c.getContext('2d');
+  x.fillStyle = 'rgba(16,20,26,.16)'; x.fillRect(0, 0, 6, 6); x.strokeStyle = 'rgba(16,20,26,.2)'; x.lineWidth = 1; x.beginPath(); x.moveTo(0, 6); x.lineTo(6, 0); x.stroke();
+  fogCtx.fillStyle = fogCtx.createPattern(c, 'repeat'); fogCtx.setTransform(0.5, 0, 0, 0.5, 0, 0);
   for (let i = 0; i < NP; i++) if (vis[i] === '0') { const R = RUNS[i]; for (let k = 0; k < R.length; k += 3) fogCtx.fillRect(R[k + 1], R[k], R[k + 2] - R[k + 1] + 1, 1); }
 }
 /* weather: snow on cold provinces in winter, mud in spring and autumn */
 function rebuildWeather() {
   if (!G) return;
   const key = G.m + (timelapseOwners ? 'x' : '');
-  if (key === wxKey) return; wxKey = key;
-  wxCtx.clearRect(0, 0, GW, GH);
+  if (key === wxKey) return; wxKey = key; wxOn = false; invalidateTiles(null);
+  wxCtx.setTransform(1, 0, 0, 1, 0, 0); wxCtx.clearRect(0, 0, HW, HH);
   if (timelapseOwners) return;
   const snow = isWinter(), mud = isMud();
   if (!snow && !mud) return;
+  wxOn = true;
+  wxCtx.setTransform(0.5, 0, 0, 0.5, 0, 0);
   for (let i = 0; i < NP; i++) {
     const P = PROV[i]; let col = null;
-    if (snow && P.cold) col = 'rgba(245,250,255,.34)'; else if (mud && P.muddy) col = 'rgba(96,70,40,.16)';
+    if (snow && P.cold) col = 'rgba(245,250,255,.42)'; else if (mud && P.muddy) col = 'rgba(96,70,40,.2)';
     if (!col) continue; wxCtx.fillStyle = col; const R = RUNS[i]; for (let k = 0; k < R.length; k += 3) wxCtx.fillRect(R[k + 1], R[k], R[k + 2] - R[k + 1] + 1, 1);
   }
 }
@@ -260,73 +443,59 @@ function stripePat(r, g, b, a) {
 }
 function overlayPats() {
   if (OVPAT.sel) return OVPAT;
-  Object.assign(OVPAT, { sel:stripePat(255, 240, 200, 0.38), move:stripePat(110, 205, 95, 0.6), attack:stripePat(225, 70, 40, 0.58), naval:stripePat(90, 166, 214, 0.6), land:stripePat(90, 166, 214, 0.6), para:stripePat(190, 120, 230, 0.6), hover:stripePat(255, 236, 170, 0.5), pick:stripePat(255, 200, 80, 0.55) });
+  Object.assign(OVPAT, { sel:stripePat(255, 240, 200, 0.38), move:stripePat(110, 205, 95, 0.6), attack:stripePat(225, 70, 40, 0.58), naval:stripePat(90, 166, 214, 0.6), land:stripePat(90, 166, 214, 0.6), para:stripePat(190, 120, 230, 0.6), hover:stripePat(255, 236, 170, 0.5), pick:stripePat(255, 200, 80, 0.55), sea:stripePat(150, 210, 245, 0.32) });
   return OVPAT;
 }
 let hoverNat = null, overlayOn = false;
-function fillProv(id, pat) { const R = RUNS[id]; overCtx.fillStyle = pat; for (let k = 0; k < R.length; k += 3) overCtx.fillRect(R[k + 1], R[k], R[k + 2] - R[k + 1] + 1, 1); }
-function fillProvSolid(id, col) { overCtx.fillStyle = col; const R = RUNS[id]; for (let k = 0; k < R.length; k += 3) overCtx.fillRect(R[k + 1], R[k], R[k + 2] - R[k + 1] + 1, 1); }
+function fillRuns(R, style) { overCtx.fillStyle = style; for (let k = 0; k < R.length; k += 3) overCtx.fillRect(R[k + 1], R[k], R[k + 2] - R[k + 1] + 1, 1); }
+const fillProv = (id, pat) => fillRuns(RUNS[id], pat), fillProvSolid = (id, col) => fillRuns(RUNS[id], col);
 function rebuildOverlay() {
   const P = overlayPats();
   overCtx.clearRect(0, 0, GW, GH);
-  overlayOn = !!(sel || hoverNat || mapMode !== 'pol' || pickMode);
+  overlayOn = !!(sel || selFleet || hoverNat || mapMode === 'sup' || mapMode === 'res' || pickMode);
   if (!G) return;
-  if (mapMode === 'sup') for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (ME && !friendly(p.o, ME)) continue; const s = p.sup; fillProvSolid(i, s >= 1 ? 'rgba(90,170,80,.45)' : s >= 0.75 ? 'rgba(190,190,70,.5)' : s > 0.4 ? 'rgba(220,140,50,.55)' : s > 0 ? 'rgba(220,90,40,.6)' : 'rgba(200,30,30,.7)'); }
-  if (mapMode === 'res') for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (p.core === p.o) continue; fillProvSolid(i, `rgba(210,60,30,${0.12 + p.res / 140})`); }
+  if (mapMode === 'sup') for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (ME && !friendly(p.o, ME)) continue; const s = p.sup; fillProvSolid(i, s >= 1 ? 'rgba(90,170,80,.5)' : s >= 0.75 ? 'rgba(190,190,70,.55)' : s > 0.4 ? 'rgba(220,140,50,.6)' : s > 0 ? 'rgba(220,90,40,.65)' : 'rgba(200,30,30,.75)'); }
+  if (mapMode === 'res') for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (p.core === p.o) continue; fillProvSolid(i, `rgba(210,60,30,${0.15 + p.res / 130})`); }
   if (hoverNat) for (let i = 0; i < NP; i++) if (G.prov[i].o === hoverNat) fillProv(i, P.hover);
   if (pickMode) for (const id of pickMode.ids || []) fillProv(id, P.pick);
+  if (selFleet) for (const z of fleetTargetsSet) { const k = SEA_IDS.indexOf(z); if (k >= 0) fillRuns(ZRUNS[k], P.sea); }
   if (sel) { fillProv(sel.id, P.sel); if (sel.multi) for (const id of sel.multi) fillProv(id, P.sel); for (const [id, k] of targets) fillProv(id, P[k]); }
   selPath = null;
-  if (sel) { selPath = new Path2D(); const S = sel.multi ? new Set([sel.id, ...sel.multi]) : new Set([sel.id]); for (const [a, b, pts] of MAP.borders) if (S.has(a) !== S.has(b)) addLine(selPath, pts); }
+  if (sel) { selPath = new Path2D(); const S = sel.multi ? new Set([sel.id, ...sel.multi]) : new Set([sel.id]); for (const [a, b, pts] of MAP.borders) if (S.has(a) !== S.has(b)) { selPath.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) selPath.lineTo(pts[i], pts[i + 1]); } }
   staticDirty = true;
 }
 function markDirty(owners) { staticDirty = true; if (owners) ownersDirty = true; }
+function setMapMode(m) { mapMode = m; painted.fill(''); ownersDirty = true; rebuildOverlay(); staticDirty = true; }
 
 /* ================= CAMERA ================= */
 const shake = { amp:0, t0:0, x:0, y:0 };
-const w2s = (x, y) => [(x - cam.x) * cam.z + VW / 2, (y - cam.y) * cam.z + VH / 2];
+const w2s = (x, y) => [(nearX(x) - cam.x) * cam.z + VW / 2, (y - cam.y) * cam.z + VH / 2];
 const s2w = (x, y) => [(x - VW / 2) / cam.z + cam.x, (y - VH / 2) / cam.z + cam.y];
+// province id under a world point (wrapping), on land
+function gridAt(wx, wy, grid = GRIDD) { const gx = gx2(Math.floor(wx / GS)), gy = Math.floor(wy / GS); if (gy < 0 || gy >= GH) return -1; return grid[gy * GW + gx]; }
 function clampCam() {
-  const minZ = Math.max(VW / WW, VH / WH) * 0.9;
-  cam.z = clamp(cam.z, Math.max(0.35, minZ), 4.5);
-  const hw = VW / 2 / cam.z, hh = VH / 2 / cam.z;
-  cam.x = clamp(cam.x, Math.min(hw - 60, WW / 2), Math.max(WW - hw + 60, WW / 2));
-  cam.y = clamp(cam.y, Math.min(hh - 60, WH / 2), Math.max(WH - hh + 60, WH / 2));
+  const minZ = Math.max(VW / WW * 1.02, VH / WH * 0.9);
+  cam.z = clamp(cam.z, Math.max(0.12, minZ), 6);
+  const hh = VH / 2 / cam.z;
+  cam.y = clamp(cam.y, Math.min(hh - 80, WH / 2), Math.max(WH - hh + 80, WH / 2));
+  if (!camAnim) cam.x = wrapX(cam.x);
 }
 let camAnim = null, drift = false;
-function centerOn(pid, z) { if (pid == null || pid < 0) return; camAnim = { x0:cam.x, y0:cam.y, z0:cam.z, x1:PROV[pid].x, y1:PROV[pid].y, z1:z || cam.z, t0:performance.now(), dur:800 }; }
-function centerXY(x, y, z) { camAnim = { x0:cam.x, y0:cam.y, z0:cam.z, x1:x, y1:y, z1:z || cam.z, t0:performance.now(), dur:800 }; }
+function animTo(x, y, z, dur = 800) { camAnim = { x0:cam.x, y0:cam.y, z0:cam.z, x1:nearX(x), y1:y, z1:z || cam.z, t0:performance.now(), dur }; }
+function centerOn(pid, z) { if (pid == null || pid < 0) return; animTo(PROV[pid].x, PROV[pid].y, z); }
+function centerXY(x, y, z) { animTo(x, y, z); }
 function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);
   VW = cv.clientWidth || innerWidth; VH = cv.clientHeight || innerHeight;
   cv.width = stat.width = Math.round(VW * DPR); cv.height = stat.height = Math.round(VH * DPR);
   clampCam(); staticDirty = true;
 }
+// the horizontal copies of the world that are on screen, as offsets for world-space drawing
+function wrapOffsets() { const [x0] = s2w(0, 0), [x1] = s2w(VW, VH); const o = [0]; if (x0 < 0) o.push(-WW); if (x1 > WW) o.push(WW); return o; }
 
 /* ================= DRAW ================= */
 // camera shake only offsets the final composite, so the expensive static layer is never redrawn for it
-function worldT(c, shaken) { const sx = shaken ? shake.x : 0, sy = shaken ? shake.y : 0; c.setTransform(DPR * cam.z, 0, 0, DPR * cam.z, DPR * (VW / 2 - cam.x * cam.z + sx), DPR * (VH / 2 - cam.y * cam.z + sy)); }
-const viewCv = mkCanvas(1, 1), viewCtx = viewCv.getContext('2d');
-let viewInfo = null;
-const VIEW_MARGIN = 0.35;
-function needsViewCache() { return cam.z * DPR > WS * 1.08; }
-function viewCovers() {
-  if (!viewInfo || viewInfo.z !== cam.z || viewInfo.ver !== worldVersion) return false;
-  const [x0, y0] = s2w(0, 0), [x1, y1] = s2w(VW, VH);
-  return x0 >= viewInfo.x0 && y0 >= viewInfo.y0 && x1 <= viewInfo.x0 + viewInfo.w / cam.z && y1 <= viewInfo.y0 + viewInfo.h / cam.z;
-}
-function renderViewCache() {
-  const w = Math.round(VW * (1 + 2 * VIEW_MARGIN)), h = Math.round(VH * (1 + 2 * VIEW_MARGIN));
-  if (viewCv.width !== Math.round(w * DPR) || viewCv.height !== Math.round(h * DPR)) { viewCv.width = Math.round(w * DPR); viewCv.height = Math.round(h * DPR); }
-  const [x0, y0] = s2w(-VW * VIEW_MARGIN, -VH * VIEW_MARGIN);
-  const c = viewCtx, z = cam.z;
-  c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = '#10283b'; c.fillRect(0, 0, viewCv.width, viewCv.height);
-  c.setTransform(DPR * z, 0, 0, DPR * z, -x0 * DPR * z, -y0 * DPR * z);
-  c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
-  c.drawImage(worldCv, 0, 0, WW, WH);
-  strokeLines(c);
-  viewInfo = { x0, y0, z, w, h, ver:worldVersion };
-}
+function worldT(c, shaken, off = 0) { const sx = shaken ? shake.x : 0, sy = shaken ? shake.y : 0; c.setTransform(DPR * cam.z, 0, 0, DPR * cam.z, DPR * (VW / 2 - (cam.x - off) * cam.z + sx), DPR * (VH / 2 - cam.y * cam.z + sy)); }
 let lastMode = 'fast';
 function drawStatic(allowCache) {
   if (!G) return;
@@ -334,27 +503,24 @@ function drawStatic(allowCache) {
   staticDirty = false;
   const c = sctx, z = cam.z;
   c.setTransform(1, 0, 0, 1, 0, 0);
-  c.fillStyle = '#10283b'; c.fillRect(0, 0, stat.width, stat.height);
-  c.imageSmoothingEnabled = true;
-  if (needsViewCache() && allowCache && !viewCovers()) renderViewCache();
-  if (needsViewCache() && viewCovers()) { const [sx, sy] = w2s(viewInfo.x0, viewInfo.y0); c.drawImage(viewCv, Math.round(sx * DPR), Math.round(sy * DPR)); lastMode = 'crisp'; }
-  else { const ratio = z * DPR, small = ratio <= 1.05; c.imageSmoothingQuality = allowCache && ratio < 0.8 ? 'high' : 'low'; worldT(c); c.drawImage(small ? world1 : worldCv, 0, 0, WW, WH); lastMode = needsViewCache() || (!allowCache && ratio < 0.8) ? 'fast' : 'crisp'; }
-  c.imageSmoothingQuality = 'low';
-  worldT(c);
-  c.save(); c.clip(landPath, 'evenodd'); c.drawImage(wxCv, 0, 0, WW, WH); c.drawImage(fogCv, 0, 0, WW, WH); c.restore();
-  if (overlayOn) c.drawImage(overCv, 0, 0, WW, WH);
-  if (selPath) { c.strokeStyle = 'rgba(255,236,170,.95)'; c.lineWidth = 2.6 / z; c.stroke(selPath); }
-  c.textAlign = 'center'; c.textBaseline = 'middle';
-  const ls = 'letterSpacing' in c;
-  for (const L of labels) {
-    const sz = L.fs * z; if (sz < 8) continue;
-    const a = clamp(1.4 - sz / 70, 0, 0.62); if (a <= 0.02) continue;
-    c.font = `700 ${L.fs}px ${FONT_MAP}`; if (ls) c.letterSpacing = (L.fs * 0.28) + 'px';
-    c.fillStyle = `rgba(36,24,12,${a})`; c.fillText(L.nm, L.x, L.y);
+  c.fillStyle = OCEAN; c.fillRect(0, 0, stat.width, stat.height);
+  const missing = drawTiles(c, allowCache ? 14 : 5);
+  lastMode = missing ? 'fast' : 'crisp';
+  c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'low';
+  for (const off of wrapOffsets()) {
+    worldT(c, false, off);
+    if (overlayOn) { // only the visible part of the grid-sized overlay
+      const [a, b] = s2w(0, 0), [d, e] = s2w(VW, VH), gx0 = clamp(Math.floor((a + off) / GS) - 1, 0, GW), gy0 = clamp(Math.floor(b / GS) - 1, 0, GH), gx1 = clamp(Math.ceil((d + off) / GS) + 1, 0, GW), gy1 = clamp(Math.ceil(e / GS) + 1, 0, GH);
+      if (gx1 > gx0 && gy1 > gy0) c.drawImage(overCv, gx0, gy0, gx1 - gx0, gy1 - gy0, gx0 * GS, gy0 * GS, (gx1 - gx0) * GS, (gy1 - gy0) * GS);
+    }
+    if (selPath) { c.strokeStyle = 'rgba(255,236,170,.95)'; c.lineWidth = 2.6 / z; c.lineJoin = 'round'; c.stroke(selPath); }
   }
-  if (ls) c.letterSpacing = '0px';
-  // sea zone names, faint, when zoomed out
-  if (z < 1.3) { c.font = `italic 600 ${15}px ${FONT_MAP}`; c.fillStyle = 'rgba(200,225,235,.28)'; for (const k in SEA) { const S = SEA[k]; c.fillText(S.n.toUpperCase(), S.x, S.y - 30); } }
+  worldT(c);
+  drawLabels(c, z);
+  if (z < 1.3 && z > 0.18) { // sea names, faint
+    c.font = `italic 600 ${z < 0.5 ? 26 : 16}px ${FONT_MAP}`; c.fillStyle = `rgba(205,228,238,${z < 0.5 ? 0.32 : 0.26})`; c.textAlign = 'center';
+    for (const k in SEA) { const S = SEA[k]; c.fillText(S.n.toUpperCase(), nearX(S.x), S.y - (z < 0.5 ? 0 : 30)); }
+  }
   c.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (timelapseOwners) return;
   drawCities(c);
@@ -366,12 +532,14 @@ function drawCities(c) {
   const z = cam.z;
   c.textAlign = 'left'; c.textBaseline = 'middle'; c.lineJoin = 'round';
   for (let i = 0; i < NP; i++) {
-    const P = PROV[i], p = G.prov[i]; const [x, y] = w2s(P.x, P.y); if (!onScreen(x, y)) continue;
+    const P = PROV[i], p = G.prov[i];
+    if (z < 0.42 && P.vp < 10) continue;
+    const [x, y] = w2s(P.x, P.y); if (!onScreen(x, y)) continue;
     const isCap = A(p.o) && nat(p.o).capital === i;
     if (isCap) star(c, x, y, z > 0.8 ? 6.5 : 5, '#1d150b', '#f2d27e');
-    else if (P.vp >= 4) { c.fillStyle = '#1d150b'; c.fillRect(x - 3, y - 3, 6, 6); c.fillStyle = '#efe3c4'; c.fillRect(x - 1.6, y - 1.6, 3.2, 3.2); }
-    else if (z > 0.75) { c.fillStyle = '#2a1e10'; c.fillRect(x - 1.6, y - 1.6, 3.2, 3.2); }
-    const show = isCap ? z > 0.6 : P.vp >= 5 ? z > 0.95 : P.vp >= 2 ? z > 1.5 : z > 2.1;
+    else if (P.vp >= 4) { c.beginPath(); c.arc(x, y, 3.4, 0, 7); c.fillStyle = '#efe3c4'; c.fill(); c.lineWidth = 1.5; c.strokeStyle = '#1d150b'; c.stroke(); }
+    else if (z > 0.75) { c.beginPath(); c.arc(x, y, 1.9, 0, 7); c.fillStyle = '#2a1e10'; c.fill(); }
+    const show = isCap ? z > 0.5 : P.vp >= 5 ? z > 0.85 : P.vp >= 2 ? z > 1.4 : z > 2.1;
     if (show) { c.font = `${isCap ? 700 : 600} ${isCap ? 14 : 12.5}px ${FONT_MAP}`; c.lineWidth = 3; c.strokeStyle = 'rgba(240,230,205,.85)'; c.strokeText(P.name, x + 7, y - 1); c.fillStyle = '#21170b'; c.fillText(P.name, x + 7, y - 1); }
     if (z > 1.25 && (P.oil || P.steel)) { const k = P.oil ? 'oil' : 'steel'; c.globalAlpha = 0.85; drawIcon(c, k, 9, x - 14, y - 15, P.oil ? '#1a1410' : '#3a3f45'); c.globalAlpha = 1; }
     if (p.res >= 40 && p.core !== p.o && z > 0.8) drawIcon(c, 'flame', 10, x - 15, y - 3, p.res >= 75 ? '#ff5a2a' : '#d98a3a');
@@ -386,6 +554,7 @@ const darkCache = {};
 const darkOf = col => darkCache[col] || (darkCache[col] = shade(col, -0.18));
 function shade(hex, k) { const c = hexRGB(hex); return `rgb(${c.map(v => clamp(Math.round(v * (1 + k)), 0, 255)).join(',')})`; }
 const sliding = new Map(); // province -> time until which its counter is hidden while units slide in
+// unit counters: flag, unit symbols and strengths, a readiness bar underneath
 function drawCounters(c) {
   const z = cam.z; if (z < 0.45) return;
   const now = performance.now();
@@ -412,42 +581,63 @@ function drawCounters(c) {
     if (compact) {
       const txt = vis ? String(tot) : '?';
       const k = vis && p.u.arm * 2 > tot ? 'arm' : 'inf', ih = k === 'arm' ? 7 : 9, iw = iconSprite(k, ih).w;
-      const w = Math.round(c.measureText(txt).width + iw + 9), x = Math.round(sx - w / 2), y = Math.round(sy + 5);
+      const w = Math.round(c.measureText(txt).width + iw + 22), x = Math.round(sx - w / 2), y = Math.round(sy + 5);
+      c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(x + 1, y + 2, w, 13);
       c.fillStyle = darkOf(col); c.fillRect(x, y, w, 13);
+      c.drawImage(flagSprite(p.o), x + 2, y + 2.5, 12, 8);
       c.lineWidth = 1; c.strokeStyle = stroke; c.strokeRect(x + 0.5, y + 0.5, w - 1, 12);
-      drawIcon(c, k, ih, x + 3, y + (13 - ih) / 2);
-      c.fillStyle = '#fff'; c.textAlign = 'left'; c.fillText(txt, x + 5 + iw, y + 7);
+      drawIcon(c, k, ih, x + 16, y + (13 - ih) / 2);
+      c.fillStyle = '#fff'; c.textAlign = 'left'; c.fillText(txt, x + 18 + iw, y + 7);
       continue;
     }
-    // [soldier] n  [gun] n  [tank] n
+    // [flag] [soldier] n  [gun] n  [tank] n — drawn once into a sprite keyed by everything it shows
     const segs = [];
     const infN = p.u.inf + p.u.mtn + p.u.par;
     if (!vis) segs.push(['inf', '?']);
     else { if (infN) segs.push([p.u.mtn > p.u.inf ? 'mtn' : p.u.par > p.u.inf ? 'par' : 'inf', String(infN)]); if (p.u.art) segs.push(['art', String(p.u.art)]); if (p.u.arm) segs.push(['arm', String(p.u.arm)]); }
-    const IH = { inf:12, mtn:10, par:12, art:9, arm:9 };
-    let w = 6; for (const [k, t] of segs) w += iconSprite(k, IH[k]).w + 3 + c.measureText(t).width + 6;
-    w = Math.round(w); const h = 17;
-    const x = Math.round(sx - w / 2), y = Math.round(sy + 6);
-    c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(x + 1, y + 2, w, h);
-    c.fillStyle = darkOf(col); c.fillRect(x, y, w, h);
-    c.fillStyle = 'rgba(255,255,255,.12)'; c.fillRect(x, y, w, 1);
-    c.lineWidth = 1; c.strokeStyle = stroke; c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-    let cx2 = x + 5; c.textAlign = 'left';
-    for (const [k, t] of segs) { cx2 += drawIcon(c, k, IH[k], cx2, y + (h - IH[k]) / 2) + 3; c.fillStyle = '#fff'; c.fillText(t, cx2, y + 9); cx2 += c.measureText(t).width + 6; }
-    if (mine && readyAt(p) > 0) { c.beginPath(); c.arc(x + w, y, 3.4, 0, 7); c.fillStyle = '#f0cd7f'; c.fill(); c.strokeStyle = '#1b1407'; c.stroke(); }
     const g = vis && G.gens.find(q => q.pid === i && q.tag === p.o);
-    if (g) { star(c, x, y, 5, '#1b1407', g.lv >= 3 ? '#fff4c2' : '#f0cd7f'); }
-    if (vis && p.sup < 1 && (mine || ally)) drawIcon(c, 'sup', 8, x + w + 3, y + 5, p.sup ? '#f0b050' : '#ff5a3a');
-    if (z > 1.1 && vis) {
-      let bx = x + 2;
-      if (p.fort > 0) { c.fillStyle = '#21170b'; for (let k = 0; k < p.fort; k++) { c.fillRect(bx, y + h + 2, 4, 3); bx += 5; } bx += 2; }
-      if (p.dig > 0) { c.fillStyle = '#5a4a2a'; for (let k = 0; k < p.dig; k++) { c.fillRect(bx, y + h + 3, 3, 2); bx += 4; } bx += 2; }
-      if (p.xp >= 1) { for (let k = 0; k < Math.floor(p.xp); k++) { star(c, bx + 3, y + h + 4, 2.6, 'rgba(0,0,0,.6)', '#f0cd7f'); bx += 6; } }
-    }
+    const d = { o:p.o, col, stroke, segs, rd:vis ? Math.round(readyAt(p) / tot * 8) / 8 : 1, sup:p.sup, dot:mine && readyAt(p) > 0, gen:g ? (g.lv >= 3 ? 2 : 1) : 0,
+      supIc:vis && p.sup < 1 && (mine || ally) ? (p.sup ? 1 : 2) : 0, extra:z > 1.1 && vis ? [p.fort, p.dig, Math.floor(p.xp)] : null };
+    const sp = counterSprite(d), x = Math.round(sx - sp.w / 2), y = Math.round(sy + 6);
+    c.drawImage(sp.cv, x - CPAD, y - CPAD, sp.cv.width / DPR, sp.cv.height / DPR);
   }
 }
+// counter sprites: padding around the box leaves room for the general's star, the supply icon and the fort pips
+const CPAD = 7, CSPR = new Map();
+function counterSprite(d) {
+  const key = JSON.stringify(d) + DPR + natColor(d.o);
+  let s = CSPR.get(key); if (s) return s;
+  const m = sctx; m.font = `700 11.5px ${FONT_BODY}`;
+  const IH = { inf:12, mtn:10, par:12, art:9, arm:9 };
+  let w = 22; for (const [k, t] of d.segs) w += iconSprite(k, IH[k]).w + 3 + m.measureText(t).width + 6;
+  w = Math.round(w); const h = 17;
+  const cv2 = mkCanvas(Math.ceil((w + CPAD * 2 + 10) * DPR), Math.ceil((h + CPAD * 2 + 8) * DPR)), c = cv2.getContext('2d');
+  c.scale(DPR, DPR); c.translate(CPAD, CPAD); c.font = m.font; c.textBaseline = 'middle';
+  const x = 0, y = 0;
+  c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(x + 1, y + 2, w, h + 3);
+  c.fillStyle = darkOf(d.col); c.fillRect(x, y, w, h);
+  c.fillStyle = 'rgba(255,255,255,.12)'; c.fillRect(x, y, w, 1);
+  c.drawImage(flagSprite(d.o), x + 3, y + 3, 16, 11);
+  c.lineWidth = 1; c.strokeStyle = d.stroke; c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  // readiness and supply, like an organisation bar
+  c.fillStyle = 'rgba(10,10,10,.85)'; c.fillRect(x, y + h, w, 3);
+  c.fillStyle = d.sup >= 1 ? '#7fc66a' : d.sup > 0.5 ? '#d8c25a' : '#e0663a'; c.fillRect(x + 1, y + h + 0.5, Math.max(2, (w - 2) * (0.35 + 0.65 * d.rd)), 2);
+  let cx2 = x + 22; c.textAlign = 'left';
+  for (const [k, t] of d.segs) { cx2 += drawIcon(c, k, IH[k], cx2, y + (h - IH[k]) / 2) + 3; c.fillStyle = '#fff'; c.fillText(t, cx2, y + 9); cx2 += c.measureText(t).width + 6; }
+  if (d.dot) { c.beginPath(); c.arc(x + w, y, 3.4, 0, 7); c.fillStyle = '#f0cd7f'; c.fill(); c.strokeStyle = '#1b1407'; c.stroke(); }
+  if (d.gen) star(c, x, y, 5, '#1b1407', d.gen === 2 ? '#fff4c2' : '#f0cd7f');
+  if (d.supIc) drawIcon(c, 'sup', 8, x + w + 3, y + 5, d.supIc === 1 ? '#f0b050' : '#ff5a3a');
+  if (d.extra) {
+    const [fort, dig, xp] = d.extra; let bx = x + 2;
+    if (fort > 0) { c.fillStyle = '#21170b'; for (let k = 0; k < fort; k++) { c.fillRect(bx, y + h + 5, 4, 3); bx += 5; } bx += 2; }
+    if (dig > 0) { c.fillStyle = '#5a4a2a'; for (let k = 0; k < dig; k++) { c.fillRect(bx, y + h + 6, 3, 2); bx += 4; } bx += 2; }
+    for (let k = 0; k < xp; k++) { star(c, bx + 3, y + h + 7, 2.6, 'rgba(0,0,0,.6)', '#f0cd7f'); bx += 6; }
+  }
+  s = { cv:cv2, w };
+  if (CSPR.size > 800) CSPR.clear();
+  CSPR.set(key, s); return s;
+}
 // fleets sit at the sea-zone markers
-const FLEET_SLOTS = {};
 function fleetBoxes() {
   const out = [];
   for (const z in SEA) {
@@ -458,7 +648,7 @@ function fleetBoxes() {
   return out;
 }
 function drawFleets(c) {
-  if (cam.z < 0.42) return;
+  if (cam.z < 0.3) return;
   c.font = `700 11px ${FONT_BODY}`; c.textBaseline = 'middle'; c.textAlign = 'left';
   // targets for the selected fleet
   if (selFleet) for (const z of fleetTargetsSet) { const [x, y] = w2s(SEA[z].x, SEA[z].y); c.beginPath(); c.arc(x, y, 18, 0, 7); c.strokeStyle = 'rgba(140,200,240,.9)'; c.lineWidth = 2; c.setLineDash([4, 3]); c.stroke(); c.setLineDash([]); }
@@ -479,11 +669,23 @@ function drawFleets(c) {
 }
 function fleetAt(sx, sy) {
   const r = cv.getBoundingClientRect(); sx -= r.left; sy -= r.top;
-  for (const b of fleetBoxes()) { c2: { const w = 60, h = 16; if (Math.abs(sx - b.x) < w / 2 + 4 && Math.abs(sy - b.y) < h / 2 + 3) return b; } }
+  for (const b of fleetBoxes()) { const w = 60, h = 16; if (Math.abs(sx - b.x) < w / 2 + 4 && Math.abs(sy - b.y) < h / 2 + 3) return b; }
   return null;
 }
+// the sea zone under the cursor: its water, or (near a coast) the closest fleet marker
 function zoneAt(sx, sy) {
   const r = cv.getBoundingClientRect(); sx -= r.left; sy -= r.top;
+  const [wx, wy] = s2w(sx, sy), v = gridAt(wx, wy, GRID);
+  if (v <= -2) return SEA_IDS[-2 - v];
   for (const z in SEA) { const [x, y] = w2s(SEA[z].x, SEA[z].y); if (Math.hypot(sx - x, sy - y) < 28) return z; }
   return null;
+}
+// small whole-world picture for the minimap
+const miniCv = mkCanvas(360, Math.round(360 * WH / WW));
+let miniVer = -1;
+function miniSource() {
+  if (miniVer === worldVersion) return miniCv;
+  const m = miniCv.getContext('2d'); m.imageSmoothingEnabled = true; m.imageSmoothingQuality = 'high';
+  m.drawImage(oceanCv, 0, 0, miniCv.width, miniCv.height); m.drawImage(polCv, 0, 0, miniCv.width, miniCv.height);
+  miniVer = worldVersion; return miniCv;
 }

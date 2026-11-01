@@ -128,7 +128,7 @@ function renderDrawer() {
     h += `<div class="sect">Destiny decisions</div>`;
     for (const D of DECISIONS) {
       const st = decisionState(pl, D); if (!st) continue; any = true;
-      const req = D.need === '60%' ? `<div class="req"><span class="${st.ok ? 'ok' : ''}">${Math.round((st.pct || 0) * 100)}% of 60% victory points</span></div>` : `<div class="req">${D.need.map((nm, k) => `<span class="${st.have && st.have[k] ? 'ok' : ''}">${esc(nm)}</span>`).join('')}</div>`;
+      const req = typeof D.need === 'string' ? `<div class="req"><span class="${st.ok ? 'ok' : ''}">${Math.round((st.pct || 0) * 100)}% of ${D.need} victory points</span></div>` : `<div class="req">${D.need.map((nm, k) => `<span class="${st.have && st.have[k] ? 'ok' : ''}">${esc(nm)}</span>`).join('')}</div>`;
       h += `<div class="row ${st.done ? 'done' : st.ok ? 'active' : ''}"><div><h4>${esc(D.n)}</h4><p>${esc(D.d)}</p>${st.done ? '' : req}</div><div>${st.done ? '<span class="chip ally">Enacted</span>' : `<button class="btn ${st.ok ? 'gold' : ''}" data-dec="${D.k}" ${st.ok && n.pol >= 50 && act ? '' : 'disabled'}>50 pol</button>`}</div></div>`;
     }
     if (!any) h += `<div class="hint">No destiny decisions for your nation.</div>`;
@@ -136,7 +136,7 @@ function renderDrawer() {
     const s = n.st;
     h = dh('War Ledger', `${esc(n.name)}, ${dateStr()} · score ${scoreOf(pl)}`);
     h += kv([[s.won, 'Victories'], [s.lost, 'Defeats'], [s.caps, 'Captures'], [s.kills, 'Enemy losses'], [s.losses, 'Our losses'], [s.nav, 'Naval wins'], [medalsOf(pl).length + '/' + Object.keys(ACH).length, 'Medals'], [n.played, 'Cards played'], [scoreOf(pl), 'Score']]);
-    h += `<div class="sect">Share of Europe</div><canvas id="vpGraph" class="graph"></canvas><div class="legendrow" id="vpLegend"></div>`;
+    h += `<div class="sect">Share of the world</div><canvas id="vpGraph" class="graph"></canvas><div class="legendrow" id="vpLegend"></div>`;
     h += `<div class="sect">Medals</div><div class="req">${Object.entries(ACH).map(([k, a]) => `<span class="${medalsOf(pl).includes(k) ? 'ok' : ''}" title="${esc(a.d)}">${medalsOf(pl).includes(k) ? '✪ ' : ''}${a.n}</span>`).join('')}</div>`;
     h += `<div class="sect">Dispatches</div>${G.log.slice(0, 50).map(l => `<div class="logline"><time>${l.d}</time>${l.txt}</div>`).join('')}`;
   }

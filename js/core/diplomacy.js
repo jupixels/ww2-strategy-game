@@ -36,7 +36,7 @@ function declareWar(a, b, opts = {}) {
   }
   delete G.truce[wkey(a, b)];
   // unaligned victims of Axis aggression may be guaranteed by the Allies
-  if (!facOf(b) && G.flags.guarantee && G.facs.ALLIES && membersOf('ALLIES').length && !friendly(a, 'ENG') && isAxis(a) && !['IRQ','SAU','PER'].includes(b)) {
+  if (!facOf(b) && G.flags.guarantee && G.facs.ALLIES && membersOf('ALLIES').length && !friendly(a, 'ENG') && isAxis(a) && !['IRQ','SAU','PER'].includes(b) && inEurope(b)) {
     joinFaction(b, 'ALLIES', true);
     news(`${natName(b)} placed under Allied protection`);
   }
