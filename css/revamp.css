@@ -25,6 +25,23 @@
 .rank b{display:block;font-family:var(--f-display);font-size:22px;letter-spacing:.05em}
 .rank span{font-size:13px;color:var(--muted)}
 .mbtns{display:flex;flex-direction:column;gap:8px}
+.mcol{min-width:0}
+/* laptop screens: keep the whole menu on one screen without scrolling */
+@media (max-height:900px) and (min-width:821px){
+  .menu{padding:16px 20px;gap:28px}
+  .brand h1{font-size:clamp(54px,8vw,96px)}
+  .brand p{font-size:15.5px;margin-top:10px}
+  .brand .rank{margin-top:14px}
+  .mbtns{gap:6px}
+  .mbtn{padding:9px 14px;gap:2px}.mbtn b{font-size:18px}.mbtn span{font-size:12.5px}
+  .mbtn.small{padding:7px 14px}.mbtn.small b{font-size:15px}
+  .mapsel{margin-bottom:8px}.mapsel button{padding:6px 10px}
+}
+@media (max-height:720px) and (min-width:821px){
+  .brand p{display:none}
+  .mbtn span{display:none}.mbtn.gold span,.mbtn.small span{display:inline}
+  .mapsel button em{display:none}
+}
 /* map choice on the main menu: Europe or the world */
 .mapsel{display:flex;align-items:stretch;gap:6px;margin-bottom:10px}
 .mapsel>span{align-self:center;font:700 11px/1 var(--fb,'Barlow Semi Condensed',sans-serif);letter-spacing:.14em;text-transform:uppercase;color:#cdbf98;margin-right:4px}

@@ -11,13 +11,19 @@ function aliveAt(sc) {
   return aliveCache[sc];
 }
 const stars = k => '◆'.repeat(6 - k) + '◇'.repeat(k - 1);
+let menuCam = false;
 function previewWorld() {
   if (!G || !G.preview) { Hooks.L.toast = Hooks.L.toast; newGame({ humans:{}, seed:42 }); G.preview = true; ME = null; adopt(G); }
-  if (WORLD && !cam.x && !cam.y) { const B = PROV[ID['Berlin']]; cam.x = B.x + 250; cam.y = B.y + 260; cam.z = 0.45; clampCam(); }
+  // the world map opens zoomed out on the whole globe, Europe right of the menu
+  if (WORLD && !menuCam) { menuCam = true; const B = PROV[ID['Berlin']]; cam.z = 0; clampCam(); cam.z *= 1.12; cam.x = B.x - (VW > 820 ? VW * 0.12 / cam.z : 0); cam.y = B.y + 520; clampCam(); }
   drift = true;
 }
 // switching maps reloads the page: the map data, the simulation tables and the renderer are all built at load
-function switchMap(m, query = '') { try { localStorage.setItem('idom-map', m); } catch (e) {} location.href = location.pathname + query; }
+function switchMap(m, query = '') {
+  try { localStorage.setItem('idom-map', m); } catch (e) {}
+  showLoader(m === 'world' ? 'Redeploying · The World' : 'Redeploying · Europe');
+  setTimeout(() => { location.href = location.pathname + query; }, 350);
+}
 function hideGameUI() {
   ['#top', '#rail', '#ticker', '#actions', '#zoomCtl', '#legend', '#miniWrap', '#tut', '#mpbar', '#hand', '#report', '#chat', '#pickBar', '#lapse', '#pass'].forEach(s => { const e = $(s); if (e) e.hidden = true; }); hideTip();
   $('#card').hidden = true; $('#drawer').hidden = true; tab = null; sel = null; selFleet = null; pickMode = null;
@@ -35,7 +41,7 @@ function showStart() {
       <p>Lead any nation through the Second World War — alone against the AI, around one screen with friends, or online. Follow history's script, or tear it up.</p>
       <div class="rank">${iconSvg('medal')}<div><b>${esc(rk.n)}</b><span>${p.games || 0} campaigns · ${p.wins || 0} victories${p.best ? ' · best score ' + p.best : ''}${rk.next ? ` · ${rk.next - (p.xp || 0)} xp to next rank` : ''}</span></div></div>
     </div>
-    <div class="mapsel" role="group" aria-label="Map"><span>Map</span>${[['europe','Europe','The original theatre: 234 provinces, 31 nations'],['world','The World','Every continent: 687 provinces, 70 nations, the Pacific war']].map(([k, l, d]) => `<button class="${MAPKIND === k ? 'on' : ''}" data-map="${k}" title="${d}"><b>${l}</b><em>${d}</em></button>`).join('')}</div>
+    <div class="mcol"><div class="mapsel" role="group" aria-label="Map"><span>Map</span>${[['europe','Europe','The original theatre: 234 provinces, 31 nations'],['world','The World','Every continent: 687 provinces, 70 nations, the Pacific war']].map(([k, l, d]) => `<button class="${MAPKIND === k ? 'on' : ''}" data-map="${k}" title="${d}"><b>${l}</b><em>${d}</em></button>`).join('')}</div>
     <div class="mbtns">
       ${inGame && Ctl.mode !== 'client' && Ctl.mode !== 'watch' ? `<button class="mbtn gold" data-go="back"><b>Return to the war</b><span>${esc(ME ? natName(ME) : '')}, ${MONTHS_L[G.m]} ${G.y}</span></button>` : ''}
       ${saved && !inGame ? `<button class="mbtn gold" data-go="cont"><b>Continue</b><span>${esc(saved.nat[Object.keys(saved.humans)[0]] ? saved.nat[Object.keys(saved.humans)[0]].name : '')}, ${MONTHS_L[saved.m]} ${saved.y}</span></button>` : ''}
@@ -46,7 +52,7 @@ function showStart() {
       <button class="mbtn" data-go="tut"><b>${iconSvg('card')} Tutorial</b><span>Learn to command in five minutes</span></button>
       ${savedHot ? `<button class="mbtn small" data-go="conthot"><b>Continue hot-seat</b><span>${MONTHS_L[savedHot.m]} ${savedHot.y} · ${Object.keys(savedHot.humans).length} players</span></button>` : ''}
       ${savedMp ? `<button class="mbtn small" data-go="contmp"><b>Re-host saved online game</b><span>${MONTHS_L[savedMp.m]} ${savedMp.y} · ${Object.keys(savedMp.humans).length} players</span></button>` : ''}
-    </div></div>`;
+    </div></div></div>`;
   st.querySelectorAll('[data-map]').forEach(b => b.onclick = () => { SFX.init(); SFX.click(); if (b.dataset.map !== MAPKIND) { if (G && !G.preview && !G.over) Ctl.save(); switchMap(b.dataset.map); } });
   st.querySelectorAll('[data-go]').forEach(b => b.onclick = () => {
     SFX.init(); SFX.click();

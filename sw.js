@@ -16,7 +16,8 @@ self.addEventListener('fetch', e => {
   const same = url.origin === location.origin && url.pathname.startsWith(new URL(self.registration.scope).pathname);
   if (!same && !CDNS.includes(url.hostname)) return; // multiplayer servers etc. go straight to the network
   e.respondWith(
-    fetch(req).then(res => {
+    // revalidate our own files every time, so a new version shows up on the next load rather than after the HTTP cache expires
+    fetch(same ? new Request(req.url, { cache:'no-cache', credentials:'same-origin' }) : req).then(res => {
       if (res.ok && (res.type === 'basic' || res.type === 'cors')) {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});

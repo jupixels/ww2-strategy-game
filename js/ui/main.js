@@ -144,10 +144,15 @@ function startPlay(fresh) {
 
 /* ---------- boot ---------- */
 $$('[data-icon]').forEach(el => { el.innerHTML = iconSvg(el.dataset.icon, el.dataset.icon); });
+// the loading screen in index.html: lifted once the menu and map have drawn, shown again while switching maps
+function hideLoader() { const L = $('#loader'); if (L) L.classList.add('done'); }
+function showLoader(text) { const L = $('#loader'); if (!L) return; if (text) $('#ldMap').textContent = text; L.classList.remove('done'); }
 function boot() {
   resize();
   showStart();
   requestAnimationFrame(frame);
+  requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(hideLoader, 250)));
+  setTimeout(hideLoader, 5000); // a background tab may not run frames
   // joining from a shared link: ?join=CODE
   const q = new URLSearchParams(location.search);
   if (q.get('join')) setTimeout(() => showJoin(q.get('join')), 200);

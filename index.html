@@ -13,8 +13,44 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Stencil+Display:wght@600;800;900&family=Barlow+Semi+Condensed:wght@400;500;600;700&family=Cormorant+SC:wght@500;600;700&family=Special+Elite&display=swap">
 <link rel="stylesheet" href="css/game.css">
 <link rel="stylesheet" href="css/revamp.css">
+<style>
+/* loading screen: inline so it shows while the map data downloads. Only transform/opacity animate, so it keeps moving while scripts parse */
+#loader{position:fixed;inset:0;z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;background:radial-gradient(ellipse at 50% 42%,#16232a 0,#0b1115 62%,#06090b 100%);color:#ece1c4;font-family:'Barlow Semi Condensed',sans-serif;transition:opacity .6s ease,visibility .6s}
+#loader.done{opacity:0;visibility:hidden;pointer-events:none}
+#loader::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.018) 0 1px,transparent 1px 3px);pointer-events:none}
+.ld-scope{position:relative;width:min(240px,56vw);aspect-ratio:1;border-radius:50%;overflow:hidden;background:radial-gradient(circle,#173327 0,#0c1b16 70%,#08110e 100%);box-shadow:0 0 0 2px #7d5f28,0 0 0 7px #11181c,0 0 0 8px rgba(199,155,69,.45),0 0 60px rgba(90,200,130,.18),inset 0 0 40px rgba(0,0,0,.7)}
+.ld-scope i{position:absolute;inset:0;border-radius:50%}
+.ld-grid{background:radial-gradient(circle,transparent 0 calc(25% - 1px),rgba(120,220,150,.22) calc(25% - 1px) 25%,transparent 25% calc(50% - 1px),rgba(120,220,150,.22) calc(50% - 1px) 50%,transparent 50% calc(75% - 1px),rgba(120,220,150,.22) calc(75% - 1px) 75%,transparent 75%),linear-gradient(90deg,transparent calc(50% - .5px),rgba(120,220,150,.28) calc(50% - .5px) calc(50% + .5px),transparent calc(50% + .5px)),linear-gradient(0deg,transparent calc(50% - .5px),rgba(120,220,150,.28) calc(50% - .5px) calc(50% + .5px),transparent calc(50% + .5px))}
+.ld-sweep{background:conic-gradient(from 0deg,rgba(130,255,170,.55),rgba(130,255,170,.12) 40deg,transparent 90deg);animation:ld-spin 2.6s linear infinite;will-change:transform}
+.ld-sweep::after{content:"";position:absolute;left:50%;top:0;width:2px;height:50%;margin-left:-1px;background:linear-gradient(#b8ffd0,rgba(184,255,208,.2));box-shadow:0 0 8px #8fffb4}
+.ld-scope b{position:absolute;width:7px;height:7px;margin:-3.5px;border-radius:50%;background:#ff6a4a;box-shadow:0 0 10px #ff6a4a;opacity:0;animation:ld-blip 2.6s linear infinite}
+.ld-scope b.f{background:#9fe8ff;box-shadow:0 0 10px #9fe8ff}
+.ld-scope b:nth-of-type(1){left:66%;top:30%;animation-delay:.27s}.ld-scope b:nth-of-type(2){left:75%;top:62%;animation-delay:.85s}.ld-scope b:nth-of-type(3){left:38%;top:72%;animation-delay:1.5s}.ld-scope b:nth-of-type(4){left:27%;top:36%;animation-delay:2.1s}.ld-scope b:nth-of-type(5){left:57%;top:46%;animation-delay:.6s}
+.ld-scope em{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.1),transparent 45%)}
+@keyframes ld-spin{to{transform:rotate(360deg)}}
+@keyframes ld-blip{0%{opacity:1;transform:scale(1.5)}60%{opacity:.25;transform:scale(1)}100%{opacity:0}}
+.ld-title{text-align:center;line-height:.85}
+.ld-title h2{margin:0;font:900 clamp(40px,7vw,64px)/.85 'Big Shoulders Stencil Display',Impact,sans-serif;letter-spacing:.02em;color:#ece1c4;text-shadow:0 3px 0 rgba(0,0,0,.4),0 0 40px rgba(199,155,69,.25)}
+.ld-title span{display:block;margin-top:8px;font:800 20px/1 'Big Shoulders Stencil Display',Impact,sans-serif;letter-spacing:.42em;color:#ecc472}
+.ld-bar{width:min(320px,70vw);height:4px;border-radius:2px;background:rgba(199,155,69,.16);overflow:hidden;position:relative}
+.ld-bar i{position:absolute;inset:0;width:40%;background:linear-gradient(90deg,transparent,#ecc472,transparent);animation:ld-run 1.3s ease-in-out infinite;will-change:transform}
+@keyframes ld-run{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
+.ld-msg{position:relative;height:16px;width:min(420px,90vw);text-align:center;font-size:12.5px;letter-spacing:.24em;text-transform:uppercase;color:#b9ae94}
+.ld-msg s{position:absolute;inset:0;text-decoration:none;opacity:0;animation:ld-msg 8s linear infinite}
+.ld-msg s:nth-child(2){animation-delay:2s}.ld-msg s:nth-child(3){animation-delay:4s}.ld-msg s:nth-child(4){animation-delay:6s}
+@keyframes ld-msg{0%{opacity:0;transform:translateY(6px)}4%,22%{opacity:1;transform:none}26%,100%{opacity:0;transform:translateY(-6px)}}
+#ldMap{font-size:11.5px;letter-spacing:.3em;text-transform:uppercase;color:#7d8f95}
+@media (prefers-reduced-motion:reduce){.ld-sweep,.ld-bar i{animation-duration:8s}.ld-scope b{animation:none;opacity:.7}}
+</style>
 </head>
 <body>
+<div id="loader" role="status" aria-label="Loading">
+  <div class="ld-scope"><i class="ld-grid"></i><i class="ld-sweep"></i><b></b><b class="f"></b><b></b><b class="f"></b><b></b><em></em></div>
+  <div class="ld-title"><h2>Iron Dominion</h2><span>1936</span></div>
+  <div class="ld-bar"><i></i></div>
+  <div class="ld-msg"><s>Unfolding the maps</s><s>Mobilising the divisions</s><s>Briefing the generals</s><s>Decoding enemy signals</s></div>
+  <div id="ldMap"></div>
+</div>
 <div id="app">
   <canvas id="map" aria-label="Strategic map of Europe"></canvas>
   <div class="vignette"></div>
@@ -87,7 +123,9 @@
 </div>
 <script>
 // which map to play on: the original Europe map (default) or the world map. Chosen in the main menu; ?map=world|europe overrides.
-window.MAPKIND = (() => { try { const q = new URLSearchParams(location.search).get('map'); const v = q || localStorage.getItem('idom-map'); return v === 'world' ? 'world' : 'europe'; } catch (e) { return 'europe'; } })();
+// The last map played is remembered, so a returning player lands on it.
+window.MAPKIND = (() => { try { const q = new URLSearchParams(location.search).get('map'); const v = (q || localStorage.getItem('idom-map')) === 'world' ? 'world' : 'europe'; localStorage.setItem('idom-map', v); return v; } catch (e) { return 'europe'; } })();
+document.getElementById('ldMap').textContent = MAPKIND === 'world' ? 'Theatre · The World' : 'Theatre · Europe';
 document.write('<script src="data/' + (MAPKIND === 'world' ? 'map.js' : 'map-europe.js') + '"><\/script>');
 </script>
 <script src="js/core/util.js"></script>
