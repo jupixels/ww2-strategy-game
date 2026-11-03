@@ -90,6 +90,9 @@ function playCard(t, k, target) {
   Hooks.emit('card', { t, k, target });
   return true;
 }
+// discard a card you will not use: the hand frees a slot and the staff gains a little politics from the reshuffle
+const DISCARD_POL = 2;
+function discardCard(t, k) { const n = nat(t), i = n.hand.indexOf(k); if (i < 0) return false; n.hand.splice(i, 1); n.pol += DISCARD_POL; return true; }
 function threatAt(t, i) { return sum(PROV[i].adj.filter(j => W(t, G.prov[j].o)), j => unitsAt(G.prov[j])) - unitsAt(G.prov[i]); }
 
 /* ================= ESPIONAGE ================= */

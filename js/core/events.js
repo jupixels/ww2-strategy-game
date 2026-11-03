@@ -345,6 +345,13 @@ function battleOfBritain() {
   if (gerWins) { cull('ENG', 0.45); cull('GER', 0.2); nat('ENG').stab -= 12; nat('ENG').pp = Math.max(0, nat('ENG').pp - 50); news('THE RAF BREAKS — GERMANY RULES THE CHANNEL SKIES'); }
   else { cull('GER', 0.4); cull('ENG', 0.15); nat('GER').stab -= 6; nat('ENG').stab += 10; news('THE FEW HOLD: LUFTWAFFE DEFEATED OVER ENGLAND'); }
 }
+// one headline a month for partisan risings, however many there are; small ones only reach the people involved
+function partisanNews(pid) {
+  const P = PROV[pid], p = G.prov[pid], f = G.flags.partisanT === G.turn ? G.flags.partisanN || 0 : 0;
+  G.flags.partisanT = G.turn; G.flags.partisanN = f + 1;
+  if (P.vp >= 4 || isHuman(p.core) || isHuman(p.o)) { if (f === 0) news(`PARTISANS SEIZE ${P.name.toUpperCase()}`); else if (f === 1) news('RESISTANCE SPREADS ACROSS OCCUPIED LANDS'); }
+  for (const h of humanTags()) if (h === p.o || h === p.core) notify(h, '⚑', `Partisans take ${P.name}`, h === p.core ? 'Our people have risen against the occupier.' : 'Garrison occupied land to keep resistance down.', h === p.core ? 'medal' : 'war');
+}
 function partisanStrike(pid, strength) {
   const p = G.prov[pid], core = p.core;
   const def = Math.max(0.5, unitStrength(nat(p.o), p.u, false, PROV[pid].ter));
@@ -354,7 +361,7 @@ function partisanStrike(pid, strength) {
     if (A(core) && W(core, occ)) { p.o = core; p.u.inf = 2; p.res = 0; }
     else if (!A(core) && NATDEF[core] && !NATDEF[core].off) { restorePartisans(core, pid, occ); }
     else { p.res = 40; }
-    news(`PARTISANS SEIZE ${PROV[pid].name.toUpperCase()}`);
+    partisanNews(pid);
     if (isHuman(core)) award(core, 'partisan');
     Hooks.emit('dirty', { owners:true });
   } else { const l = takeLosses(p.u, rr(unitsAt(p) * 0.2)); clampReady(p); p.res = Math.max(20, p.res - 30); }

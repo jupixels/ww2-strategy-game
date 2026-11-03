@@ -98,6 +98,7 @@ function applyScenario(year) {
     for (const t of MAJORS) if (A(t)) { const n = nat(t); n.pp += 150; n.oil += 40; n.steel += 60; techsByYear(t, 5); }
     nat('ENG').pp += 100;
     ['Sverdlovsk','Perm','Kuibyshev','Ufa','Gorky','Kazan','Stalingrad','Moscow'].forEach(nm => { const p = G.prov[ID[nm]]; if (p.o === 'SOV') p.fac++; }); nat('SOV').done.push('sov_urals'); nat('SOV').pp += 150;
+    delete G.pacts[wkey('GER','SOV')]; // the pact lapses quietly in a 1941 start: Barbarossa is the opening move, not a betrayal on turn one
     barbarossa(); G.ev.barbarossa = 1;
     bolster('GER', { inf:24, arm:8, art:6 }); bolster('SOV', { inf:80, arm:8, art:8 }); bolster('ENG', { inf:10, arm:3 }); bolster('ITA', { inf:6 }); bolster('ROM', { inf:6 }); bolster('FIN', { inf:4 }); bolster('HUN', { inf:4 });
     for (const t of ['GER','SOV','ROM','FIN','HUN']) deployToFronts(t, 0.7);

@@ -13,7 +13,7 @@ A grand strategy game of the Second World War, in the browser. Play on the origi
 - **Oil and steel**, a world market, blockades, stability and war weariness, occupation resistance and partisans. Ships, aircraft and tanks burn oil (half in peacetime); a dry tank weakens them in proportion to the shortfall, and idle ships can be decommissioned.
 - **Diplomacy**: alliances fight each other's defensive wars, and **Call to war** asks your allies into a war you are fighting (human allies get to answer). Pacts, guarantees, ultimatums, peace terms; Japan joins the Axis without fighting Britain until Pearl Harbor, and a neutrality pact keeps Tokyo and Moscow apart.
 - **National focus branches** for every great power, including the USA (Two-Ocean Navy, Liberty Ships, Arsenal of Democracy) and Japan (Kantai Kessen, Fuel Reserve, Kwantung Army, Southern Operation).
-- **Strategy cards** (one a month), **spies**, **operations** with objectives, timed **research** in four branches, a **national focus tree** with branches for the great powers, alternate-history **Destiny** decisions, ~50 historical events, peace treaties, pacts, guarantees and ultimatums.
+- **Strategy cards** (one a month; discard the ones you don't want), **spies**, **operations** with objectives, timed **research** in four branches, a **national focus tree** with branches for the great powers, alternate-history **Destiny** decisions, ~50 historical events, peace treaties, pacts, guarantees and ultimatums.
 - **Secret agendas**, medals, a career rank, a daily challenge and an end-of-war timelapse.
 - **Install it as an app**: in Chrome or Edge, use the install icon in the address bar (or "Add to Home screen" on a phone). It opens in its own window and keeps working offline once loaded.
 

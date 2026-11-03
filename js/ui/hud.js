@@ -14,6 +14,9 @@ Hooks.on('toast', d => { if (d.to === '*' || d.to === ME) toast(d.ic, d.title, d
 Hooks.on('sfx', d => { if (d.to === '*' || d.to === ME) SFX.play(d.name === 'boom' ? 'boom' : d.name, d.arg); });
 Hooks.on('dirty', d => markDirty(d.owners));
 let tab = null;
+// phone layout: hide the card hand whenever the dossier or a drawer is open, however it was opened
+const syncSheet = () => document.body.classList.toggle('sheet', !$('#card').hidden || !$('#drawer').hidden);
+for (const id of ['#card', '#drawer']) new MutationObserver(syncSheet).observe($(id), { attributes:true, attributeFilter:['hidden'] });
 function renderAll() { if (!G) return; renderTop(); renderCard(); renderDrawer(); renderTicker(); renderDots(); renderActions(); renderHand(); renderMP(); document.body.classList.toggle('sheet', !$('#card').hidden || !$('#drawer').hidden); }
 const statHTML = (ic, v, inc, cls = '') => `${iconSvg(ic, 'si ' + cls)}<span>${v}</span>${inc != null ? `<small class="${inc < 0 ? 'neg' : ''}">${inc >= 0 ? '+' : ''}${inc}</small>` : ''}`;
 function renderTop() {
@@ -66,8 +69,9 @@ function openCard(k) {
   const m = $('#modal'); m.hidden = false;
   m.innerHTML = `<div class="cardbig" role="dialog" aria-modal="true"><div class="cbic">${C.ic}</div><h3>${esc(C.n)}</h3><p>${esc(C.d)}</p>
     <div class="cbmeta">${C.cost ? `${C.cost} politics` : 'Free to play'} · one card per month${C.ide ? ` · ${IDEO[C.ide]} only` : ''}</div>
-    <div class="acts" style="justify-content:center"><button class="btn" data-x>Keep it</button><button class="btn gold" data-play ${why ? 'disabled title="' + esc(why) + '"' : ''}>${C.tgt === 'none' ? 'Play' : 'Choose target'}</button></div>${why ? `<p class="hint" style="text-align:center">${esc(why)}</p>` : ''}</div>`;
+    <div class="acts" style="justify-content:center"><button class="btn red" data-discard title="Throw it away: frees a slot in your hand, +${DISCARD_POL} politics">Discard</button><button class="btn" data-x>Keep it</button><button class="btn gold" data-play ${why ? 'disabled title="' + esc(why) + '"' : ''}>${C.tgt === 'none' ? 'Play' : 'Choose target'}</button></div>${why ? `<p class="hint" style="text-align:center">${esc(why)}</p>` : ''}</div>`;
   m.querySelector('[data-x]').onclick = closeModal;
+  m.querySelector('[data-discard]').onclick = () => { closeModal(); if (Ctl.act({ c:'discard', k })?.ok !== false) { SFX.paper(); toast('✕', `${C.n} discarded`, `+${DISCARD_POL} politics. A new card arrives next month.`, ''); } };
   m.onclick = e => { if (e.target === m) closeModal(); };
   const pb = m.querySelector('[data-play]');
   if (pb) pb.onclick = () => {

@@ -245,7 +245,7 @@ function sendAid(t, to, kind, amt) {
 /* ================= CALL TO ARMS =================
    An alliance only fights its members' defensive wars by itself. A member that starts (or is in) a war
    can call its allies in; the AI weighs ideology, fear, pacts and how busy it already is. */
-const CALL_COST = 10;
+const CALL_COST = 5;
 function callTargets(t, e) {
   const fk = facOf(t); if (!fk || !A(e)) return [];
   return membersOf(fk).filter(m => m !== t && A(m) && !W(m, e) && !friendly(m, e) && !NATDEF[m].off);

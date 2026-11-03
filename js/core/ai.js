@@ -57,6 +57,8 @@ function aiCards(t, enemies, fd) {
     }
     return 0.5;
   };
+  // a full hand of dead cards blocks new draws: throw the least useful one away
+  if (n.hand.length >= HAND_MAX) { const worst = n.hand.slice().sort((a, b) => want(a) - want(b))[0]; if (want(worst) < 0.8) discardCard(t, worst); }
   const best = n.hand.map(k => [k, want(k) * (0.7 + rnd() * 0.6)]).filter(([k, w]) => w > 1 && !canPlay(t, k)).sort((a, b) => b[1] - a[1])[0];
   if (!best) return;
   const k = best[0], tg = cardTargets(t, k);
@@ -285,6 +287,8 @@ function aiConvoys(t, n, fd, enemies, pacific) {
     }
   }
 }
+// nations with a tradition of neutrality: they fight if attacked but never join an alliance by themselves
+const NEUTRAL_MINDED = new Set(['SWE','SWI','IRE','POR','SPA','TUR','ICE','AFG','SAU','ARG']);
 function aiDiplomacy() {
   // dictatorships pick new fights from 1942 on
   if (G.y >= 1942) for (const t of ['GER','ITA','SOV','VIC','SPA','TUR','JAP']) {
@@ -313,8 +317,9 @@ function aiDiplomacy() {
       // stalemated wars between AI nations end quietly
       if (!isHuman(e) && dur > 20 && !n.major && !nat(e).major && Math.abs(warScore(t, e)) < 0.08 && rnd() < 0.05) makePeace(t, e, 'white');
     }
-    // threatened minors seek protection
-    if (!n.major && !facOf(t) && G.tension > 45 && rnd() < 0.03) {
+    // minors at war seek protection — neutrals at peace stay neutral (an empty enemy list used to let every
+    // democracy in Europe drift into the Allies in 1939)
+    if (!n.major && !facOf(t) && enemiesOf(t).length && !NEUTRAL_MINDED.has(t) && G.tension > 45 && rnd() < 0.03) {
       // ...but only into an alliance already fighting all of their enemies (no dragging great powers into new wars)
       const fk = Object.keys(G.facs).find(k => G.facs[k].lead && nat(G.facs[k].lead).ide === n.ide && !membersOf(k).some(m => W(m, t)) && enemiesOf(t).every(e => membersOf(k).some(m => W(m, e))));
       if (fk && !humanTags().some(h => W(h, t))) joinFaction(t, fk);
