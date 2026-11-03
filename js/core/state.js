@@ -76,7 +76,7 @@ function newGame(opts) {
     humans:opts.humans || {}, turn:0, y:1936, m:0, tension:8, prov:[], nat:{}, wars:[], warStart:{}, truce:{}, pacts:{},
     facs:{ AXIS:{n:'Axis',lead:'GER',m:['GER']}, ALLIES:{n:'Allies',lead:'ENG',m:['ENG','FRA','CAN','AST','NZL','SAF','RAJ']}, COMINTERN:{n:'Comintern',lead:'SOV',m:['SOV','MON']},
       SPHERE:{n:'Co-Prosperity Sphere',lead:'JAP',m:['JAP','MAN']} },
-    fleet:{}, gens:[], genId:1, ev:{}, flags:{}, log:[], news:[], inbox:{}, hist:[], over:false, orders:[], daily:opts.daily || null };
+    fleet:{}, gens:[], genId:1, ev:{}, flags:{}, log:[], news:[], inbox:{}, hist:[], over:false, orders:[], convoys:[], daily:opts.daily || null };
   // alliances only hold nations that exist on this map
   for (const k in G.facs) { const f = G.facs[k]; f.m = f.m.filter(t => !NATDEF[t].off); if (!f.m.includes(f.lead)) delete G.facs[k]; }
   G.map = WORLD ? 'world' : 'europe';
@@ -105,7 +105,7 @@ function newGame(opts) {
   return G;
 }
 const START_FORTS = { Strasbourg:3, Metz:3, Sudetenland:2, Viipuri:2, Sevastopol:2, Gibraltar:3, Malta:2, Bern:2, Leningrad:1, Moscow:1, Saarbrücken:1, Brussels:1, Istanbul:1, Bratislava:1, Brno:1,
-  Singapore:3, Manila:1, Honolulu:2, 'Hong Kong':1, Vladivostok:2, Truk:1, Panama:1 };
+  Singapore:3, Manila:1, Honolulu:2, 'Hong Kong':1, Vladivostok:2, Truk:1, Panama:1, Chongqing:3 };
 function addLandAt(name, k, n) { if (ID[name] != null) G.prov[ID[name]].u[k] += n; }
 function placeStartingForces(t) {
   const d = NATDEF[t]; if (!d.u) return;
@@ -145,7 +145,7 @@ function rebuildWarSet() { G.warSet = new Set(G.wars); }
 function resetReady() {
   for (const p of G.prov) { for (const k of LAND) p.r[k] = p.u[k]; p.ad = 0; }
   for (const z in G.fleet) for (const t in G.fleet[z]) G.fleet[z][t].mv = 0;
-  for (const t in G.nat) { G.nat[t].rocket = false; G.nat[t].imports = 0; }
+  for (const t in G.nat) { G.nat[t].rocket = false; G.nat[t].imports = 0; G.nat[t].lift = 0; }
 }
 function log(txt) { G.log.unshift({ d:MONTHS[G.m] + ' ' + G.y, txt }); if (G.log.length > 120) G.log.length = 120; }
 function tension(n) { G.tension = clamp(G.tension + n, 0, 100); }

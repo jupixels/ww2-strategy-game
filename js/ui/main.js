@@ -32,11 +32,16 @@ const Ctl = {
     if (r.spy) toast(r.spy.ok ? '✓' : '✕', r.spy.ok ? 'Operation succeeded' : 'Operation failed', r.spy.msg, r.spy.ok ? 'medal' : 'war');
     if (c.c === 'card' && r.ok) { SFX.card(); toast(CARDS[c.k].ic, `${CARDS[c.k].n} played`, CARDS[c.k].d, ''); }
     if (c.c === 'fleet' && r.ok) SFX.ship();
+    if (r.convoy) { const v = r.convoy; SFX.ship(); toast('⚓', `Convoy sails for ${PROV[v.to].name}`, `${landN(v.u)} division${landN(v.u) === 1 ? '' : 's'} ${v.kind === 'invade' ? 'will storm the beaches' : 'will come ashore'} at the end of the month. Sealift left: ${liftLeft(ME)}.`, ''); }
+    if (c.c === 'ship' && !r.ok && !r.why) { toast('✕', 'No sealift left this month', 'Each battle squadron adds 2 divisions of sealift. Wait for next month or build more ships.', ''); SFX.error(); }
+    if (c.c === 'unship' && r.ok) toast('⚓', 'Convoy recalled', 'The troops are back in port, ready to act.', '');
+    if (c.c === 'scrap' && r.ok) { SFX.build(); toast('⚓', 'Ships decommissioned', 'Their steel goes back to the yards and they no longer burn oil.', ''); }
+    if (r.call) { SFX.signal(); }
     if (G.tut) { if (r.raid) G.tut.raided = 1; if (c.c === 'fleet' && r.ok) G.tut.sailed = 1; if (c.c === 'spy' && r.ok) G.tut.spied = 1; }
     if (r.raid) { animBattle({ tid:c.to, from:[c.from], a:ME, d:G.prov[c.to].o, raid:r.raid }); }
     if (c.c === 'research' && r.ok) SFX.click();
     if (c.c === 'ops' && r.ok) { const n = nat(ME); toast('⌖', `Operation ${n.ops.name}`, `Objectives: ${n.ops.tg.map(i => PROV[i].name).join(', ')}. Four months to take them.`, 'medal'); SFX.signal(); }
-    if (r.ok && (c.c === 'move' || c.c === 'attack' || c.c === 'declare' || c.c === 'peace' || c.c === 'card' || c.c === 'answer' || c.c === 'fleet' || c.c === 'decision')) markDirty(true); else markDirty(false);
+    if (r.ok && (c.c === 'move' || c.c === 'attack' || c.c === 'declare' || c.c === 'peace' || c.c === 'card' || c.c === 'answer' || c.c === 'fleet' || c.c === 'decision' || c.c === 'ship' || c.c === 'unship' || c.c === 'calltowar')) markDirty(true); else markDirty(false);
     if (r.move) { addArrow(r.move.from, r.move.to, r.move.kind === 'naval' ? 'naval' : 'move'); slideUnits(r.move.from, r.move.to, ME, r.move.part.arm > r.move.part.inf ? 'arm' : 'inf'); if (r.move.part.arm) SFX.tank(); }
     if (sel) { computeTargets(); rebuildOverlay(); }
     if (selFleet) selectFleet(selFleet.z);

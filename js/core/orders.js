@@ -4,12 +4,14 @@
    run it locally; online, clients send commands to the host, which runs them and broadcasts the result.
    In simultaneous multiplayer, attacks are queued as orders and resolved together at month end. */
 
-// what the army at `pid` can do: Map(provinceId -> 'move'|'attack'|'naval'|'land'|'para')
+// what the army at `pid` can do: Map(provinceId -> 'move'|'attack'|'naval'|'land'|'para'|'convoy'|'invade')
+// 'naval'/'land' are instant short hops; 'convoy'/'invade' sail further and arrive at month end
 function targetsFor(t, pid) {
   const r = new Map(), p = G.prov[pid];
   if (!p || p.o !== t || readyAt(p) === 0) return r;
   for (const j of PROV[pid].adj) { const o = G.prov[j].o; if (o === t) r.set(j, 'move'); else if (W(t, o)) r.set(j, 'attack'); }
   if (PROV[pid].coast) for (const [j, k] of navalTargets(pid, t)) if (!r.has(j)) r.set(j, k);
+  if (PROV[pid].coast && liftLeft(t) > 0) for (const [j, v] of convoyTargets(pid, t, r)) if (!r.has(j)) r.set(j, v.kind);
   if (p.r.par > 0) for (const j of paraTargets(t, pid)) if (!r.has(j)) r.set(j, 'para');
   return r;
 }
@@ -148,6 +150,10 @@ function doCommand(t, c, mode) {
     case 'rocket': { if (!n.tech.rocket || n.rocket || !rocketTargets(t).includes(c.to)) return R(false); const k = fireRocket(t, c.to); award(t, 'v2'); Hooks.emit('battle', { tid:c.to, from:[], a:t, d:G.prov[c.to].o, rocket:k }); return R(true, { killed:k }); }
     case 'bomb': { if (canBomb(t) || !rocketTargets(t).includes(c.to)) return R(false); const vic = G.prov[c.to].o; const r = dropBomb(t, c.to); award(t, 'bomb'); news(`ATOMIC BOMB DROPPED ON ${PROV[c.to].name.toUpperCase()}`); Hooks.emit('battle', { tid:c.to, from:[], a:t, d:vic, bomb:r.killed, surrender:r.surrender }); return R(true, { bomb:r }); }
     case 'fleet': return R(moveFleet(t, c.from, c.to, c.part));
+    case 'ship': { const cv = shipConvoy(t, c.from, c.to, c.amt); return R(cv, { convoy:cv }); }
+    case 'unship': return R(cancelConvoy(t, c.id));
+    case 'scrap': return R(scrapFleet(t, c.z, c.part));
+    case 'calltowar': { const why = canCallToWar(t, c.tag); if (why) return R(false, { why }); return R(true, { call:callToWar(t, c.tag) }); }
     case 'answer': return R(answer(t, c.uid, c.choice));
   }
   return R(false, { why:'Unknown command' });

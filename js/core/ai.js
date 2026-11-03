@@ -193,6 +193,7 @@ function aiTurn(t, battles) {
       if (best != null) { const part = portion(p, 'all'); part.inf = Math.max(0, part.inf - 3); const r = battle([{ id:i, u:part }], best, { naval:true }); battles.push(r); if (r.win) news(`${n.adj.toUpperCase()} TROOPS STORM THE BEACHES AT ${PROV[best].name.toUpperCase()}`); break; }
     }
   }
+  aiConvoys(t, n, fd, enemies, pacific);
   // paratroopers drop behind the lines when the odds are good
   for (const i of order) {
     const p = G.prov[i]; if (!p.r.par) continue;
@@ -208,7 +209,7 @@ function aiTurn(t, battles) {
         const T = G.prov[j];
         const helpers = PROV[j].adj.filter(k => k !== i && G.prov[k].o === t && readyAt(G.prov[k]) > 0);
         const sumU = portion(p, 'all');
-        for (const k of helpers) { const hp = portion(G.prov[k], 'all'); if (hp.inf > 0) hp.inf--; for (const kk of LAND) sumU[kk] += hp[kk]; }
+        for (const k of helpers) { const hp = portion(G.prov[k], 'all'); hp.inf = Math.max(0, hp.inf - (k === n.capital ? 3 : 1)); for (const kk of LAND) sumU[kk] += hp[kk]; }
         const atk = attackValue(t, sumU, j, { from:i });
         const def = unitsAt(T) === 0 ? 0.01 : defenseValue(j, sumU, t);
         const odds = atk / def;
@@ -218,10 +219,11 @@ function aiTurn(t, battles) {
       }
       if (best) {
         const otherThreat = PROV[i].adj.filter(j => enemies.has(G.prov[j].o) && j !== best.j).reduce((s, j) => s + unitsAt(G.prov[j]), 0);
-        const keep = otherThreat > 0 ? Math.min(p.r.inf, Math.ceil(otherThreat / 3)) : 0;
+        let keep = otherThreat > 0 ? Math.min(p.r.inf, Math.ceil(otherThreat / 3)) : 0;
+        if (i === n.capital) keep = Math.min(p.r.inf, Math.max(keep, Math.ceil(otherThreat / 2), 2)); // never strip the capital
         const part = portion(p, 'all'); part.inf = Math.max(0, part.inf - keep);
         const srcs = [{ id:i, u:part }];
-        if (best.odds < 3) for (const k of best.helpers) { const hp = portion(G.prov[k], 'all'); if (hp.inf > 0) hp.inf--; if (landN(hp)) srcs.push({ id:k, u:hp }); }
+        if (best.odds < 3) for (const k of best.helpers) { const hp = portion(G.prov[k], 'all'); hp.inf = Math.max(0, hp.inf - (k === n.capital ? 3 : 1)); if (landN(hp)) srcs.push({ id:k, u:hp }); }
         if (!landN(srcs[0].u)) continue;
         const r = battle(srcs, best.j);
         battles.push(r);
@@ -238,15 +240,48 @@ function aiTurn(t, battles) {
     } else if (fd[i] === 99 && sd && sd[i] > 0 && sd[i] < 99) {
       // no land front: make for the ports that face the enemy across the sea
       const nb = PROV[i].adj.filter(j => G.prov[j].o === t && sd[j] < sd[i]);
-      if (nb.length) { const part = portion(p, 'all'); if (PROV[i].vp >= 6 && part.inf > 0) part.inf--; if (landN(part)) { moveLand(p, G.prov[pickR(nb)], part); if (!unitsAt(p)) moveGeneral(i, nb[0], t); } }
+      if (nb.length) { const part = portion(p, 'all'); if (PROV[i].vp >= 6 && part.inf > 0) part.inf--; if (i === n.capital) part.inf = Math.max(0, part.inf - 2); if (landN(part)) { moveLand(p, G.prov[pickR(nb)], part); if (!unitsAt(p)) moveGeneral(i, nb[0], t); } }
     } else if (fd[i] < 99) {
       // march toward the front, preferring the sector under most pressure
       const nb = PROV[i].adj.filter(j => G.prov[j].o === t && fd[j] < fd[i]);
       if (nb.length) {
         const j = nb.length > 1 && rnd() < 0.7 ? nb.sort((a, b) => threatAt(t, b) - threatAt(t, a))[0] : pickR(nb);
-        const part = portion(p, 'all'); if (PROV[i].vp >= 6 && part.inf > 0) part.inf--;
+        const part = portion(p, 'all'); if (PROV[i].vp >= 6 && part.inf > 0) part.inf--; if (i === n.capital) part.inf = Math.max(0, part.inf - 2);
         if (landN(part)) { moveLand(p, G.prov[j], part); if (!unitsAt(p)) moveGeneral(i, j, t); }
       }
+    }
+  }
+}
+// convoys: idle armies with no land front ship out to reinforce a front over the sea, or invade an enemy shore
+function aiConvoys(t, n, fd, enemies, pacific) {
+  if (!n.major || liftLeft(t) < 3 || G.flags.noconv) return;
+  const stacks = owned(t).filter(i => PROV[i].coast && fd[i] >= 2 && readyAt(G.prov[i]) >= 4).sort((a, b) => readyAt(G.prov[b]) - readyAt(G.prov[a])).slice(0, 3);
+  const seaWar = pacific || t === 'ENG' || t === 'USA';
+  for (const i of stacks) {
+    if (liftLeft(t) < 3) return;
+    const p = G.prov[i]; if (readyAt(p) < 4) continue;
+    const tg = convoyTargets(i, t);
+    // invasion of a weakly held shore
+    if ((G.y >= 1940 || pacific) && rnd() < (pacific ? 0.4 : seaWar ? 0.25 : 0.1)) {
+      let best = null;
+      for (const [j, v] of tg) {
+        if (v.kind !== 'invade' || v.risk > 0.22) continue;
+        // Fortress Europe: the Western Allies wait until late 1942 before landing on the continent, and need better odds
+        const fortress = !pacific && inEurope(G.prov[j].o) && nat(G.prov[j].o).major;
+        if (fortress && nowNum() < ymNum(1942, 10)) continue;
+        const part = trimTo(portion(p, 'all'), liftLeft(t)); if (PROV[i].vp >= 4) part.inf = Math.max(0, part.inf - 2);
+        if (landN(part) < 3) continue;
+        const o = unitsAt(G.prov[j]) ? attackValue(t, part, j, { naval:true }) * (1 - v.risk) / Math.max(0.3, defenseValue(j, part, t)) : 9;
+        const sc = o * (1 + PROV[j].vp * 0.1 + (A(G.prov[j].o) && nat(G.prov[j].o).capital === j ? 0.5 : 0));
+        if (o > (fortress ? 2.8 : 2) && (!best || sc > best[0])) best = [sc, j, part];
+      }
+      if (best) { shipConvoy(t, i, best[1], best[2]); continue; }
+    }
+    // reinforce a front across the water
+    if (fd[i] === 99 && rnd() < 0.6) {
+      let best = null;
+      for (const [j, v] of tg) { if (v.kind !== 'convoy' || fd[j] !== 0 || v.risk > 0.15) continue; const th = threatAt(t, j) + PROV[j].vp; if (!best || th > best[0]) best = [th, j]; }
+      if (best) { const part = portion(p, 'half'); if (PROV[i].vp >= 4 && part.inf > 0) part.inf--; if (landN(part)) shipConvoy(t, i, best[1], part); }
     }
   }
 }
@@ -264,8 +299,11 @@ function aiDiplomacy() {
     if (!A(t) || isHuman(t) || NATDEF[t].off) continue;
     const n = nat(t);
     for (const e of enemiesOf(t)) {
-      if (!A(e) || signer(t) !== t || signer(e) !== e) continue;
+      if (!A(e)) continue;
       const dur = G.turn - (G.warStart[wkey(t, e)] || 0);
+      // an AI ally at war asks its human partners to join in
+      if (dur <= 2 && facOf(t) && (n.major || G.facs[facOf(t)].lead === t) && callTargets(t, e).some(m => liveHuman(m)) && !canCallToWar(t, e) && rnd() < 0.5) callToWar(t, e, true);
+      if (signer(t) !== t || signer(e) !== e) continue;
       // losing AIs sue for peace with human players
       if (isHuman(e) && dur >= 4 && rnd() < 0.12) {
         const ws = warScore(t, e);

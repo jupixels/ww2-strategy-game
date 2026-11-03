@@ -16,11 +16,19 @@ function endMonth() {
     // 3. American expeditionary force
     if (G.flags.usa && G.m % 3 === 0 && nowNum() < ymNum(1946, 0)) {
       const host = humanTags().find(isAllied) || (A('ENG') && isAllied('ENG') ? 'ENG' : membersOf('ALLIES').find(t => t !== 'USA'));
-      if (host && A(host)) { const c = homeProv(host); if (c >= 0) { G.prov[c].u.inf += 2; G.prov[c].u.arm += 1; notify(host, '★', 'US Expeditionary Force arrives', `2 infantry and 1 armored division land at ${PROV[c].name}.`, 'medal'); } }
+      // on the world map the USA is a real nation: the divisions come out of its own army, and a human
+      // president ships his own troops by convoy instead
+      let src = null;
+      if (WORLD && A('USA')) src = isHuman('USA') ? -1 : owned('USA').filter(i => G.prov[i].u.inf >= 3 && !PROV[i].adj.some(j => W('USA', G.prov[j].o))).sort((a, b) => unitsAt(G.prov[b]) - unitsAt(G.prov[a]))[0] ?? -1;
+      if (host && A(host) && src !== -1) { const c = homeProv(host); if (c >= 0) {
+        const arm = src != null ? Math.min(1, G.prov[src].u.arm) : 1;
+        if (src != null) { G.prov[src].u.inf -= 2; G.prov[src].u.arm -= arm; clampReady(G.prov[src]); }
+        G.prov[c].u.inf += 2; G.prov[c].u.arm += arm; notify(host, '★', 'US Expeditionary Force arrives', `2 infantry${arm ? ' and 1 armored division' : ' divisions'} land at ${PROV[c].name}.`, 'medal'); } }
     }
     // 4. the war at sea
     for (const z in G.fleet) { const tags = Object.keys(G.fleet[z]); for (let i = 0; i < tags.length; i++) for (let j = i + 1; j < tags.length; j++) if (W(tags[i], tags[j]) && G.fleet[z][tags[i]] && G.fleet[z][tags[j]]) navalBattle(z, tags[i], tags[j]); }
     convoyRaids();
+    landConvoys(out);
     // 5. dig in: armies that did not move this month entrench
     for (const p of G.prov) { if (unitsAt(p) && readyAt(p) === unitsAt(p)) { const n = nat(p.o); p.dig = Math.min(n && n.tech.grand ? 4 : 3, p.dig + 1); } if (!unitsAt(p)) p.dig = 0; }
     // 6. the calendar turns
@@ -29,8 +37,9 @@ function endMonth() {
       const n = G.nat[t]; if (!n.alive || NATDEF[t].off) continue;
       n.pp += income(t); n.mp += mpIncome(t); n.pol += 2 + (n.stab > 70 ? 1 : 0);
       n.oil = Math.min(999, n.oil + oilIncome(t) - oilUpkeep(t)); if (n.oil < -20) n.oil = -20;
+      n.fuel = fuelLevel(t);
       n.steel = Math.min(999, n.steel + steelIncome(t));
-      if (n.oil <= 0 && isHuman(t)) notify(t, '⛽', 'Fuel shortage', 'Tanks, aircraft and ships fight at 60%. Import oil, capture oil fields or research Synthetic Oil.', 'war');
+      if (n.oil <= 0 && isHuman(t)) notify(t, '⛽', 'Fuel shortage', `Income covers ${Math.round(100 * Math.min(1, oilIncome(t) / Math.max(0.1, oilUpkeep(t))))}% of upkeep: tanks, aircraft and ships fight at ${Math.round(n.fuel * 100)}% and sealift shrinks. Import oil, capture oil fields, research Synthetic Oil — or lay up some ships.`, 'war');
       if (n.intel > 0) n.intel--;
       if (n.reveal) for (const o in n.reveal) if (--n.reveal[o] <= 0) delete n.reveal[o];
       if (n.counter > 0) n.counter--;

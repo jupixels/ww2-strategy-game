@@ -1,6 +1,6 @@
 'use strict';
 /* ================= SEA CONTROL ================= */
-function fleetPower(f, t) { if (!f) return 0; const n = nat(t); const fuel = n && n.oil <= 0 ? 0.6 : 1; return (f.cap * 3 * (n && n.tech.carrier ? 1.4 : 1) + f.sub * 0.6) * fuel; }
+function fleetPower(f, t) { if (!f) return 0; const n = nat(t); const fuel = n ? fuelMul(t) : 1; return (f.cap * 3 * (n && n.tech.carrier ? 1.4 : 1) + f.sub * 0.6) * fuel; }
 // returns 'free' | 'ours' | 'contested' | 'enemy' from t's point of view
 function seaControl(z, t) {
   let fs = 0, hs = 0;
@@ -27,6 +27,124 @@ function navalTargets(pid, t) {
   return out;
 }
 function fleetTargets(z, t) { return SEA[z].adj.filter(z2 => passable(z, z2, t)); }
+const FLEET_MOVES = 2; // sea zones a fleet can sail each month
+const fleetReady = f => !!f && (f.mv || 0) < FLEET_MOVES;
+
+/* ================= SEA TRANSPORT: CONVOYS =================
+   Short hops (a neighbouring sea zone) are instant. Anything further is a convoy: the troops embark now,
+   cross up to CONVOY_HOPS sea zones and come ashore at the end of the month, after the fleets have fought.
+   Enemy ships and U-boats along the route sink part of it; your battle squadrons in those waters escort it.
+   Sealift (divisions shipped per month) grows with the navy. Moving troops costs no oil. */
+const CONVOY_HOPS = 4;
+function convoyHops(t) { const n = nat(t); return CONVOY_HOPS + (n.tech.amph ? 1 : 0) + (n.done.includes('usa_liberty') ? 1 : 0); }
+function sealift(t) {
+  const n = nat(t), nv = navyOf(t);
+  let c = 4 + 2 * nv.cap + (n.tech.amph ? 4 : 0) + (n.done.includes('usa_liberty') ? 12 : 0) + (n.done.includes('eng_rn') ? 4 : 0) + (n.done.includes('jap_southern') ? 8 : 0);
+  if (n.oil <= 0) c = Math.ceil(c * 0.6);
+  return c;
+}
+const liftLeft = t => Math.max(0, sealift(t) - (nat(t).lift || 0));
+// share of a convoy lost crossing zone z
+function convoyRisk(z, t) {
+  let h = 0, f = 0;
+  for (const o in G.fleet[z]) {
+    const fl = G.fleet[z][o]; if (!fl) continue;
+    if (W(o, t)) h += (fl.cap * 1.5 + fl.sub * (hasTech(o, 'sub2') ? 1.6 : 1) * (nat(o).fx.wolfpack ? 2 : 1)) * fuelMul(o);
+    else if (friendly(o, t)) f += fl.cap * 2 * fuelMul(o);
+  }
+  if (!h) return 0;
+  return clamp(0.25 * h / (h + f + 2), 0.02, 0.25);
+}
+const routeRisk = (route, t) => 1 - route.reduce((s, z) => s * (1 - convoyRisk(z, t)), 1);
+// cheapest sea route from a coastal province to every zone in reach: Map(zone -> [zones from start to it])
+function seaRoutes(pid, t) {
+  const best = new Map(), max = convoyHops(t), q = [];
+  for (const z of PROV[pid].zones) if (seaControl(z, t) !== 'enemy') { best.set(z, { c:convoyRisk(z, t) * 6, h:0, r:[z] }); q.push(z); }
+  while (q.length) {
+    q.sort((a, b) => best.get(a).c - best.get(b).c);
+    const z = q.shift(), cur = best.get(z); if (cur.h >= max) continue;
+    for (const z2 of SEA[z].adj) {
+      if (!passable(z, z2, t) || seaControl(z2, t) === 'enemy') continue;
+      const c = cur.c + 1 + convoyRisk(z2, t) * 6, old = best.get(z2);
+      if (!old || c < old.c) { best.set(z2, { c, h:cur.h + 1, r:cur.r.concat(z2) }); if (!q.includes(z2)) q.push(z2); }
+    }
+  }
+  const out = new Map(); for (const [z, v] of best) out.set(z, v.r); return out;
+}
+// coastal provinces a convoy from pid can reach: Map(j -> {kind:'convoy'|'invade', route, risk})
+function convoyTargets(pid, t, skip) {
+  const out = new Map(); if (!PROV[pid].coast) return out;
+  const routes = seaRoutes(pid, t);
+  for (const [z, route] of routes) for (const j of ZONE_PROVS[z]) {
+    if (j === pid || (skip && skip.has(j))) continue;
+    const o = G.prov[j].o, kind = o === t ? 'convoy' : W(t, o) ? 'invade' : null; if (!kind) continue;
+    const prev = out.get(j);
+    if (!prev || route.length < prev.route.length) out.set(j, { kind, route, risk:0 });
+  }
+  for (const v of out.values()) v.risk = routeRisk(v.route, t);
+  return out;
+}
+function convoyInfo(t, from, to) { const m = convoyTargets(from, t); return m.get(to) || null; }
+// trim a stack to n divisions, shedding the most numerous types first
+function trimTo(u, n) { while (landN(u) > n) { let k = LAND[0]; for (const kk of LAND) if (u[kk] > u[k]) k = kk; u[k]--; } return u; }
+function shipConvoy(t, from, to, amt) {
+  const p = G.prov[from]; if (!p || p.o !== t) return null;
+  const k = targetsFor(t, from).get(to); if (k !== 'convoy' && k !== 'invade') return null;
+  const info = convoyInfo(t, from, to); if (!info) return null;
+  const left = liftLeft(t); if (left <= 0) return null;
+  const part = trimTo(portion(p, amt), left); if (!landN(part)) return null;
+  for (const kk of LAND) { p.u[kk] -= part[kk]; p.r[kk] -= part[kk]; }
+  clampReady(p);
+  const n = nat(t); n.lift = (n.lift || 0) + landN(part);
+  const g = genAt(from, t), gid = g && !unitsAt(p) ? g.id : null;
+  const c = { id:(G.cid = (G.cid || 0) + 1), t, u:part, from, to, route:info.route, kind:info.kind, gid, xp:p.xp };
+  (G.convoys || (G.convoys = [])).push(c);
+  if (!unitsAt(p)) { p.dig = 0; p.xp = 0; }
+  return c;
+}
+function cancelConvoy(t, id) {
+  const L = G.convoys || [], i = L.findIndex(c => c.id === id && c.t === t); if (i < 0) return false;
+  const c = L[i], p = G.prov[c.from]; if (p.o !== t) return false;
+  L.splice(i, 1);
+  for (const k of LAND) { p.u[k] += c.u[k]; p.r[k] += c.u[k]; }
+  nat(t).lift = Math.max(0, (nat(t).lift || 0) - landN(c.u));
+  return true;
+}
+const convoysOf = t => (G.convoys || []).filter(c => c.t === t);
+// month end: every convoy at sea runs the gauntlet and comes ashore
+function landConvoys(out) {
+  const L = G.convoys || []; G.convoys = [];
+  for (const c of shuffleR(L)) {
+    const t = c.t; if (!A(t)) continue;
+    const n0 = landN(c.u);
+    let risk = 0; { let keep = 1; for (const z of c.route) keep *= 1 - (seaControl(z, t) === 'enemy' ? Math.max(0.35, convoyRisk(z, t)) : convoyRisk(z, t)); risk = 1 - keep; }
+    const lost = landN(takeLosses(c.u, rr(n0 * risk)));
+    const n = nat(t); if (lost) { n.lm = (n.lm || 0) + lost; n.st.losses += lost; }
+    const T = G.prov[c.to], g = c.gid != null ? G.gens.find(x => x.id === c.gid && x.tag === t) : null;
+    const home = G.prov[c.from].o === t ? c.from : homeProv(t);
+    const rep = { t, from:c.from, to:c.to, lost, n:n0, kind:c.kind };
+    if (!landN(c.u)) { rep.sunk = true; }
+    else if (T.o === t) {
+      for (const k of LAND) T.u[k] += c.u[k];
+      const b = unitsAt(T) - landN(c.u); T.xp = b > 0 ? (T.xp * b + (c.xp || 0) * landN(c.u)) / unitsAt(T) : (c.xp || 0);
+      if (g && !genAt(c.to, t)) g.pid = c.to;
+      rep.landed = true;
+    } else if (W(t, T.o)) {
+      const r = battle([{ id:-1, o:t, u:c.u, back:home }], c.to, { naval:true, gid:c.gid });
+      r.kind = 'land'; r.convoy = true; r.from = [c.from];
+      if (r.win && g && !genAt(c.to, t)) g.pid = c.to;
+      out.battles.push(r); rep.battle = true; rep.win = r.win;
+      if (r.win && PROV[c.to].vp >= 3) news(`${n.adj.toUpperCase()} TROOPS STORM THE BEACHES AT ${PROV[c.to].name.toUpperCase()}`);
+    } else if (home >= 0) { for (const k of LAND) G.prov[home].u[k] += c.u[k]; rep.back = true; }
+    if (isHuman(t)) {
+      const nm = PROV[c.to].name;
+      if (rep.sunk) notify(t, '⚓', `Convoy to ${nm} lost`, `All ${n0} divisions went down with their transports.`, 'war');
+      else if (rep.landed) notify(t, '⚓', `Convoy reaches ${nm}`, `${n0 - lost} divisions came ashore${lost ? `; ${lost} were lost at sea` : ''}.`, lost ? 'war' : '');
+      else if (rep.back) notify(t, '⚓', `Convoy to ${nm} turned back`, `${nm} is no longer ours to land in. The troops returned to port.`, '');
+    }
+    (out.convoys || (out.convoys = [])).push(rep);
+  }
+}
 
 /* ================= SUPPLY ================= */
 // Supply is graded: full near depots (capitals, home cities, long-held big cities and friendly ports),
@@ -64,7 +182,7 @@ function airPower(sideOf, pid, kind) {
     const n = nat(q.o); const range = AIR_RANGE * (kind === 'bmb' && n.tech.bmb2 ? 1.3 : 1);
     if (Math.hypot(PROV[i].x - P.x, PROV[i].y - P.y) > range) continue;
     let m = 1; if (kind === 'ftr') m *= 1 + (n.tech.ftr2 ? 0.3 : 0) + (n.tech.jet ? 0.6 : 0);
-    if (n.oil <= 0) m *= 0.6;
+    m *= fuelMul(q.o);
     s += v * m;
   }
   return s;
@@ -130,7 +248,7 @@ const WINTER_LANDS = new Set(['SOV','FIN']);
 function unitStrength(n, u, attacking, ter, opts = {}) {
   const T = n.tech, infMul = 1 + 0.15 * ((T.inf1 ? 1 : 0) + (T.inf2 ? 1 : 0) + (T.inf3 ? 1 : 0));
   const rough = 'mfsu'.includes(ter), hilly = 'mh'.includes(ter);
-  const fuel = n.oil <= 0 ? 0.6 : 1;
+  const fuel = fuelMul(n.tag);
   let s = 0;
   s += u.inf * infMul;
   s += u.mtn * infMul * (attacking ? 1.0 : 1.1) * (hilly ? (attacking ? 1.5 : 1.3) : 1);
@@ -161,6 +279,7 @@ function defenseValue(pid, atkUnits, atkTag, detail) {
   mul(p.sup ? 'Supply' : 'Out of supply', 0.75 + 0.25 * p.sup);
   mul('Low stability', n.stab < 20 ? 0.9 : 1);
   if (G.flags.gpw && p.o === 'SOV' && p.core === 'SOV' && G.y < 1944) mul('Not one step back', 1.15);
+  if (p.o === 'CHI' && p.core === 'CHI' && atkTag && friendly(atkTag, 'JAP')) mul('Trading space for time', P.ter === 'p' ? 1.2 : 1.35);
   mul('Hold the line', n.fx.maginot ? 1.2 : 1);
   mul('Codebreakers', n.fx.codebreak ? 1.1 : 1);
   if (atkTag && nat(atkTag).fx.fifth === pid) mul('Fifth column', 0.5);
@@ -178,7 +297,7 @@ function attackValue(t, u, pid, opts, detail) {
   const ab = airBalance(t, d.o, pid);
   mul('Air superiority', 1 + 0.3 * (2 * ab.share - 1));
   mul('Bombers', 1 + Math.min(0.3, 0.03 * ab.ba * ab.share) - Math.min(0.2, 0.02 * ab.bd * (1 - ab.share)));
-  if (opts.naval) { const g = opts.from >= 0 ? genAt(opts.from, t) : null; mul('Naval landing', g && g.tr === 'amphib' ? 1 : n.tech.amph ? 0.75 : 0.5); }
+  if (opts.naval) { const g = opts.from >= 0 ? genAt(opts.from, t) : opts.gid != null ? G.gens.find(x => x.id === opts.gid) : null; mul('Naval landing', g && g.tr === 'amphib' ? 1 : n.tech.amph ? 0.75 : 0.5); }
   if (opts.para) mul('Airdrop', 0.85);
   if (P.coast && !opts.meeting) { let caps = 0; for (const z of P.zones) caps = Math.max(caps, sum(Object.keys(G.fleet[z]).filter(o => friendly(o, t)), o => G.fleet[z][o].cap)); mul('Naval bombardment', 1 + Math.min(0.25, 0.05 * caps)); }
   const winterProof = WINTER_LANDS.has(t) || n.fx.weather || (opts.from >= 0 && genAt(opts.from, t) && genAt(opts.from, t).tr === 'winter');
@@ -210,7 +329,7 @@ function battle(srcs, tid, opts = {}) {
   }
   const ab = airBalance(a, d, tid);
   res.air = ab;
-  let atk = attackValue(a, au, tid, { naval:opts.naval, para:opts.para, from:mainFrom, meeting:opts.meeting }, res.af);
+  let atk = attackValue(a, au, tid, { naval:opts.naval, para:opts.para, from:mainFrom, meeting:opts.meeting, gid:opts.gid }, res.af);
   const def = Math.max(0.3, opts.meeting ? unitStrength(nat(d), T.u, false, 'p') : defenseValue(tid, au, a, res.df));
   const roll = 0.85 + rnd() * 0.3, roll2 = 0.85 + rnd() * 0.3;
   an.nextAtk = 1;
@@ -247,7 +366,7 @@ function battle(srcs, tid, opts = {}) {
     srcs.forEach((s, i) => {
       const last = i === srcs.length - 1, sh = landN(s.u) / tot, part = emptyLand();
       for (const k of LAND) { part[k] = last ? left[k] : Math.min(left[k], Math.round(au[k] * sh)); left[k] -= part[k]; }
-      const home = s.id >= 0 && G.prov[s.id].o === a ? s.id : homeProv(a);
+      const home = s.id >= 0 && G.prov[s.id].o === a ? s.id : s.back != null && s.back >= 0 && G.prov[s.back].o === a ? s.back : homeProv(a);
       if (home >= 0 && G.prov[home].o === a && !opts.para) for (const k of LAND) G.prov[home].u[k] += part[k];
     });
     T.xp = Math.min(3, T.xp + 0.25);
@@ -300,7 +419,8 @@ function checkCapitulation(d, w) {
   for (let i = 0; i < NP; i++) if (G.prov[i].core === d) { coreVP += PROV[i].vp + 0.5; if (G.prov[i].o === d) holdVP += PROV[i].vp + 0.5; }
   const capLost = !capitalOk(d);
   const small = n.nprov0 <= 4;
-  const thr = (d === 'SOV' ? 0.3 : 0.45) + (n.stab < 25 ? 0.15 : 0);
+  // the Soviet Union traded space for time; Nationalist China never surrendered while it held any land
+  const thr = (d === 'SOV' ? 0.3 : d === 'CHI' ? 0 : 0.45) + (n.stab < 25 ? 0.15 : 0);
   if (capLost && (small || holdVP / Math.max(1, coreVP) < thr)) return capitulate(d, w);
   if (capLost) {
     const best = mine.sort((x, y) => PROV[y].vp - PROV[x].vp)[0];
@@ -494,14 +614,28 @@ function navalBattle(z, a, b) {
   return r;
 }
 function moveFleet(t, from, to, part) {
-  const f = G.fleet[from][t]; if (!f || f.mv) return false;
+  const f = G.fleet[from][t]; if (!fleetReady(f)) return false;
   if (!SEA[from].adj.includes(to) || !passable(from, to, t)) return false;
   const c = part === 'half' ? Math.ceil(f.cap / 2) : f.cap, s = part === 'half' ? Math.ceil(f.sub / 2) : f.sub;
+  if (c + s <= 0) return false;
+  const had = G.fleet[to][t] && G.fleet[to][t].cap + G.fleet[to][t].sub > 0 ? G.fleet[to][t].mv || 0 : 0;
   f.cap -= c; f.sub -= s;
-  addFleet(to, t, 'cap', c); addFleet(to, t, 'sub', s); G.fleet[to][t].mv = 1;
+  addFleet(to, t, 'cap', c); addFleet(to, t, 'sub', s);
+  const nf = G.fleet[to][t]; nf.mv = Math.max(had, (f.mv || 0) + 1);
   if (f.cap + f.sub <= 0) delete G.fleet[from][t];
-  // engage anyone hostile waiting there
-  for (const o of Object.keys(G.fleet[to])) if (o !== t && W(o, t)) navalBattle(to, t, o);
+  // engage anyone hostile waiting there: a fleet that fights stops for the month
+  let fought = false;
+  for (const o of Object.keys(G.fleet[to])) if (o !== t && W(o, t) && G.fleet[to][o]) { navalBattle(to, t, o); fought = true; }
+  if (fought && G.fleet[to][t]) G.fleet[to][t].mv = FLEET_MOVES;
+  return true;
+}
+// decommission ships to save their oil: some steel comes back from the breakers' yards
+function scrapFleet(t, z, part) {
+  const f = G.fleet[z] && G.fleet[z][t]; if (!f) return false;
+  const c = part === 'half' ? Math.floor(f.cap / 2) : f.cap, s = part === 'half' ? Math.floor(f.sub / 2) : f.sub;
+  if (c + s <= 0) return false;
+  f.cap -= c; f.sub -= s; nat(t).steel += c * 3 + s;
+  if (f.cap + f.sub <= 0) delete G.fleet[z][t];
   return true;
 }
 function convoyRaids() {

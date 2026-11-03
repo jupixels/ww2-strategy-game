@@ -24,6 +24,7 @@ function decisionText(it) {
       : { head:`${f} Demands Our Surrender of Land`, dek:'They would keep everything they occupy', text:`${f} offers peace — on condition that every province of ours they hold becomes theirs.`, yes:'Sign the treaty', no:'Never' };
     case 'pact': return { head:`${f} Offers a Pact`, dek:'Three years of non-aggression', text:`The ${nat(it.from).adj} ambassador proposes a non-aggression pact. Breaking it later would cost stability and the trust of the world.`, yes:'Sign the pact', no:'Decline' };
     case 'demand': return { head:`${f} Issues an Ultimatum`, dek:`Hand over ${it.provs.map(i => PROV[i].name).join(' and ')}`, text:`${f} demands territory and hints at war if refused. Refusing gives them a cheap excuse to attack.`, yes:'Give in', no:'Refuse' };
+    case 'calltowar': return { head:`${f} Calls Us to Arms`, dek:`Join the war against ${natName(it.enemy)}`, text:`${f} invokes our alliance and asks us to declare war on ${natName(it.enemy)}. Refusing costs a little stability and goodwill; accepting puts our borders and convoys in the line of fire.`, yes:`War with ${natName(it.enemy)}`, no:'Stay out of it' };
     case 'invite': return { head:`An Invitation from ${f}`, dek:`Join the ${G.facs[it.fk] ? G.facs[it.fk].n : 'alliance'}`, text:`${f} invites us into its alliance. Members fight each other's defensive wars.`, yes:'Join', no:'Decline' };
   }
   return { head:'A Message', dek:'', text:'', yes:'Yes', no:'No' };
@@ -159,14 +160,18 @@ const TIPS = [
   'Artillery shreds forts. Mountain troops own the hills. Armor is king on the plains but burns oil and stalls in mud.',
   'Fighters within range decide <b>air superiority</b> — worth up to ±30% in every battle.',
   'Never attack Russia or Finland in winter unless you are Russian or Finnish: attackers lose 35% and freeze.',
-  'Control the sea: landings and sea supply need waters the enemy does not control. Submarines strangle island economies.',
+  'Control the sea: landings and sea supply need waters the enemy does not control. Submarines strangle island economies and sink convoys.',
+  '<b>Convoys</b>: select an army in a port and click a <span style="color:#86dde2">teal</span> province to ship it, or an <span style="color:#f0a25a">orange</span> one to invade. It lands at month end; escort the route with battle squadrons. Each battle squadron adds 2 divisions of sealift.',
+  'Your allies only fight your wars by themselves when you are attacked. Started one? Press <b>Call to war</b> in the World panel.',
+  'Oil is burned by ships, aircraft and tanks — never by marching or shipping troops — and only half as fast in peacetime. Running dry weakens them in proportion to the shortfall; decommission idle ships to save fuel.',
   'One <b>strategy card</b> a month. Save Blitzkrieg for the big push and Scorched Earth for the retreat.',
   'Low stability cuts production and makes you surrender sooner. Win battles, make peace, or play propaganda.',
   'Spies can map an enemy army, sabotage factories, steal tech or stage coups in neutral countries.',
   'Losing? Offer peace from the World panel. Winning? Demand terms and keep what you hold.',
 ].concat(WORLD ? [
   'The map spans the whole world and wraps east to west. Japan, China and the Americas fight their own wars — and yours, once Pearl Harbor drags America in.',
-  'Island war: select a coastal army and click a <span class="tg">blue</span> island to land. Japan and America stage their armies at ports facing the enemy.',
+  'Ocean war: from New York a convoy reaches Normandy in one month; from San Francisco, Hawaii. Japan and America stage their armies at ports facing the enemy and island-hop.',
+  'Japan signs the Tripartite Pact without going to war with Britain, and a neutrality pact keeps Tokyo and Moscow apart — until someone breaks it.',
   'Colonies give little manpower. When a homeland falls, colonies the enemy cannot reach overland rally to its strongest ally.',
   'Press <kbd>M</kbd> for the <b>terrain map</b>: mountains, jungle and marsh slow attackers; plains and desert favour armor.',
 ] : []);

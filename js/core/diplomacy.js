@@ -35,15 +35,16 @@ function declareWar(a, b, opts = {}) {
     notify('*', '⚠', 'Backstab!', `${natName(a)} broke its non-aggression pact with ${natName(b)}.`, 'war');
   }
   delete G.truce[wkey(a, b)];
+  if (nonBelligerent(a) && facOf(b)) delete G.nbm[a]; // attacking an alliance ends non-belligerence
   // unaligned victims of Axis aggression may be guaranteed by the Allies
   if (!facOf(b) && G.flags.guarantee && G.facs.ALLIES && membersOf('ALLIES').length && !friendly(a, 'ENG') && isAxis(a) && !['IRQ','SAU','PER'].includes(b) && inEurope(b)) {
     joinFaction(b, 'ALLIES', true);
     news(`${natName(b)} placed under Allied protection`);
   }
-  const sideB = sideOf(b);
+  const sideB = sideOf(b).filter(y => y === b || !nonBelligerent(y));
   for (const y of sideB) setWar(a, y);
   // guarantors honour their word
-  for (const x in G.nat) { const n = G.nat[x]; if (!n.alive || x === a || friendly(x, a) || W(x, a)) continue; if (n.guar.includes(b)) { for (const y of sideOf(x)) setWar(y, a); news(`${natName(x).toUpperCase()} HONOURS ITS GUARANTEE OF ${natName(b).toUpperCase()}`); } }
+  for (const x in G.nat) { const n = G.nat[x]; if (!n.alive || x === a || friendly(x, a) || W(x, a)) continue; if (n.guar.includes(b)) { for (const y of sideOf(x)) if (y === x || !nonBelligerent(y)) setWar(y, a); news(`${natName(x).toUpperCase()} HONOURS ITS GUARANTEE OF ${natName(b).toUpperCase()}`); } }
   tension((nat(a).major || nat(b).major ? 7 : 3) * (opts.half ? 0.5 : 1));
   if (!opts.quiet) {
     news(`${natName(a)} declares war on ${natName(b)}`);
@@ -54,6 +55,12 @@ function declareWar(a, b, opts = {}) {
   Hooks.emit('dirty', { owners:true });
   return true;
 }
+// alliance wars spread to every member, except across a non-aggression pact (Tokyo and Moscow keep their
+// neutrality pact) and except for non-belligerent members: Japan signs the Tripartite Pact without going to war
+// with Britain, and Germany does not inherit Japan's war in China, until Japan strikes the Western powers.
+function allyWar(a, b) { if (!pactWith(a, b)) setWar(a, b); }
+const nonBelligerent = t => !!(G.nbm && G.nbm[t]);
+function joinNonBelligerent(t, fk) { (G.nbm || (G.nbm = {}))[t] = 1; joinFaction(t, fk); }
 function joinFaction(t, fk, quiet) {
   const old = facOf(t); if (old === fk) return;
   if (old) leaveFaction(t);
@@ -72,8 +79,8 @@ function leaveFaction(t) {
 }
 function syncFaction(fk) {
   const ms = membersOf(fk); const en = new Set();
-  for (const m of ms) for (const e of enemiesOf(m)) if (!ms.includes(e)) en.add(e);
-  for (const m of ms) for (const e of en) setWar(m, e);
+  for (const m of ms) if (!nonBelligerent(m)) for (const e of enemiesOf(m)) if (!ms.includes(e)) en.add(e);
+  for (const m of ms) if (!nonBelligerent(m)) for (const e of en) allyWar(m, e);
 }
 function canJoin(t, fk) {
   const n = nat(t), F = G.facs[fk]; if (!F) return 'Gone';
@@ -235,6 +242,66 @@ function sendAid(t, to, kind, amt) {
   return true;
 }
 
+/* ================= CALL TO ARMS =================
+   An alliance only fights its members' defensive wars by itself. A member that starts (or is in) a war
+   can call its allies in; the AI weighs ideology, fear, pacts and how busy it already is. */
+const CALL_COST = 10;
+function callTargets(t, e) {
+  const fk = facOf(t); if (!fk || !A(e)) return [];
+  return membersOf(fk).filter(m => m !== t && A(m) && !W(m, e) && !friendly(m, e) && !NATDEF[m].off);
+}
+function canCallToWar(t, e) {
+  if (!W(t, e)) return 'Not at war with them';
+  if (!facOf(t)) return 'You are not in an alliance';
+  if (!callTargets(t, e).length) return 'Every ally is already fighting them';
+  const k = t + '>' + e; if (G.calls && G.calls[k] > G.turn) return `Asked recently: again in ${G.calls[k] - G.turn} mo`;
+  if (nat(t).pol < CALL_COST) return `Needs ${CALL_COST} politics`;
+  return '';
+}
+function aiAnswersCall(m, t, e) {
+  const n = nat(m), en = nat(e);
+  if (truceWith(m, e)) return false;
+  let s = 0.45;
+  if (n.ide === nat(t).ide) s += 0.2;
+  if (n.ide === en.ide) s -= 0.3;
+  if (enemiesOf(m).some(x => friendly(x, e))) s += 0.35;   // already fighting their friends
+  if (G.facs[facOf(t)] && G.facs[facOf(t)].lead === t) s += 0.15;
+  if (G.tension >= 60) s += 0.1;
+  if (pactWith(m, e) && rnd() > 0.1) return false; // a signed pact is rarely torn up for someone else's war
+  if (n.stab < 30) s -= 0.2;
+  const border = owned(m).some(i => PROV[i].adj.some(j => friendly(G.prov[j].o, e)));
+  if (border && sidePower(e) > armyPower(m) * 4 && !n.major) s -= 0.3;   // too close to a giant
+  if (enemiesOf(m).length && !enemiesOf(m).some(x => friendly(x, e))) s -= 0.15; // busy elsewhere
+  if (warScore(t, e) < -0.25) s -= 0.15;                    // a losing war
+  return s + rnd() * 0.3 > 0.62;
+}
+function answerCall(m, t, e) {
+  if (!A(m) || !A(e) || W(m, e) || friendly(m, e) || !W(t, e)) return false;
+  if (G.nbm) delete G.nbm[m];
+  declareWar(m, e, { quiet:true, half:true });
+  news(`${natName(m).toUpperCase()} ANSWERS ${natName(t).toUpperCase()}'S CALL TO ARMS AGAINST ${natName(e).toUpperCase()}`);
+  log(`<b>${natName(m)}</b> joined <b>${natName(t)}</b>'s war against <b>${natName(e)}</b>.`);
+  for (const h of humanTags()) if (h === e || friendly(h, e)) notify(h, '!', `${natName(m)} enters the war`, `${natName(m)} answered ${natName(t)}'s call to arms.`, 'war');
+  return true;
+}
+function callToWar(t, e, humansOnly) {
+  const res = { joined:[], refused:[], asked:[] };
+  if (canCallToWar(t, e)) return res;
+  nat(t).pol -= CALL_COST;
+  (G.calls || (G.calls = {}))[t + '>' + e] = G.turn + 6;
+  for (const m of callTargets(t, e)) {
+    if (humansOnly && !isHuman(m)) continue;
+    if (isHuman(m)) { sendDecision(m, { kind:'calltowar', from:t, enemy:e }); res.asked.push(m); }
+    else if (aiAnswersCall(m, t, e) && answerCall(m, t, e)) res.joined.push(m);
+    else res.refused.push(m);
+  }
+  if (isHuman(t)) {
+    const nm = a => a.map(natName).join(', ');
+    notify(t, '⚑', `Call to arms against ${natName(e)}`, [res.joined.length ? `Joined: ${nm(res.joined)}.` : '', res.refused.length ? `Refused: ${nm(res.refused)}.` : '', res.asked.length ? `Awaiting an answer: ${nm(res.asked)}.` : ''].filter(Boolean).join(' '), res.joined.length ? 'medal' : '');
+  }
+  return res;
+}
+
 /* ================= INBOX: newspapers and decisions for human players ================= */
 function sendNews(to, item) {
   for (const h of humanTags()) if (!G.humans[h].dead && (to === '*' || to === h)) pushInbox(h, { type:'news', ...item });
@@ -257,5 +324,9 @@ function resolveDecision(h, it, yes) {
   else if (it.kind === 'pact') { if (yes && !W(it.from, h)) signPact(it.from, h); else notify(it.from, '✕', 'Pact refused', `${natName(h)} declined.`, ''); }
   else if (it.kind === 'demand') { if (yes) cede(h, it.from, it.provs.filter(i => G.prov[i].o === h)); else { (nat(it.from).claims || (nat(it.from).claims = [])).push(h); notify(it.from, '✕', 'Demands rejected', `${natName(h)} refuses. War with them now costs only 10 politics.`, 'war'); } }
   else if (it.kind === 'alliance') { if (yes && G.facs[it.fk]) joinFaction(h, it.fk); }
+  else if (it.kind === 'calltowar') {
+    if (yes && answerCall(h, it.from, it.enemy)) { if (isHuman(it.from)) notify(it.from, '⚑', `${natName(h)} answers the call`, `${natName(h)} is now at war with ${natName(it.enemy)}.`, 'medal'); }
+    else if (!yes) { notify(it.from, '✕', 'Call to arms refused', `${natName(h)} will not join the war against ${natName(it.enemy)}.`, ''); nat(h).stab = Math.max(0, nat(h).stab - 2); }
+  }
   else if (it.kind === 'invite') { if (yes && G.facs[it.fk] && !facOf(it.to)) joinFaction(it.to, it.fk); else notify(it.from, '✕', 'Invitation declined', '', ''); }
 }

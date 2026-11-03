@@ -65,7 +65,7 @@ function applyScenario(year) {
     runEv('marcopolo');
     setOwner('JAP', 'Peking,Tientsin,Taiyuan,Jinan,Tsingtao,Xuzhou,Kalgan,Baotou,Shanghai,Nanjing,Hangzhou,Wuhan,Canton,Hainan,Nanchang,Zhengzhou', 2);
     if (A('CHI')) nat('CHI').capital = ID['Chongqing'];
-    bolster('JAP', { inf:20, art:4, arm:2 }); bolster('CHI', { inf:20 }); deployToFronts('JAP', 0.4);
+    bolster('JAP', { inf:20, art:4, arm:2 }); bolster('CHI', { inf:32, art:2 }); deployToFronts('JAP', 0.4); deployToFronts('CHI', 0.5);
     { const n = nat('JAP'); n.pp += 100; n.oil += 30; n.steel += 30; }
     hireGeneral('JAP', true, 'Tomoyuki Yamashita');
     }
@@ -106,7 +106,7 @@ function applyScenario(year) {
     hireGeneral('GER', true, 'Erwin Rommel'); hireGeneral('SOV', true, 'Georgy Zhukov'); hireGeneral('ENG', true, 'Archibald Wavell');
     // Asia on the eve of the Pacific war: Japan in the Axis, French Indochina occupied, Changsha holding out
     if (WORLD) {
-    runEv('japaxis'); runEv('indochina');
+    runEv('japaxis'); runEv('neutrality'); runEv('indochina');
     setOwner('JAP', 'Fuzhou,Nanning,Yinchuan', 2);
     bolster('JAP', { inf:16, art:4, arm:2 }); bolster('CHI', { inf:16 }); bolster('USA', { inf:10, arm:2 });
     { const n = nat('JAP'); n.pp += 120; n.oil += 40; n.steel += 40; techsByYear('JAP', 4); }

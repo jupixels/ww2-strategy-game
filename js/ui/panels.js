@@ -27,6 +27,10 @@ function renderDrawer() {
     const ros = rosterFor(pl);
     if (act && gens.length < n.genSlots) h += `<div class="row"><div><h4>Appoint a general</h4><p>${ros.length ? ros.map(r => `${esc(r[0])} (${TRAITS[r[1]].n})`).slice(0, 3).join(', ') : 'A capable officer from the ranks'} — posted to your biggest army.</p></div><div><button class="btn gold" data-hire ${why ? `disabled title="${esc(why)}"` : ''}>25 pol</button></div></div>`;
     // outliner
+    const cvs = convoysOf(pl);
+    h += `<div class="sect">Convoys at sea · sealift ${liftLeft(pl)}/${sealift(pl)} left this month</div>`;
+    h += cvs.length ? cvs.map(v => `<div class="row orow" data-goto="${v.to}"><div><h4>${iconSvg('anchor')}${esc(PROV[v.from].name)} → ${esc(PROV[v.to].name)}</h4><p class="ounits">${LAND.filter(k => v.u[k]).map(k => iconSvg(k, k) + v.u[k]).join(' ')} · ${v.kind === 'invade' ? '<span class="tr">invasion</span>' : 'reinforcement'} · via ${v.route.map(z => esc(SEA[z].n)).join(', ')} · ~${Math.round(routeRisk(v.route, pl) * 100)}% risk</p></div><div><button class="btn" data-unship="${v.id}" ${act ? '' : 'disabled'} title="Bring them back to port, ready to act">Recall</button></div></div>`).join('')
+      : `<div class="hint">Select an army in a port: <span style="color:#86dde2">teal</span> provinces across the sea take a convoy, <span style="color:#f0a25a">orange</span> ones an overseas invasion. Convoys cross up to ${convoyHops(pl)} sea zones and land at the end of the month. Every battle squadron adds 2 divisions of sealift and escorts convoys in its waters.</div>`;
     h += `<div class="sect">Armies</div><div class="seg filt">${[['ready','Ready'],['front','At the front'],['sup','Low supply'],['all','All']].map(([k, l]) => `<button class="${outFilter === k ? 'on' : ''}" data-filt="${k}">${l}</button>`).join('')}</div>`;
     const stacks = owned(pl).filter(i => unitsAt(G.prov[i])).filter(i => {
       const p = G.prov[i];
@@ -38,10 +42,13 @@ function renderDrawer() {
     h += stacks.slice(0, 60).map(i => { const p = G.prov[i], g = genAt(i, pl); return `<div class="row orow" data-goto="${i}"><div><h4>${esc(PROV[i].name)}${g ? ' ' + iconSvg('gen') : ''}</h4><p class="ounits">${LAND.filter(k => p.u[k]).map(k => iconSvg(k, k) + p.u[k]).join(' ')}${p.sup < 1 ? ` · <span class="tr">supply ${Math.round(p.sup * 100)}%</span>` : ''}${p.dig ? ` · dug in ${p.dig}` : ''}</p></div><div>${readyAt(p) ? `<span class="chip ally">${readyAt(p)} ready</span>` : ''}</div></div>`; }).join('') || '<div class="hint">Nothing matches.</div>';
     h += `<div class="sect">Field manual</div><div class="hint">Select a province, then click a highlighted neighbour. <b>Shift-click</b> several of your provinces to strike one target together. Defenders with nowhere to retreat are <b>encircled and destroyed</b>. Armies far from depots lose strength — watch the supply truck.</div>`;
   } else if (tab === 'industry') {
-    const oi = oilIncome(pl), ou = oilUpkeep(pl);
+    const oi = oilIncome(pl), ou = oilUpkeep(pl), ob = oilBreakdown(pl);
     h = dh('Industry', 'Factories, fuel, steel and the world market.');
     h += kv([[iconSvg('pp') + '+' + income(pl), 'Production'], [iconSvg('mp') + '+' + mpIncome(pl) + 'k', 'Manpower'], [iconSvg('oil') + (oi - ou >= 0 ? '+' : '') + Math.round(oi - ou), 'Oil net'], [iconSvg('steel') + '+' + steelIncome(pl), 'Steel'], [owned(pl).reduce((s, i) => s + G.prov[i].fac, 0), 'Factories'], [Math.round(n.stab) + '%', 'Stability']]);
     const bl = blockaded(pl);
+    const mo = oi - ou < 0 && n.oil > 0 ? Math.floor(n.oil / (ou - oi)) : null;
+    h += `<div class="sect">Fuel</div><div class="row"><div><h4>${iconSvg('oil')}Oil: ${Math.round(n.oil)} in the tanks</h4><p>Income <b class="tg">+${oi}</b> · ships −${ob.navy.toFixed(1)} · aircraft −${ob.air.toFixed(1)} · tanks −${ob.arm.toFixed(1)}${ob.peace ? ' · <i>peacetime: half upkeep</i>' : ''}.
+      ${n.oil <= 0 ? `<b class="tr">Empty: mechanised forces fight at ${Math.round(fuelMul(pl) * 100)}% and sealift shrinks.</b>` : mo != null ? `<b class="tr">Dry in about ${mo} month${mo === 1 ? '' : 's'}.</b>` : 'Stock is growing.'} Marching and shipping troops costs no oil — only tanks, aircraft and ships burn it. Short? Import, capture oil fields, research Synthetic Oil or decommission ships you do not need.</p></div></div>`;
     h += `<div class="sect">World market</div><div class="row"><div><h4>${iconSvg('oil')}Import oil</h4><p>3 oil for ${IMPORT_PRICE * 3} production. ${n.imports}/${IMPORT_MAX} bought this month.${bl ? ' <b class="tr">Blockaded!</b>' : ''}</p></div><div><button class="btn" data-imp="oil" ${act && !canImport(pl, 'oil') ? '' : 'disabled'}>Buy</button></div></div>
       <div class="row"><div><h4>${iconSvg('steel')}Import steel</h4><p>3 steel for ${IMPORT_PRICE * 3} production.</p></div><div><button class="btn" data-imp="steel" ${act && !canImport(pl, 'steel') ? '' : 'disabled'}>Buy</button></div></div>`;
     h += `<div class="row"><div><h4>Total War Economy</h4><p>+20% production for 12 months. Requires being at war.</p></div><div><button class="btn ${n.totalWar ? '' : 'gold'}" data-tw ${!act || n.totalWar || !enemiesOf(pl).length || n.pol < 30 ? 'disabled' : ''}>${n.totalWar ? n.totalWar + ' mo' : '30 pol'}</button></div></div>`;
@@ -50,7 +57,7 @@ function renderDrawer() {
     h += `<div class="sect">Resources you hold</div><div class="req">${owned(pl).filter(i => PROV[i].oil || PROV[i].steel).map(i => `<span class="ok">${PROV[i].oil ? iconSvg('oil') + PROV[i].oil : iconSvg('steel') + PROV[i].steel} ${esc(PROV[i].name)}</span>`).join('') || '<span>None — you depend on imports</span>'}</div>`;
     h += `<div class="sect">Fleets</div>`;
     const fl = Object.keys(G.fleet).filter(z => G.fleet[z][pl]);
-    h += fl.map(z => { const f = G.fleet[z][pl]; return `<div class="row" data-zone="${z}"><div><h4>${iconSvg('anchor')}${esc(SEA[z].n)}</h4><p>${f.cap} battle squadrons · ${f.sub} submarines · ${{ free:'open water', ours:'we control it', contested:'contested', enemy:'enemy waters' }[seaControl(z, pl)]}</p></div><div>${f.mv ? '' : '<span class="chip ally">ready</span>'}</div></div>`; }).join('') || '<div class="hint">No navy. Build battle squadrons or submarines in a coastal home province.</div>';
+    h += fl.map(z => { const f = G.fleet[z][pl]; return `<div class="row" data-zone="${z}"><div><h4>${iconSvg('anchor')}${esc(SEA[z].n)}</h4><p>${f.cap} battle squadrons · ${f.sub} submarines · ${{ free:'open water', ours:'we control it', contested:'contested', enemy:'enemy waters' }[seaControl(z, pl)]}</p></div><div>${fleetReady(f) ? `<span class="chip ally">${FLEET_MOVES - (f.mv || 0)} moves</span>` : ''}</div></div>`; }).join('') || '<div class="hint">No navy. Build battle squadrons or submarines in a coastal home province.</div>';
   } else if (tab === 'focus') {
     h = dh('National Focus', 'One long-term project at a time. Each completes once.');
     const list = focusFor(pl, n.major), cols = Math.max(...list.map(f => f.col)) + 1, rows = Math.max(...list.map(f => f.row)) + 1;
@@ -96,6 +103,7 @@ function renderDrawer() {
           btns.push(`<button class="btn" data-peace="${t}:white" ${cp ? `disabled title="${esc(cp)}"` : ''}>White peace</button>`);
           btns.push(`<button class="btn gold" data-peace="${t}:terms" ${cp ? `disabled title="${esc(cp)}"` : `title="Keep the ${esc(o.adj)} land you occupy"`}>Demand terms</button>`);
           btns.unshift(`<span class="ws ${ws > 0.05 ? 'good' : ws < -0.05 ? 'bad' : ''}">War score ${ws > 0 ? '+' : ''}${Math.round(ws * 100)}</span>`);
+          if (facOf(pl)) { const cw = canCallToWar(pl, t), ct = callTargets(pl, t); btns.push(`<button class="btn gold" data-call="${t}" ${cw ? `disabled title="${esc(cw)}"` : `title="Ask ${esc(ct.map(natName).join(', '))} to join this war"`}>Call to war${ct.length ? ` (${ct.length})` : ''}<small>${CALL_COST}</small></button>`); }
         } else if (al) {
           btns.push(`<button class="btn" data-aid="${t}:pp" ${n.pp >= 25 ? '' : 'disabled'}>Send 25⚙</button>`);
           btns.push(`<button class="btn" data-aid="${t}:oil" ${n.oil >= 10 ? '' : 'disabled'}>10 oil</button>`);
@@ -161,6 +169,8 @@ function wireDrawer(el, pl, n) {
   on('[data-leave]', () => confirmBox('Leave your alliance?', 'You will stop fighting your allies\' wars — and they will stop fighting yours.', 'Leave', () => Ctl.act({ c:'leave' })));
   on('[data-found]', () => { const name = prompt('Name your alliance', `${nat(pl).adj} Pact`); if (name) Ctl.act({ c:'found', name:name.slice(0, 32) }); });
   on('[data-war]', b => Ctl.act({ c:'declare', tag:b.dataset.war }));
+  on('[data-call]', b => Ctl.act({ c:'calltowar', tag:b.dataset.call }));
+  on('[data-unship]', b => Ctl.act({ c:'unship', id:+b.dataset.unship }));
   on('[data-pact]', b => Ctl.act({ c:'pact', tag:b.dataset.pact }));
   on('[data-guar]', b => Ctl.act({ c:'guarantee', tag:b.dataset.guar }));
   on('[data-invite]', b => Ctl.act({ c:'invite', tag:b.dataset.invite }));

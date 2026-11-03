@@ -151,6 +151,7 @@ const Net = {
       if (r && r.result) this.sendTo(from, { t:'toast', ic:r.result === 'refused' ? '✕' : '✓', title:`${natName(d.c.tag)}: ${{ accepted:'Accepted!', refused:'Refused.', sent:'Proposal sent.' }[r.result]}` });
       if (r && r.spy) this.sendTo(from, { t:'toast', ic:r.spy.ok ? '✓' : '✕', title:r.spy.ok ? 'Operation succeeded' : 'Operation failed', body:r.spy.msg });
       if (r && r.raid) this.evq.push(['raid', { t:p.tag, from:d.c.from, to:d.c.to, ...r.raid }]);
+      if (r && r.convoy) this.sendTo(from, { t:'toast', ic:'⚓', title:`Convoy sails for ${PROV[r.convoy.to].name}`, body:`${landN(r.convoy.u)} divisions land at the end of the month.` });
       checkVictory();
       markDirty(true); renderAll();
       this.pushState();

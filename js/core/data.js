@@ -24,7 +24,7 @@ const UNIT = {
   par:{n:'Paratroopers', pl:'Airborne divisions', pp:16, mp:6, st:0, oil:1, up:0,  atk:1.2, def:0.9, need:'para', d:'Can drop on enemy provinces two steps away.'},
   ftr:{n:'Fighters',  pl:'Fighter wings',       pp:18, mp:2,  st:1, oil:1, up:0.08, d:'Win the skies: air superiority swings every battle in range.'},
   bmb:{n:'Bombers',   pl:'Bomber wings',        pp:24, mp:2,  st:2, oil:2, up:0.12, d:'Support attacks in range and bomb enemy factories.'},
-  cap:{n:'Capital ships', pl:'Battle squadrons', pp:50, mp:4, st:8, oil:3, up:0.2, d:'Control the sea lanes, escort landings, bombard coasts.'},
+  cap:{n:'Capital ships', pl:'Battle squadrons', pp:50, mp:4, st:8, oil:3, up:0.15, d:'Control the sea lanes, escort convoys and landings, bombard coasts. Each adds 2 divisions of sealift.'},
   sub:{n:'Submarines', pl:'U-boat flotillas',   pp:20, mp:2,  st:2, oil:1, up:0.05, d:'Raid enemy convoys and cut their income.'},
 };
 const AIR_RANGE = 430;   // world units an air wing can reach from its base
@@ -245,6 +245,14 @@ const FOCUS = [
   {k:'sov_urals',  who:['SOV'], col:5,row:1, req:'sov_5yr', n:'Industry Beyond the Urals', m:4, d:'Factories and steel in the Urals, out of reach.'},
   {k:'sov_deep',   who:['SOV'], col:5,row:2, req:'sov_urals', n:'Deep Battle', m:4, d:'Combined Arms researched, +4 armored divisions.'},
   {k:'sov_stavka', who:['SOV'], col:5,row:3, req:'sov_deep', n:'Stavka Reserve', m:3, d:'+12 infantry divisions at Moscow.'},
+  {k:'usa_newdeal', who:['USA'], col:5,row:0, n:'New Deal Works', m:3, d:'+1 factory in four industrial cities, +10 stability.'},
+  {k:'usa_twoocean',who:['USA'], col:5,row:1, req:'usa_newdeal', n:'Two-Ocean Navy Act', m:4, d:'+3 battle squadrons in the Atlantic and +3 in the Pacific.'},
+  {k:'usa_liberty', who:['USA'], col:5,row:2, req:'usa_twoocean', n:'Liberty Ships', m:4, d:'+12 sealift and one more sea zone of convoy range. Amphibious Doctrine researched.'},
+  {k:'usa_arsenal', who:['USA'], col:5,row:3, req:'usa_liberty', n:'Arsenal of Democracy', m:4, d:'+4 factories, +30 steel, +30 oil.'},
+  {k:'jap_kantai',  who:['JAP'], col:5,row:0, n:'Kantai Kessen', m:4, d:'+3 battle squadrons; Carrier Aviation researched.'},
+  {k:'jap_fuel',    who:['JAP'], col:5,row:1, req:'jap_kantai', n:'Strategic Fuel Reserve', m:3, d:'+60 oil now and +3 oil a month from Manchurian shale.'},
+  {k:'jap_southern',who:['JAP'], col:5,row:2, req:'jap_fuel', n:'Southern Operation', m:4, d:'+8 sealift and +4 infantry divisions at Tokyo for the push south.'},
+  {k:'jap_kwantung',who:['JAP'], col:5,row:3, req:'jap_southern', n:'Kwantung Army', m:3, d:'+4 infantry and an armored division in Korea and Manchuria.'},
   {k:'min_neut',   minor:1,     col:5,row:0, n:'Armed Neutrality', m:3, d:'+1 fort everywhere on the border, +10 stability.'},
   {k:'min_army',   minor:1,     col:5,row:1, req:'min_neut', n:'Modernise the Army', m:4, d:'+4 artillery divisions; Improved Rifles researched.'},
   {k:'min_patron', minor:1,     col:5,row:2, req:'min_army', n:'Seek a Patron', m:2, d:'+60 production of foreign aid, +30 politics.'},

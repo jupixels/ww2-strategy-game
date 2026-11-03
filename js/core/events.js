@@ -182,7 +182,12 @@ const EVENTS = [
   { id:'japaxis', y:1940, m:8, actor:'JAP', cond:() => A('JAP') && A('GER') && facOf('GER') === 'AXIS' && !isAxis('JAP') && !W('JAP','GER'),
     title:'The Tripartite Pact', dek:'Berlin, Rome and Tokyo divide the world into spheres of influence',
     text:'Ribbentrop, Ciano and Ambassador Kurusu sign in the Reich Chancellery. Each power promises to come to the aid of the others if attacked by a nation not yet at war — everyone knows which nation they mean.',
-    opts:[{ t:'Sign the pact', e:'Japan and Manchukuo join the Axis', f(){ joinFaction('JAP','AXIS'); if (A('MAN') && facOf('MAN') !== 'AXIS' && !isHuman('MAN')) joinFaction('MAN','AXIS', true); } }, { t:'Keep our own sphere', e:'Japan stays outside the Axis', f(){} }] },
+    opts:[{ t:'Sign the pact', e:'Japan and Manchukuo join the Axis — no war with Britain until we choose', f(){ joinNonBelligerent('JAP','AXIS'); if (A('MAN') && facOf('MAN') !== 'AXIS' && !isHuman('MAN')) { G.nbm.MAN = 1; joinFaction('MAN','AXIS', true); } } }, { t:'Keep our own sphere', e:'Japan stays outside the Axis', f(){} }] },
+  { id:'neutrality', y:1941, m:3, actor:'JAP', tgt:['SOV'], cond:() => A('JAP') && A('SOV') && !W('JAP','SOV') && !pactWith('JAP','SOV'),
+    title:'The Soviet–Japanese Neutrality Pact', dek:'Matsuoka and Molotov sign in the Kremlin; Stalin sees the Japanese delegation off at the station',
+    text:'After the bloody border battles at Khalkhin Gol, Tokyo and Moscow agree to leave each other alone for five years. Japan is free to look south, Stalin to look west.',
+    opts:[{ t:'Sign the pact', e:'Four years of peace with the Soviet Union and Mongolia', f(){ neutralityPact(); } }, { t:'Keep the north open', e:'No pact with Moscow', f(){} }],
+    topts:[{ t:'Sign the pact', e:'Four years of peace with Japan and Manchukuo', f(){ neutralityPact(); } }, { t:'Refuse', e:'Japan remains a threat in the east', f(){} }] },
   { id:'indochina', y:1941, m:6, actor:'JAP', cond:() => A('JAP') && A('VIC') && !W('JAP','VIC') && at('VIC','Hanoi'),
     title:'Japan Moves into Indochina', dek:'Vichy bows to Tokyo; Japanese troops land at Saigon and Cam Ranh Bay',
     text:'The French administration stays at its desks, but the airfields and harbours now serve the Imperial Army. Washington answers with an oil embargo that leaves Japan with eighteen months of fuel.',
@@ -271,8 +276,12 @@ function conquerEthiopia() {
   killNation('ETH', 'ITA');
 }
 // the Pacific Fleet loses battleships at anchor; Japan strikes the Western colonies on the same day
+function neutralityPact() {
+  for (const a of ['JAP','MAN']) for (const b of ['SOV','MON']) if (A(a) && A(b) && !W(a, b)) G.pacts[wkey(a, b)] = G.turn + 48;
+  news('TOKYO AND MOSCOW SIGN NEUTRALITY PACT');
+}
 function pearlHarbor() {
-  G.flags.pearl = 1;
+  G.flags.pearl = 1; if (G.nbm) { delete G.nbm.JAP; delete G.nbm.MAN; }
   for (const z of ['CPA','EPA']) { const f = G.fleet[z] && G.fleet[z].USA; if (f && f.cap) { f.cap = Math.max(0, f.cap - 3); break; } }
 }
 function usaJoin() {
@@ -281,11 +290,12 @@ function usaJoin() {
   if (!G.facs.ALLIES) G.facs.ALLIES = { n:'Allies', lead:'USA', m:[] };
   if (facOf('USA') !== 'ALLIES') { leaveFaction('USA'); G.facs.ALLIES.m.push('USA'); }
   syncFaction('ALLIES');
-  for (const t of membersOf('AXIS')) setWar('USA', t);
+  for (const t of membersOf('AXIS')) if (!nonBelligerent(t)) setWar('USA', t);
   // Japan goes south: war with America and the British Empire; China becomes an Allied power
   if (A('JAP') && (isAxis('JAP') || W('JAP','CHI') || G.flags.pearl)) {
     if (!G.flags.pearl && !isHuman('USA')) pearlHarbor();
-    for (const t of sideOf('JAP')) for (const a of membersOf('ALLIES')) setWar(t, a);
+    if (G.nbm) { delete G.nbm.JAP; delete G.nbm.MAN; }
+    for (const t of sideOf('JAP')) for (const a of membersOf('ALLIES')) allyWar(t, a);
     if (A('HOL') && !friendly('HOL','JAP')) for (const t of sideOf('JAP')) setWar(t, 'HOL');
     for (const c of ['CHI','PRC']) if (A(c) && W(c,'JAP') && !facOf(c) && !isHuman(c)) joinFaction(c, 'ALLIES', true);
     syncFaction('ALLIES');

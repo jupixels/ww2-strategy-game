@@ -15,6 +15,7 @@ function income(t) {
   s *= 1 + (n.tech.ind1 ? 0.1 : 0) + (n.tech.ind2 ? 0.1 : 0) + (n.tech.ind3 ? 0.15 : 0);
   if (t === 'SPA' && G.flags.spain && nowNum() < G.flags.spain) s *= 0.5;
   if (n.totalWar > 0) s *= 1.2;
+  if (t === 'CHI' && W('CHI', 'JAP')) s += 6; // Soviet credits and the Burma Road keep China in the war
   s *= stabMul(n) * (1 - (n.raid || 0));
   s *= diffMul(t, 'pp');
   if (G.gm === 'blitz') s *= 1.5;
@@ -28,11 +29,14 @@ function mpIncome(t) {
   if (G.gm === 'blitz') s *= 1.4;
   return Math.round(s * (isHuman(t) && G.diff === 'easy' ? 1.3 : 1));
 }
-const OIL_BASE = { ENG:9, FRA:5, GER:4, ITA:3, SPA:2, VIC:2, SWE:2 };
+// oil a nation buys or pumps beyond the fields on the map. Japan imported most of its oil from America until the 1941 embargo.
+const OIL_BASE = { ENG:9, FRA:5, GER:4, ITA:3, SPA:2, VIC:2, SWE:2, JAP:4, CHI:1 };
+function oilBase(t) { if (t === 'JAP' && G.flags.embargo) return 1; return OIL_BASE[t] || 0; }
 function oilIncome(t) {
-  const n = nat(t); let s = 2 + (OIL_BASE[t] || 0) * (blockadedCached(t) ? 0.3 : 1);
+  const n = nat(t); let s = 2 + oilBase(t) * (blockadedCached(t) ? 0.3 : 1);
   for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (p.o === t && PROV[i].oil) s += PROV[i].oil * (p.core === t ? 1 : 0.6 * (1 - p.res / 100)); }
   if (n.tech.synth) s += 4; if (n.done.includes('ind_synth')) s += 3; if (n.done.includes('ger_autarky')) s += 3;
+  if (n.done.includes('jap_fuel')) s += 3;
   if (G.flags.usa && isAllied(t) && t !== 'USA') s += 3;
   return Math.round(s);
 }
@@ -43,13 +47,20 @@ function steelIncome(t) {
   if (G.flags.usa && isAllied(t) && t !== 'USA') s += 3;
   return Math.round(s);
 }
-function oilUpkeep(t) {
-  let s = 0;
-  for (const p of G.prov) if (p.o === t) { s += p.u.arm * UNIT.arm.up + p.air.ftr * UNIT.ftr.up + p.air.bmb * UNIT.bmb.up; }
-  for (const z in G.fleet) { const f = G.fleet[z][t]; if (f) s += f.cap * UNIT.cap.up + f.sub * UNIT.sub.up; }
-  return Math.round(s * 10) / 10;
+// monthly fuel burned by tanks, aircraft and ships. In peacetime forces train on half rations.
+function oilBreakdown(t) {
+  let arm = 0, air = 0, navy = 0;
+  for (const p of G.prov) if (p.o === t) { arm += p.u.arm * UNIT.arm.up; air += p.air.ftr * UNIT.ftr.up + p.air.bmb * UNIT.bmb.up; }
+  for (const z in G.fleet) { const f = G.fleet[z][t]; if (f) navy += f.cap * UNIT.cap.up + f.sub * UNIT.sub.up; }
+  const peace = !enemiesOf(t).length, m = peace ? 0.5 : 1;
+  return { arm:arm * m, air:air * m, navy:navy * m, peace };
 }
+function oilUpkeep(t) { const b = oilBreakdown(t); return Math.round((b.arm + b.air + b.navy) * 10) / 10; }
 const fuelShort = t => nat(t).oil <= 0;
+// fighting strength of tanks, aircraft and ships: full while the tanks hold oil; when they run dry it falls
+// with the shortfall (a nation covering most of its upkeep loses little), never below 60%
+function fuelMul(t) { const n = G.nat[t]; return !n || n.oil > 0 ? 1 : n.fuel != null ? n.fuel : 0.6; }
+function fuelLevel(t) { const u = oilUpkeep(t); return u <= 0 ? 1 : 0.6 + 0.4 * clamp(oilIncome(t) / u, 0, 1); }
 
 /* ---------- building ---------- */
 function unitCost(t, k) {
@@ -171,6 +182,14 @@ function completeFocus(t, k) {
     case 'sov_urals': ['Sverdlovsk','Perm','Kuibyshev','Ufa'].forEach(nm => named(nm, p => p.fac += 1)); break;
     case 'sov_deep': grantTech(t, 'combined'); grantTech(t, 'arm1'); if (C) C.u.arm += 4; break;
     case 'sov_stavka': named('Moscow', p => p.u.inf += 12); if (!capitalOk(t) && C) C.u.inf += 12; break;
+    case 'usa_newdeal': owned(t).filter(i => G.prov[i].core === t).sort((a, b) => G.prov[b].fac - G.prov[a].fac).slice(0, 4).forEach(i => G.prov[i].fac++); n.stab = Math.min(100, n.stab + 10); break;
+    case 'usa_twoocean': { const a = SEA.WAT ? 'WAT' : homeZone(), b = SEA.EPA ? 'EPA' : homeZone(); if (a) addFleet(a, t, 'cap', 3); if (b) addFleet(b, t, 'cap', 3); if (!a && !b) n.pp += 120; break; }
+    case 'usa_liberty': grantTech(t, 'amph'); break;
+    case 'usa_arsenal': ['Detroit','Chicago','Pittsburgh','Los Angeles'].forEach(nm => named(nm, p => p.fac++)); n.steel += 30; n.oil += 30; break;
+    case 'jap_kantai': { const z = SEA.PHS ? 'PHS' : homeZone(); if (z) addFleet(z, t, 'cap', 3); else n.pp += 120; grantTech(t, 'carrier'); break; }
+    case 'jap_fuel': n.oil += 60; break;
+    case 'jap_kwantung': { let done = 0; ['Dairen','Keijo'].forEach(nm => named(nm, p => { p.u.inf += 2; if (!done++) p.u.arm += 1; })); if (!done && C) { C.u.inf += 4; C.u.arm += 1; } break; }
+    case 'jap_southern': if (C) C.u.inf += 4; break;
     case 'min_neut': borderProvs().forEach(i => G.prov[i].fort = Math.min(3, G.prov[i].fort + 1)); n.stab = Math.min(100, n.stab + 10); break;
     case 'min_army': grantTech(t, 'inf1'); grantTech(t, 'art1'); if (C) C.u.art += 4; break;
     case 'min_patron': n.pp += 60; n.pol += 30; break;

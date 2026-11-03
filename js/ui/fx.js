@@ -229,7 +229,7 @@ function frame(now) {
   else if (lastMode === 'fast' && !moving && !drift) { drawStatic(true); redraw = true; }
   ambientSpawn(now);
   const busyFx = FX.length || PARTS.length || shake.amp;
-  const ambient = hasFront || sel || selFleet || isWinter() || isMud() || G.orders.length || WORLD && cam.z < 0.55;
+  const ambient = hasFront || sel || selFleet || isWinter() || isMud() || G.orders.length || (G.convoys && G.convoys.length) || WORLD && cam.z < 0.55;
   if (!redraw && !busyFx) { if (!ambient || now - lastAmbient < 40) { tutTick(); return; } }
   lastAmbient = now;
   ctx.setTransform(1, 0, 0, 1, 0, 0);

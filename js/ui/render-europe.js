@@ -260,7 +260,7 @@ function stripePat(r, g, b, a) {
 }
 function overlayPats() {
   if (OVPAT.sel) return OVPAT;
-  Object.assign(OVPAT, { sel:stripePat(255, 240, 200, 0.38), move:stripePat(110, 205, 95, 0.6), attack:stripePat(225, 70, 40, 0.58), naval:stripePat(90, 166, 214, 0.6), land:stripePat(90, 166, 214, 0.6), para:stripePat(190, 120, 230, 0.6), hover:stripePat(255, 236, 170, 0.5), pick:stripePat(255, 200, 80, 0.55) });
+  Object.assign(OVPAT, { sel:stripePat(255, 240, 200, 0.38), move:stripePat(110, 205, 95, 0.6), attack:stripePat(225, 70, 40, 0.58), naval:stripePat(90, 166, 214, 0.6), land:stripePat(90, 166, 214, 0.6), para:stripePat(190, 120, 230, 0.6), convoy:stripePat(120, 214, 220, 0.42), invade:stripePat(236, 150, 58, 0.55), hover:stripePat(255, 236, 170, 0.5), pick:stripePat(255, 200, 80, 0.55) });
   return OVPAT;
 }
 let hoverNat = null, overlayOn = false;
@@ -360,6 +360,7 @@ function drawStatic(allowCache) {
   drawCities(c);
   drawCounters(c);
   drawFleets(c);
+  drawConvoys(c);
 }
 function onScreen(x, y, m = 40) { return x > -m && y > -m && x < VW + m && y < VH + m; }
 function drawCities(c) {
@@ -473,7 +474,7 @@ function drawFleets(c) {
     drawIcon(c, f.cap ? 'cap' : 'sub', 9, bx + 15, by + 3.5, '#e7f2fa');
     c.fillStyle = '#fff'; c.fillText(txt, bx + 27, by + 8.5);
     c.lineWidth = selFleet && selFleet.z === z && mine ? 2 : 1; c.strokeStyle = mine ? '#f0cd7f' : war ? '#ff8a6a' : 'rgba(150,200,230,.5)'; c.strokeRect(bx + 0.5, by + 0.5, w - 1, h - 1);
-    if (mine && !f.mv) { c.beginPath(); c.arc(bx + w, by, 3.2, 0, 7); c.fillStyle = '#f0cd7f'; c.fill(); }
+    if (mine && fleetReady(f)) { c.beginPath(); c.arc(bx + w, by, 3.2, 0, 7); c.fillStyle = f.mv ? '#b89a5a' : '#f0cd7f'; c.fill(); }
     b.w = w; b.h = h; b.bx = bx; b.by = by;
   }
 }

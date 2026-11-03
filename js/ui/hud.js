@@ -35,7 +35,7 @@ function renderTop() {
   $('#sDom').textContent = Math.round(vpOf(t) / totalVP() * 100) + '%';
   $('#sTen').style.width = G.tension + '%'; $('#sTenN').textContent = Math.round(G.tension) + '%';
   $('#sStab').title = `Stability ${Math.round(n.stab)}%. War weariness ${Math.round(n.ww || 0)}. Production ×${stabMul(n).toFixed(2)}.`;
-  $('#sOil').title = `Oil: +${oilIncome(t)} income, −${oilUpkeep(t)} upkeep (tanks, aircraft, ships).${n.oil <= 0 ? ' FUEL SHORTAGE: mechanised forces at 60%.' : ''}`;
+  { const b = oilBreakdown(t); $('#sOil').title = `Oil: +${oilIncome(t)} income, −${oilUpkeep(t)} upkeep (ships ${b.navy.toFixed(1)}, aircraft ${b.air.toFixed(1)}, tanks ${b.arm.toFixed(1)}${b.peace ? '; halved in peacetime' : ''}). Moving troops costs no oil.${n.oil <= 0 ? ` FUEL SHORTAGE: mechanised forces at ${Math.round(fuelMul(t) * 100)}%.` : ''}`; }
   $('#sDate').textContent = MONTHS[G.m] + ' ' + G.y;
   $('#sSeason').textContent = (isWinter() ? 'Winter · ' : isMud() ? 'Mud season · ' : '') + 'Turn ' + (G.turn + 1);
 }
@@ -131,14 +131,18 @@ function selectFleet(z) {
   sel = null; targets = new Map();
   selFleet = { z, part:selFleet && selFleet.part || 'all' };
   const f = G.fleet[z][ME];
-  fleetTargetsSet = new Set(f && !f.mv && Ctl.canAct() ? fleetTargets(z, ME) : []);
+  fleetTargetsSet = new Set(fleetReady(f) && Ctl.canAct() ? fleetTargets(z, ME) : []);
   rebuildOverlay(); staticDirty = true; renderCard();
 }
 function execOrder(to) {
   const kind = targets.get(to); if (!kind) return;
   const srcs = [sel.id, ...(sel.multi || [])].filter(s => targetsFor(ME, s).get(to));
   SFX.click();
-  if (kind === 'move' || kind === 'naval') {
+  if (kind === 'convoy' || kind === 'invade') {
+    let sent = 0;
+    for (const s of srcs) { const k = targetsFor(ME, s).get(to); if (k === 'convoy' || k === 'invade') { const r = Ctl.act({ c:'ship', from:s, to, amt:sel.amt }); if (r && r.ok !== false) sent++; } }
+    if (G.tut) G.tut.shipped = 1;
+  } else if (kind === 'move' || kind === 'naval') {
     for (const s of srcs) { const k = targetsFor(ME, s).get(to); if (k === 'move' || k === 'naval') Ctl.act({ c:'move', from:s, to, amt:sel.amt }); }
     if (G.tut) G.tut.moved = 1;
   } else {
@@ -197,7 +201,8 @@ function renderCard() {
     if (sel.multi && sel.multi.size) h += `<div class="hint"><b>${sel.multi.size + 1} provinces selected.</b> Click a highlighted province to move or attack with all of them. Shift-click to add or remove.</div>`;
     else if (ready) {
       const att = [...targets].filter(([, k]) => k === 'attack' || k === 'land' || k === 'para');
-      h += `<div class="hint"><b>${ready} ready.</b> Click <span class="tg">green</span> to move, <span class="tr">red</span> to attack${P.coast ? ', <span style="color:#8ccbf0">blue</span> to sail or land' : ''}${p.r.par ? ', <span style="color:#d6a8ff">violet</span> to drop paratroopers' : ''}. Shift-click your provinces to attack together.</div>`;
+      h += `<div class="hint"><b>${ready} ready.</b> Click <span class="tg">green</span> to move, <span class="tr">red</span> to attack${P.coast ? ', <span style="color:#8ccbf0">blue</span> to sail or land next door, <span style="color:#86dde2">teal</span> to send a convoy, <span style="color:#f0a25a">orange</span> to invade overseas' : ''}${p.r.par ? ', <span style="color:#d6a8ff">violet</span> to drop paratroopers' : ''}. Shift-click your provinces to attack together.</div>`;
+      if (P.coast) h += `<div class="extras"><span>${iconSvg('anchor')} Sealift ${liftLeft(pl)}/${sealift(pl)} divisions left this month · convoy range ${convoyHops(pl)} sea zones</span></div>`;
       if (att.length) h += `<div class="req">${att.slice(0, 6).map(([j, k]) => { const o = battleOdds(i, j, k).odds; return `<span class="${o >= 1.3 ? 'ok' : ''}">${esc(PROV[j].name)} ${o === Infinity ? 'empty' : o.toFixed(1) + ':1'}</span>`; }).join('')}</div>`;
     } else if (unitsAt(p)) h += `<div class="hint">These divisions have already acted this month.</div>`;
     else h += `<div class="hint">No troops here. Raise some or march them in.</div>`;
@@ -253,14 +258,21 @@ function renderFleetCard(el) {
   let h = `<div class="ch"><div class="sw" style="background:#2a5f80"></div><div><h3>${esc(S.n)}</h3><div class="o">${ctlTxt}${Object.keys(STRAITS).filter(k => k.includes(z)).map(k => ` · ${STRAITS[k]} strait`).join('')}</div></div><button class="ibtn x" data-close aria-label="Close">✕</button></div><div class="cb">`;
   const list = Object.keys(G.fleet[z]).filter(t => G.fleet[z][t].cap + G.fleet[z][t].sub > 0);
   h += list.length ? list.map(t => { const f = G.fleet[z][t]; return `<div class="units"><div class="u">${flagImg(t)}<b style="font-size:15px">${esc(natName(t))}</b></div><div class="u"><span>${iconSvg('cap')}<b>${f.cap}</b></span><span>${iconSvg('sub')}<b>${f.sub}</b></span></div></div>`; }).join('') : '<div class="hint">No fleets here.</div>';
+  if (ME) {
+    const risk = Math.round(convoyRisk(z, ME) * 100);
+    h += `<div class="extras"><span>${iconSvg('anchor')} Convoys crossing here: ${risk ? `about ${risk}% lost to enemy ships` : 'safe'}</span></div>`;
+  }
   if (mine && Ctl.canAct()) {
-    h += mine.mv ? '<div class="hint">This fleet has already sailed this month.</div>' : `<div class="hint">Click a <span style="color:#8ccbf0">ringed</span> sea zone to sail there. Entering a zone with enemy ships starts a naval battle. Capital ships escort convoys and bombard coasts; submarines raid enemy shipping.</div>
-      <div class="seg">${['all','half'].map(a => `<button class="${selFleet.part === a ? 'on' : ''}" data-part="${a}">${a}</button>`).join('')}</div>`;
+    const left = FLEET_MOVES - (mine.mv || 0), up = mine.cap * UNIT.cap.up + mine.sub * UNIT.sub.up;
+    h += !fleetReady(mine) ? '<div class="hint">This fleet has sailed as far as it can this month.</div>' : `<div class="hint">Click a <span style="color:#8ccbf0">ringed</span> sea zone to sail there — <b>${left} move${left > 1 ? 's' : ''} left</b> this month. Entering a zone with enemy ships starts a battle and ends the voyage. Battle squadrons escort convoys and landings, bombard coasts and add sealift; submarines sink enemy convoys and trade.</div>`;
+    h += `<div class="seg">${['all','half'].map(a => `<button class="${selFleet.part === a ? 'on' : ''}" data-part="${a}">${a}</button>`).join('')}</div>`;
+    h += `<div class="acts"><button class="btn" data-scrap title="Breaks up the selected ships for steel and stops their oil upkeep (${up.toFixed(1)} oil a month at war for the whole fleet)">Decommission ${selFleet.part}<small>+steel · saves oil</small></button></div>`;
   }
   h += `</div>`;
   el.innerHTML = h;
   el.querySelector('[data-close]').onclick = () => clearSelection();
   el.querySelectorAll('[data-part]').forEach(b => b.onclick = () => { selFleet.part = b.dataset.part; renderCard(); });
+  const sb = el.querySelector('[data-scrap]'); if (sb) sb.onclick = () => confirmBox('Decommission ships?', `Break up ${selFleet.part === 'half' ? 'half of' : 'all of'} this fleet in the ${S.n}. You get back 3 steel per battle squadron and 1 per submarine, and stop paying their oil.`, 'Decommission', () => { Ctl.act({ c:'scrap', z, part:selFleet.part }); selectFleet(z); });
 }
 function confirmBox(title, body, yes, cb) {
   const m = $('#modal'); m.hidden = false;
@@ -307,6 +319,31 @@ function renderActions() {
   et.classList.toggle('waiting', !!lbl[2]);
 }
 
+/* ---------- convoys at sea ---------- */
+// dashed routes from port through each sea zone to the landing, for the nation on this screen
+function drawConvoys(c) {
+  if (!G || !ME || cam.z < 0.25) return;
+  const L = (G.convoys || []).filter(v => v.t === ME); if (!L.length) return;
+  const toS = (x, y) => [(x - cam.x) * cam.z + VW / 2, (y - cam.y) * cam.z + VH / 2];
+  const now = performance.now();
+  c.save(); c.lineWidth = 2.2; c.lineCap = 'round'; c.lineJoin = 'round';
+  for (const v of L) {
+    const pts = [[PROV[v.from].x, PROV[v.from].y], ...v.route.map(z => [SEA[z].x, SEA[z].y]), [PROV[v.to].x, PROV[v.to].y]];
+    let px = nearX(pts[0][0]); const S = pts.map(([x, y], i) => { if (i) px = nearX(x, px); return toS(px, y); });
+    const col = v.kind === 'invade' ? '236,150,58' : '120,214,220';
+    c.setLineDash([7, 6]); c.lineDashOffset = -(now / 60) % 13;
+    c.strokeStyle = 'rgba(0,0,0,.45)'; c.lineWidth = 4; c.beginPath(); S.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.stroke();
+    c.strokeStyle = `rgba(${col},.95)`; c.lineWidth = 2.2; c.stroke();
+    c.setLineDash([]);
+    const [ex, ey] = S[S.length - 1]; c.beginPath(); c.arc(ex, ey, 5, 0, 7); c.fillStyle = `rgba(${col},.95)`; c.fill();
+    const [mx, my] = S[Math.max(1, S.length - 2)];
+    const txt = String(landN(v.u)); c.font = `700 11px ${FONT_BODY}`; const w = c.measureText(txt).width + 22;
+    c.fillStyle = 'rgba(10,20,26,.85)'; c.fillRect(mx - w / 2, my - 9, w, 16); c.strokeStyle = `rgba(${col},.9)`; c.lineWidth = 1; c.strokeRect(mx - w / 2 + 0.5, my - 8.5, w - 1, 15);
+    drawIcon(c, 'cap', 9, mx - w / 2 + 3, my - 5, '#e7f2fa'); c.fillStyle = '#fff'; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(txt, mx - w / 2 + 15, my);
+  }
+  c.restore();
+}
+
 /* ---------- tooltips ---------- */
 let hoverId = -1;
 const tipEl = $('#tip');
@@ -320,7 +357,7 @@ function hover(e) {
   if (id !== hoverId) {
     hoverId = id;
     const k = id >= 0 ? targets.get(id) : null;
-    cv.style.cursor = pickMode ? (id >= 0 && pickMode.ids.includes(id) ? 'crosshair' : 'not-allowed') : k ? (k === 'move' || k === 'naval' ? 'pointer' : 'crosshair') : id >= 0 ? 'pointer' : 'grab';
+    cv.style.cursor = pickMode ? (id >= 0 && pickMode.ids.includes(id) ? 'crosshair' : 'not-allowed') : k ? (k === 'move' || k === 'naval' || k === 'convoy' ? 'pointer' : 'crosshair') : id >= 0 ? 'pointer' : 'grab';
     if (id < 0) { hideTip(); return; }
     const p = G.prov[id], P = PROV[id], vis = !ME || visibleTo(ME, id);
     let h = `<b>${esc(P.name)}</b><span>${flagImg(p.o, 'tflag')} ${esc(natName(p.o))}${p.core !== p.o && G.nat[p.core] ? ' · occupied' : ''}</span>`;
@@ -330,6 +367,16 @@ function hover(e) {
       const o = battleOdds(sel.id, id, k);
       h += `<em class="${o.odds >= 1.3 ? 'good' : o.odds >= 1 ? 'even' : 'bad'}">${o.odds === Infinity ? 'Undefended — walk in' : 'Attack odds ' + o.odds.toFixed(2) + ':1'}${k === 'land' ? ' · naval landing' : k === 'para' ? ' · airdrop' : ''}</em>`;
       if (o.odds !== Infinity) h += `<div class="fac"><i>Us</i>${factorList(o.af)}</div><div class="fac"><i>Them</i>${factorList(o.df)}</div>`;
+    }
+    else if (k === 'convoy' || k === 'invade') {
+      const v = convoyInfo(ME, sel.id, id);
+      if (v) {
+        const nDiv = Math.min(landN(portion(G.prov[sel.id], sel.amt)), liftLeft(ME)), risk = Math.round(v.risk * 100);
+        if (k === 'invade') { const o = oddsFor([sel.id], id, 'land'); h += `<em class="${o.odds >= 1.3 ? 'good' : o.odds >= 1 ? 'even' : 'bad'}">Overseas invasion · ${o.odds === Infinity ? 'undefended shore' : 'odds now ' + o.odds.toFixed(2) + ':1'}</em>`; }
+        else h += `<em class="good">Convoy here</em>`;
+        h += `<span>${nDiv} division${nDiv === 1 ? '' : 's'} sail via ${v.route.map(z => SEA[z].n).join(' → ')}. Lands at the end of the month.</span>`;
+        h += `<span class="${risk >= 10 ? 'bad' : ''}">${risk ? `Enemy ships on the route: about ${risk}% may be sunk. Escort with battle squadrons.` : 'No enemy ships on the route.'}</span>`;
+      }
     }
     else if (k) h += `<em class="good">${k === 'naval' ? 'Sail here' : 'Move here'}</em>`;
     else if (pickMode && pickMode.ids.includes(id)) h += `<em class="even">Click to target</em>`;
