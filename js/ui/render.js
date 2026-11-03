@@ -517,7 +517,7 @@ function rebuildOverlay() {
   if (mapMode === 'sup') for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (ME && !friendly(p.o, ME)) continue; const s = p.sup; OVL.push([i, s >= 1 ? 'rgba(90,170,80,.5)' : s >= 0.75 ? 'rgba(190,190,70,.55)' : s > 0.4 ? 'rgba(220,140,50,.6)' : s > 0 ? 'rgba(220,90,40,.65)' : 'rgba(200,30,30,.75)']); }
   if (mapMode === 'res') for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (p.core === p.o) continue; OVL.push([i, `rgba(210,60,30,${0.15 + p.res / 130})`]); }
   if (hoverNat) for (let i = 0; i < NP; i++) if (G.prov[i].o === hoverNat) OVL.push([i, P.hover]);
-  if (pickMode) for (const id of pickMode.ids || []) OVL.push([id, P.pick]);
+  if (pickMode) { const S = pickMode.kind === 'front' ? new Set(pickMode.sel) : null; for (const id of (S ? pickMode.sel : pickMode.ids) || []) OVL.push([id, P.pick]); }
   if (selFleet) { overCtx.fillStyle = overCtx.createPattern(P.sea, 'repeat'); for (const z of fleetTargetsSet) { const k = SEA_IDS.indexOf(z); if (k < 0) continue; const R = ZRUNS[k]; for (let q = 0; q < R.length; q += 3) overCtx.fillRect(R[q + 1] / 2, R[q] / 2, (R[q + 2] - R[q + 1] + 1) / 2, 0.5); seaOn = true; } }
   if (sel) { OVL.push([sel.id, P.sel]); if (sel.multi) for (const id of sel.multi) OVL.push([id, P.sel]); for (const [id, k] of targets) OVL.push([id, P[k]]); }
   selPath = null;
@@ -593,6 +593,7 @@ function drawStatic(allowCache) {
   }
   c.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (timelapseOwners) return;
+  drawFrontLines(c);
   drawCities(c);
   drawCounters(c);
   drawFleets(c);

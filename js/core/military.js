@@ -315,6 +315,7 @@ function attackValue(t, u, pid, opts, detail) {
   mul('Difficulty', diffMul(t, 'cb'));
   mul('National spirit', n.bonus);
   if (opts.meeting) mul('Meeting engagement', 1);
+  if (opts.front) mul('Coordinated front', 1.05);
   return s;
 }
 function battle(srcs, tid, opts = {}) {
@@ -334,7 +335,7 @@ function battle(srcs, tid, opts = {}) {
   }
   const ab = airBalance(a, d, tid);
   res.air = ab;
-  let atk = attackValue(a, au, tid, { naval:opts.naval, para:opts.para, from:mainFrom, meeting:opts.meeting, gid:opts.gid }, res.af);
+  let atk = attackValue(a, au, tid, { naval:opts.naval, para:opts.para, from:mainFrom, meeting:opts.meeting, gid:opts.gid, front:opts.front }, res.af);
   const def = Math.max(0.3, opts.meeting ? unitStrength(nat(d), T.u, false, 'p') : defenseValue(tid, au, a, res.df));
   const roll = 0.85 + rnd() * 0.3, roll2 = 0.85 + rnd() * 0.3;
   an.nextAtk = 1;

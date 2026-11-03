@@ -274,7 +274,7 @@ function rebuildOverlay() {
   if (mapMode === 'sup') for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (ME && !friendly(p.o, ME)) continue; const s = p.sup; fillProvSolid(i, s >= 1 ? 'rgba(90,170,80,.45)' : s >= 0.75 ? 'rgba(190,190,70,.5)' : s > 0.4 ? 'rgba(220,140,50,.55)' : s > 0 ? 'rgba(220,90,40,.6)' : 'rgba(200,30,30,.7)'); }
   if (mapMode === 'res') for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (p.core === p.o) continue; fillProvSolid(i, `rgba(210,60,30,${0.12 + p.res / 140})`); }
   if (hoverNat) for (let i = 0; i < NP; i++) if (G.prov[i].o === hoverNat) fillProv(i, P.hover);
-  if (pickMode) for (const id of pickMode.ids || []) fillProv(id, P.pick);
+  if (pickMode) for (const id of (pickMode.kind === 'front' ? pickMode.sel : pickMode.ids) || []) fillProv(id, P.pick);
   if (sel) { fillProv(sel.id, P.sel); if (sel.multi) for (const id of sel.multi) fillProv(id, P.sel); for (const [id, k] of targets) fillProv(id, P[k]); }
   selPath = null;
   if (sel) { selPath = new Path2D(); const S = sel.multi ? new Set([sel.id, ...sel.multi]) : new Set([sel.id]); for (const [a, b, pts] of MAP.borders) if (S.has(a) !== S.has(b)) addLine(selPath, pts); }
@@ -357,6 +357,7 @@ function drawStatic(allowCache) {
   if (z < 1.3) { c.font = `italic 600 ${15}px ${FONT_MAP}`; c.fillStyle = 'rgba(200,225,235,.28)'; for (const k in SEA) { const S = SEA[k]; c.fillText(S.n.toUpperCase(), S.x, S.y - 30); } }
   c.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (timelapseOwners) return;
+  drawFrontLines(c);
   drawCities(c);
   drawCounters(c);
   drawFleets(c);

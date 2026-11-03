@@ -1,7 +1,16 @@
 'use strict';
 /* ================= COMMAND PANELS ================= */
 let outFilter = 'ready';
+// six drawers; three of them hold sub-pages
+const SUBS = {
+  army:[['fronts','Fronts'],['armies','Armies'],['generals','Generals'],['convoys','Convoys']],
+  plans:[['focus','National focus'],['tech','Research']],
+  log:[['ledger','Ledger'],['dec','Destiny']],
+};
+const subTab = { army:'fronts', plans:'focus', log:'ledger' };
+const TAB_ALIAS = { focus:['plans','focus'], tech:['plans','tech'], dec:['log','dec'], generals:['army','generals'], convoys:['army','convoys'], fronts:['army','fronts'], armies:['army','armies'] };
 function openTab(t) {
+  if (TAB_ALIAS[t]) { const [m, s2] = TAB_ALIAS[t]; if (tab === m && subTab[m] === s2) { tab = null; } else { tab = m; subTab[m] = s2; } $$('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab)); hoverNat = null; rebuildOverlay(); staticDirty = true; renderDrawer(); tab ? SFX.open() : SFX.close(); return; }
   tab = tab === t ? null : t;
   $$('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   hoverNat = null; rebuildOverlay(); staticDirty = true;
@@ -9,28 +18,67 @@ function openTab(t) {
 }
 const dh = (title, sub) => `<div class="dh"><div><h2>${title}</h2><p>${sub}</p></div><button class="ibtn" data-closetab aria-label="Close">✕</button></div><div class="db">`;
 const kv = items => `<div class="kv">${items.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('')}</div>`;
+/* ---------- fronts ---------- */
+const FRONT_COLORS = ['#f0cd7f','#79c0e8','#e8836b','#9fd68f','#c79be8','#e8c36b','#6be0c8','#e86bb0'];
+const frontColor = (t, f) => FRONT_COLORS[frontsOf(t).indexOf(f) % FRONT_COLORS.length] || FRONT_COLORS[0];
+function frontsPanel(pl, n, act) {
+  const fs = frontsOf(pl), gens = G.gens.filter(g => g.tag === pl);
+  let h = '';
+  if (!fs.length) h += `<div class="hint">A <b>front</b> is a stretch of your border with an order. At the end of every month its divisions that are still ready <b>hold</b>, <b>advance</b> or try to <b>encircle</b> the enemy on their own, reserves march up from the interior, and the general you assign takes the strongest army. You only step in for the big pushes — anything you move by hand that month is left alone.</div>`;
+  for (const f of fs) {
+    const st = frontStats(pl, f), col = frontColor(pl, f), g = f.gid != null ? gens.find(x => x.id === f.gid) : null, L = f.last;
+    h += `<div class="front" style="--fc:${col}"><div class="fhead"><i class="fsw"></i><h4 data-fname="${f.id}" title="Rename">${esc(f.name)}</h4><span class="fst">${st.line ? `${st.line} on the line` : '<i>quiet</i>'} · ${st.div} div${st.ready !== st.div ? ` (${st.ready} ready)` : ''} · facing ~${st.foe}</span></div>
+      <div class="seg ford">${Object.keys(FRONT_ORDERS).map(o => `<button class="${f.o === o ? 'on' : ''}" data-ford="${f.id}:${o}" title="${esc(FRONT_ORDERS[o].d)}" ${act ? '' : 'disabled'}>${FRONT_ORDERS[o].n}</button>`).join('')}</div>
+      <div class="frow"><label>${iconSvg('gen')}<select data-fgen="${f.id}" ${act ? '' : 'disabled'}><option value="">No general</option>${gens.map(x => `<option value="${x.id}" ${g && g.id === x.id ? 'selected' : ''}>${esc(x.name)} · ${TRAITS[x.tr].n} ${'★'.repeat(x.lv)}</option>`).join('')}</select></label>
+        <button class="chipbtn ${f.pull ? 'on' : ''}" data-fpull="${f.id}" title="Idle divisions from the interior march to this front" ${act ? '' : 'disabled'}>Reserves ${f.pull ? 'on' : 'off'}</button></div>
+      ${L && (L.attacks || L.moved) ? `<p class="flast">Last month: ${L.attacks ? `${L.attacks} attack${L.attacks > 1 ? 's' : ''}, ${L.won} won${L.taken.length ? `, took ${L.taken.slice(0, 3).map(i => esc(PROV[i].name)).join(', ')}${L.taken.length > 3 ? '…' : ''}` : ''}` : 'no attacks'}${L.moved ? ` · ${L.moved} divisions moved up` : ''}.</p>` : ''}
+      <div class="fbtns"><button class="btn" data-fshow="${f.id}">Show</button><button class="btn" data-fedit="${f.id}" ${act ? '' : 'disabled'}>Edit area</button><button class="btn red" data-fdel="${f.id}" ${act ? '' : 'disabled'}>Disband</button></div></div>`;
+  }
+  h += `<div class="acts fnew"><button class="btn gold" data-fauto ${act && fs.length < FRONT_MAX ? '' : 'disabled'} title="One front for each enemy you border, on Hold">Auto-assign fronts</button><button class="btn" data-fnew ${act && fs.length < FRONT_MAX ? '' : 'disabled'} title="Click your provinces on the map to draw a front">Draw a front</button></div>`;
+  if (fs.length) h += `<div class="hint">Front lines are drawn on the map in each front's colour. Select any province to add it to a front or take it out.</div>`;
+  return h;
+}
+function startFrontPick(pl, f) {
+  const ids = []; for (let i = 0; i < NP; i++) if (frontable(pl, i)) ids.push(i);
+  startPick({ kind:'front', ids, sel:f ? f.z.filter(i => frontable(pl, i)) : ids.filter(i => touchesEnemy(pl, i) && !frontAt(pl, i)).slice(0, 0), fid:f ? f.id : null, label:'' });
+  updateFrontPickBar(); $('#pickGo').hidden = false; $('#pickGo').textContent = f ? 'Save front' : 'Create front';
+  if (tab) openTab(tab);
+}
+function updateFrontPickBar() { const p = pickMode; if (!p || p.kind !== 'front') return; $('#pickBar span').textContent = `${p.fid ? 'Edit front' : 'New front'}: click your provinces · ${p.sel.length} chosen`; }
 function renderDrawer() {
   const el = $('#drawer');
   if (!G || !tab || !ME || !A(ME)) { el.hidden = true; return; }
   el.hidden = false;
   const pl = ME, n = nat(pl), act = Ctl.canAct();
   let h = '';
-  if (tab === 'army') {
+  const view = tab === 'plans' ? subTab.plans : tab === 'log' ? subTab.log : tab === 'army' ? 'army' : tab;
+  const av = subTab.army;
+  if (tab === 'army' && av === 'fronts') {
+    h = dh('High Command', 'Fronts carry out standing orders at the end of every month.');
+    h += frontsPanel(pl, n, act);
+  } else if (tab === 'army') {
     const d = divisions(pl), air = airOf(pl), navy = navyOf(pl);
     let ready = 0; for (const i of armiesOf(pl)) ready += readyAt(stackOf(i, pl));
     h = dh('High Command', 'Every army, airfield and general under your command.');
-    h += kv([[iconSvg('inf') + d.inf, 'Infantry'], [iconSvg('art', 'art') + d.art, 'Artillery'], [iconSvg('arm', 'arm') + d.arm, 'Armor'], [iconSvg('mtn', 'mtn') + d.mtn, 'Mountain'], [iconSvg('par', 'par') + d.par, 'Airborne'], [ready, 'Ready'], [iconSvg('ftr') + air.ftr, 'Fighters'], [iconSvg('bmb') + air.bmb, 'Bombers'], [iconSvg('cap') + navy.cap + ' · ' + navy.sub, 'Ships · subs']]);
+    if (av === 'armies') h += kv([[iconSvg('inf') + d.inf, 'Infantry'], [iconSvg('art', 'art') + d.art, 'Artillery'], [iconSvg('arm', 'arm') + d.arm, 'Armor'], [iconSvg('mtn', 'mtn') + d.mtn, 'Mountain'], [iconSvg('par', 'par') + d.par, 'Airborne'], [ready, 'Ready'], [iconSvg('ftr') + air.ftr, 'Fighters'], [iconSvg('bmb') + air.bmb, 'Bombers'], [iconSvg('cap') + navy.cap + ' · ' + navy.sub, 'Ships · subs']]);
     // generals
     const gens = G.gens.filter(g => g.tag === pl), why = canHire(pl);
+    if (av === 'generals') {
     h += `<div class="sect">Generals · ${gens.length}/${n.genSlots}</div>`;
     h += gens.map(g => `<div class="row" data-goto="${g.pid}"><div><h4>${iconSvg('gen')}${esc(g.name)} <span class="lv">${'★'.repeat(g.lv)}</span></h4><p>${TRAITS[g.tr].n} — ${TRAITS[g.tr].d} At <b>${esc(PROV[g.pid] ? PROV[g.pid].name : '—')}</b>.</p></div></div>`).join('') || '<div class="hint">No generals yet. A general leads the army in his province and earns promotions by winning.</div>';
     const ros = rosterFor(pl);
     if (act && gens.length < n.genSlots) h += `<div class="row"><div><h4>Appoint a general</h4><p>${ros.length ? ros.map(r => `${esc(r[0])} (${TRAITS[r[1]].n})`).slice(0, 3).join(', ') : 'A capable officer from the ranks'} — posted to your biggest army.</p></div><div><button class="btn gold" data-hire ${why ? `disabled title="${esc(why)}"` : ''}>25 pol</button></div></div>`;
+    }
     // outliner
     const cvs = convoysOf(pl);
+    if (av === 'convoys') {
     h += `<div class="sect">Convoys at sea · sealift ${liftLeft(pl)}/${sealift(pl)} left this month</div>`;
     h += cvs.length ? cvs.map(v => `<div class="row orow" data-goto="${v.to}"><div><h4>${iconSvg('anchor')}${esc(PROV[v.from].name)} → ${esc(PROV[v.to].name)}</h4><p class="ounits">${LAND.filter(k => v.u[k]).map(k => iconSvg(k, k) + v.u[k]).join(' ')} · ${v.kind === 'invade' ? '<span class="tr">invasion</span>' : 'reinforcement'} · via ${v.route.map(z => esc(SEA[z].n)).join(', ')} · ~${Math.round(routeRisk(v.route, pl) * 100)}% risk</p></div><div><button class="btn" data-unship="${v.id}" ${act ? '' : 'disabled'} title="Bring them back to port, ready to act">Recall</button></div></div>`).join('')
       : `<div class="hint">Select an army in a port: <span style="color:#86dde2">teal</span> provinces across the sea take a convoy, <span style="color:#f0a25a">orange</span> ones an overseas invasion. Convoys cross up to ${convoyHops(pl)} sea zones and land at the end of the month. Every battle squadron adds 2 divisions of sealift and escorts convoys in its waters.</div>`;
+    const fl = Object.keys(G.fleet).filter(z => G.fleet[z][pl]);
+    h += `<div class="sect">Fleets</div>` + (fl.map(z => { const f = G.fleet[z][pl]; return `<div class="row" data-zone="${z}"><div><h4>${iconSvg('anchor')}${esc(SEA[z].n)}</h4><p>${f.cap} battle squadrons · ${f.sub} submarines · ${{ free:'open water', ours:'we control it', contested:'contested', enemy:'enemy waters' }[seaControl(z, pl)]}</p></div><div>${fleetReady(f) ? `<span class="chip ally">${FLEET_MOVES - (f.mv || 0)} moves</span>` : ''}</div></div>`; }).join('') || '<div class="hint">No navy. Build battle squadrons or submarines in a coastal home province.</div>');
+    }
+    if (av === 'armies') {
     h += `<div class="sect">Armies</div><div class="seg filt">${[['ready','Ready'],['front','At the front'],['sup','Low supply'],['all','All']].map(([k, l]) => `<button class="${outFilter === k ? 'on' : ''}" data-filt="${k}">${l}</button>`).join('')}</div>`;
     const stacks = armiesOf(pl).filter(i => {
       const p = stackOf(i, pl);
@@ -40,7 +88,7 @@ function renderDrawer() {
       return true;
     }).sort((a, b) => landN(stackOf(b, pl).u) - landN(stackOf(a, pl).u));
     h += stacks.slice(0, 60).map(i => { const p = stackOf(i, pl), g = genAt(i, pl); return `<div class="row orow" data-goto="${i}"><div><h4>${esc(PROV[i].name)}${g ? ' ' + iconSvg('gen') : ''}</h4><p class="ounits">${LAND.filter(k => p.u[k]).map(k => iconSvg(k, k) + p.u[k]).join(' ')}${G.prov[i].sup < 1 ? ` · <span class="tr">supply ${Math.round(G.prov[i].sup * 100)}%</span>` : ''}${G.prov[i].o !== pl ? ` · in ${esc(natName(G.prov[i].o))}` : ''}${p.dig ? ` · dug in ${p.dig}` : ''}</p></div><div>${readyAt(p) ? `<span class="chip ally">${readyAt(p)} ready</span>` : ''}</div></div>`; }).join('') || '<div class="hint">Nothing matches.</div>';
-    h += `<div class="sect">Field manual</div><div class="hint">Select a province, then click a highlighted neighbour. <b>Shift-click</b> several of your provinces to strike one target together. Defenders with nowhere to retreat are <b>encircled and destroyed</b>. Armies far from depots lose strength — watch the supply truck.</div>`;
+    }
   } else if (tab === 'industry') {
     const oi = oilIncome(pl), ou = oilUpkeep(pl), ob = oilBreakdown(pl);
     h = dh('Industry', 'Factories, fuel, steel and the world market.');
@@ -55,10 +103,8 @@ function renderDrawer() {
     h += `<div class="sect">Home front</div><div class="hint">Stability <b>${Math.round(n.stab)}%</b> multiplies production by ${stabMul(n).toFixed(2)}. War weariness ${Math.round(n.ww || 0)} grows with your losses and drags stability down; victories, peace, propaganda and focuses lift it. Below 20% your troops defend worse and nations near collapse surrender sooner.</div>`;
     if (n.raid > 0.01) h += `<div class="hint"><b class="tr">Convoy raiding</b>: enemy submarines cost you ${Math.round(n.raid * 100)}% of production. Escort with battle squadrons in your coastal waters.</div>`;
     h += `<div class="sect">Resources you hold</div><div class="req">${owned(pl).filter(i => PROV[i].oil || PROV[i].steel).map(i => `<span class="ok">${PROV[i].oil ? iconSvg('oil') + PROV[i].oil : iconSvg('steel') + PROV[i].steel} ${esc(PROV[i].name)}</span>`).join('') || '<span>None — you depend on imports</span>'}</div>`;
-    h += `<div class="sect">Fleets</div>`;
-    const fl = Object.keys(G.fleet).filter(z => G.fleet[z][pl]);
-    h += fl.map(z => { const f = G.fleet[z][pl]; return `<div class="row" data-zone="${z}"><div><h4>${iconSvg('anchor')}${esc(SEA[z].n)}</h4><p>${f.cap} battle squadrons · ${f.sub} submarines · ${{ free:'open water', ours:'we control it', contested:'contested', enemy:'enemy waters' }[seaControl(z, pl)]}</p></div><div>${fleetReady(f) ? `<span class="chip ally">${FLEET_MOVES - (f.mv || 0)} moves</span>` : ''}</div></div>`; }).join('') || '<div class="hint">No navy. Build battle squadrons or submarines in a coastal home province.</div>';
-  } else if (tab === 'focus') {
+    h += `<div class="hint">Fleets and convoys are under <b>High Command → Convoys</b>.</div>`;
+  } else if (view === 'focus') {
     h = dh('National Focus', 'One long-term project at a time. Each completes once.');
     const list = focusFor(pl, n.major), cols = Math.max(...list.map(f => f.col)) + 1, rows = Math.max(...list.map(f => f.row)) + 1;
     h += `<div class="ftree" style="grid-template-columns:repeat(${cols},minmax(130px,1fr));grid-template-rows:repeat(${rows},auto)">`;
@@ -69,7 +115,7 @@ function renderDrawer() {
         ${active ? `<div class="prog"><i style="width:${(1 - n.focus.left / f.m) * 100}%"></i></div><small>${n.focus.left} mo left</small>` : done ? '<small>✓ Done</small>' : `<button class="btn ${st ? '' : 'gold'}" data-focus="${f.k}" ${st || !act ? 'disabled' : ''}>${f.m} months</button>`}</div>`;
     }
     h += `</div>`;
-  } else if (tab === 'tech') {
+  } else if (view === 'tech') {
     h = dh('Research', `${n.rs.length}/${n.slots} laboratories busy. Projects take months; start several at once.`);
     if (n.rs.length) h += n.rs.map(r => { const T = TECH[r.k]; return `<div class="row active"><div><h4>${esc(T.n)}</h4><p>${esc(T.d)}</p><div class="prog"><i style="width:${(1 - r.left / T.m) * 100}%"></i></div><p>${Math.ceil(r.left)} month${r.left > 1 ? 's' : ''} left</p></div><div><button class="btn" data-cres="${r.k}" ${act ? '' : 'disabled'} title="Refunds half the cost">Cancel</button></div></div>`; }).join('');
     for (const b in BRANCHES) {
@@ -126,7 +172,7 @@ function renderDrawer() {
     h += `<div class="sect">Operation planning</div>`;
     if (n.ops) h += `<div class="row active"><div><h4>${iconSvg('target')}Operation ${esc(n.ops.name)}</h4><p>Objectives: ${n.ops.tg.map(i => `<b class="${friendly(G.prov[i].o, pl) ? 'tg' : ''}">${esc(PROV[i].name)}</b>`).join(', ')}. ${n.ops.left} months left. Attacks on objectives get +15%; take them all for +30 politics and +6 stability.</p></div><div><button class="btn" data-cancelops ${act ? '' : 'disabled'}>Cancel</button></div></div>`;
     else h += `<div class="hint">Select an enemy province and press <b>Plan operation</b> to pick up to four objectives.</div>`;
-  } else if (tab === 'dec') {
+  } else if (view === 'dec') {
     h = dh('Destiny', 'Alternate history for those who hold the right cities.');
     if (n.agendas && n.agendas.length) {
       h += `<div class="sect">Secret agendas</div>`;
@@ -140,7 +186,7 @@ function renderDrawer() {
       h += `<div class="row ${st.done ? 'done' : st.ok ? 'active' : ''}"><div><h4>${esc(D.n)}</h4><p>${esc(D.d)}</p>${st.done ? '' : req}</div><div>${st.done ? '<span class="chip ally">Enacted</span>' : `<button class="btn ${st.ok ? 'gold' : ''}" data-dec="${D.k}" ${st.ok && n.pol >= 50 && act ? '' : 'disabled'}>50 pol</button>`}</div></div>`;
     }
     if (!any) h += `<div class="hint">No destiny decisions for your nation.</div>`;
-  } else if (tab === 'log') {
+  } else if (view === 'ledger') {
     const s = n.st;
     h = dh('War Ledger', `${esc(n.name)}, ${dateStr()} · score ${scoreOf(pl)}`);
     h += kv([[s.won, 'Victories'], [s.lost, 'Defeats'], [s.caps, 'Captures'], [s.kills, 'Enemy losses'], [s.losses, 'Our losses'], [s.nav, 'Naval wins'], [medalsOf(pl).length + '/' + Object.keys(ACH).length, 'Medals'], [n.played, 'Cards played'], [scoreOf(pl), 'Score']]);
@@ -149,9 +195,11 @@ function renderDrawer() {
     h += `<div class="sect">Dispatches</div>${G.log.slice(0, 50).map(l => `<div class="logline"><time>${l.d}</time>${l.txt}</div>`).join('')}`;
   }
   h += `</div>`;
+  if (SUBS[tab]) { const bar = `<div class="subtabs" role="tablist">${SUBS[tab].map(([k, l]) => `<button role="tab" class="${subTab[tab] === k ? 'on' : ''}" data-sub="${k}">${l}${k === 'focus' && !n.focus ? ' <i class="sdot"></i>' : k === 'tech' && n.rs.length < n.slots ? ' <i class="sdot"></i>' : k === 'fronts' && !frontsOf(pl).length && enemiesOf(pl).length ? ' <i class="sdot"></i>' : ''}</button>`).join('')}</div>`; h = h.replace('<div class="db">', bar + '<div class="db">'); }
   el.innerHTML = h;
+  el.querySelectorAll('[data-sub]').forEach(b => b.onclick = () => { subTab[tab] = b.dataset.sub; SFX.click(); renderDrawer(); });
   wireDrawer(el, pl, n);
-  if (tab === 'log') drawVPGraph($('#vpGraph'), $('#vpLegend'));
+  if (view === 'ledger') drawVPGraph($('#vpGraph'), $('#vpLegend'));
 }
 function wireDrawer(el, pl, n) {
   const on = (sel, f) => el.querySelectorAll(sel).forEach(b => b.onclick = e => { f(b, e); });
@@ -170,6 +218,15 @@ function wireDrawer(el, pl, n) {
   on('[data-found]', () => { const name = prompt('Name your alliance', `${nat(pl).adj} Pact`); if (name) Ctl.act({ c:'found', name:name.slice(0, 32) }); });
   on('[data-war]', b => Ctl.act({ c:'declare', tag:b.dataset.war }));
   on('[data-call]', b => Ctl.act({ c:'calltowar', tag:b.dataset.call }));
+  on('[data-fauto]', () => { const r = Ctl.act({ c:'front', op:'auto' }); if (r && r.ok) { SFX.signal(); toast('⚑', `${r.made} front${r.made > 1 ? 's' : ''} formed`, 'Each holds its sector. Switch a front to Advance or Encircle to go on the offensive.', 'medal'); } frontGeoVer++; renderDrawer(); });
+  on('[data-fnew]', () => startFrontPick(pl, null));
+  on('[data-fedit]', b => startFrontPick(pl, frontById(pl, +b.dataset.fedit)));
+  on('[data-ford]', b => { const [id, o] = b.dataset.ford.split(':'); Ctl.act({ c:'front', op:'order', id:+id, order:o }); SFX.click(); frontGeoVer++; renderDrawer(); });
+  on('[data-fpull]', b => { Ctl.act({ c:'front', op:'pull', id:+b.dataset.fpull }); SFX.click(); renderDrawer(); });
+  on('[data-fdel]', b => confirmBox('Disband this front?', 'Its armies stay where they are and wait for your orders.', 'Disband', () => { Ctl.act({ c:'front', op:'disband', id:+b.dataset.fdel }); frontGeoVer++; renderDrawer(); }));
+  on('[data-fname]', b => { const f = frontById(pl, +b.dataset.fname); const nm = f && prompt('Name this front', f.name); if (nm) { Ctl.act({ c:'front', op:'rename', id:f.id, name:nm }); renderDrawer(); } });
+  on('[data-fshow]', b => { const f = frontById(pl, +b.dataset.fshow); if (!f) return; const L = frontLine(pl, f).length ? frontLine(pl, f) : f.z; const c = L[Math.floor(L.length / 2)]; centerOn(c, Math.max(cam.z, WORLD ? 0.9 : 1.1)); hoverFront = f.id; setTimeout(() => { hoverFront = null; }, 2500); });
+  el.querySelectorAll('[data-fgen]').forEach(sl => sl.onchange = () => { Ctl.act({ c:'front', op:'general', id:+sl.dataset.fgen, gid:sl.value === '' ? null : +sl.value }); SFX.click(); renderDrawer(); });
   on('[data-unship]', b => Ctl.act({ c:'unship', id:+b.dataset.unship }));
   on('[data-pact]', b => Ctl.act({ c:'pact', tag:b.dataset.pact }));
   on('[data-guar]', b => Ctl.act({ c:'guarantee', tag:b.dataset.guar }));

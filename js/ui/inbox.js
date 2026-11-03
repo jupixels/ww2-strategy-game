@@ -155,6 +155,7 @@ function playTimelapse(done) {
 const TIPS = [
   'Attack with odds above <b>1.3:1</b> — hover a target to see the odds and every factor behind them.',
   '<b>Shift-click</b> several provinces to attack one target from all sides at once.',
+  '<b>Fronts</b> (Command → Fronts) take the clicking out of a big war: give each sector Hold, Advance or Encircle and a general, and its ready divisions act at month end, with reserves marching up. Anything you move by hand that month is left alone.',
   'Surround enemies before you strike: defenders with no friendly province behind them are <b>destroyed</b>.',
   'Armies far from a depot (capital, home city, or a big city held for six months) lose punch. Watch the supply truck on counters.',
   'Artillery shreds forts. Mountain troops own the hills. Armor is king on the plains but burns oil and stalls in mud.',
@@ -179,7 +180,7 @@ const TIPS = [
 function showHelp() {
   if (!G || !$('#modal').hidden) return;
   const m = $('#modal'); m.hidden = false;
-  const keys = [[['W','A','S','D'], 'Pan (arrows work too)'], [['Shift'], 'Hold to pan faster'], [['Wheel','Q','E'], 'Zoom'], [['Click'], 'Select a province or fleet, then a highlighted target'], [['Shift','Click'], 'Add provinces to the selection'], [['Right-click'], 'Send the selected army'], [['Space'], 'End the month / ready'], [['N'], 'Next army with orders'], [['C'], 'Centre on your capital'], [['M'], 'Cycle map mode: political, supply, resistance'], [['1','–','8'], 'Command panels'], [['Esc'], 'Close or deselect'], [['H'], 'This manual']];
+  const keys = [[['W','A','S','D'], 'Pan (arrows work too)'], [['1','–','6'], 'Command, Industry, Plans, World, Intel, Ledger'], [['Shift'], 'Hold to pan faster'], [['Wheel','Q','E'], 'Zoom'], [['Click'], 'Select a province or fleet, then a highlighted target'], [['Shift','Click'], 'Add provinces to the selection'], [['Right-click'], 'Send the selected army'], [['Space'], 'End the month / ready'], [['N'], 'Next army with orders'], [['C'], 'Centre on your capital'], [['M'], 'Cycle map mode: political, supply, resistance'], [['1','–','8'], 'Command panels'], [['Esc'], 'Close or deselect'], [['H'], 'This manual']];
   m.innerHTML = `<div class="helpcard" role="dialog" aria-modal="true" aria-label="Field manual">
     <div class="hh"><h2>Field Manual</h2><button class="ibtn" data-close aria-label="Close">✕</button></div>
     <div class="hb">

@@ -58,7 +58,7 @@ window.addEventListener('keydown', e => {
   else if (k === 'h' || e.key === '?') showHelp();
   else if (k === 'c' && ME) centerOn(homeProv(ME), Math.max(cam.z, 1.1));
   else if (k === 't' && (Ctl.mode === 'host' || Ctl.mode === 'client')) toggleChat(true);
-  else if (/^[1-8]$/.test(e.key)) openTab(['army','industry','focus','tech','dip','intel','dec','log'][+e.key - 1]);
+  else if (/^[1-6]$/.test(e.key)) openTab(['army','industry','plans','dip','intel','log'][+e.key - 1]);
 });
 window.addEventListener('keyup', e => { KEYS.delete(e.key.toLowerCase()); if (e.key === 'Shift') KEYS.delete('shift'); });
 window.addEventListener('blur', () => KEYS.clear());
