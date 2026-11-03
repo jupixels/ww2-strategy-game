@@ -153,7 +153,7 @@ function tickHomeFront(t) {
   if (atWar) n.ww = clamp((n.ww || 0) + (0.5 + 28 * lm / army) * (n.done.includes('pol_unity') ? 0.5 : 1), 0, 60);
   else n.ww = Math.max(0, (n.ww || 0) - 3);
   const base = (NATDEF[t].stab || 55) + (n.stabB || 0);
-  const target = clamp(base - n.ww * 0.7, 5, 100);
+  const target = clamp(base - n.ww * 0.7 + sigStabMod(t), 5, 100);
   n.stab = clamp(n.stab + clamp(target - n.stab, -2.5, 2.5), 0, 100);
   if (n.stab < 15 && atWar && rnd() < 0.25) {
     n.pp = Math.round(n.pp * 0.9);

@@ -4,11 +4,11 @@ let outFilter = 'ready';
 // six drawers; three of them hold sub-pages
 const SUBS = {
   army:[['fronts','Fronts'],['armies','Armies'],['generals','Generals'],['convoys','Convoys']],
-  plans:[['focus','National focus'],['tech','Research']],
+  plans:[['focus','National focus'],['tech','Research'],['nation','Nation']],
   log:[['ledger','Ledger'],['dec','Destiny']],
 };
 const subTab = { army:'fronts', plans:'focus', log:'ledger' };
-const TAB_ALIAS = { focus:['plans','focus'], tech:['plans','tech'], dec:['log','dec'], generals:['army','generals'], convoys:['army','convoys'], fronts:['army','fronts'], armies:['army','armies'] };
+const TAB_ALIAS = { nation:['plans','nation'], focus:['plans','focus'], tech:['plans','tech'], dec:['log','dec'], generals:['army','generals'], convoys:['army','convoys'], fronts:['army','fronts'], armies:['army','armies'] };
 function openTab(t) {
   if (TAB_ALIAS[t]) { const [m, s2] = TAB_ALIAS[t]; if (tab === m && subTab[m] === s2) { tab = null; } else { tab = m; subTab[m] = s2; } $$('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab)); hoverNat = null; rebuildOverlay(); staticDirty = true; renderDrawer(); tab ? SFX.open() : SFX.close(); return; }
   tab = tab === t ? null : t;
@@ -18,6 +18,45 @@ function openTab(t) {
 }
 const dh = (title, sub) => `<div class="dh"><div><h2>${title}</h2><p>${sub}</p></div><button class="ibtn" data-closetab aria-label="Close">✕</button></div><div class="db">`;
 const kv = items => `<div class="kv">${items.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('')}</div>`;
+/* ---------- national signature systems ---------- */
+const meter = (v, max, cls) => `<div class="meter ${cls || ''}"><i style="width:${clamp(v / max, 0, 1) * 100}%"></i></div>`;
+function sigPanel(pl, n, act) {
+  const s = sigOf(pl); let h = '';
+  const btn = (op, label, extra, gold) => { const why = canSig(pl, op, extra || {}); return `<button class="btn ${gold && !why ? 'gold' : ''}" data-sig='${JSON.stringify({ op, ...(extra || {}) })}' ${why || !act ? `disabled title="${esc(why)}"` : ''}>${label}</button>`; };
+  if (pl === 'GER') {
+    h += `<div class="sect">Mobilisation of industry</div>`;
+    h += ECO_LEVELS.map((L, k) => `<div class="row ${s.eco === k ? 'active' : ''}"><div><h4>${k}. ${L.n}</h4><p>${k ? `+${Math.round(L.pp * 100)}% production · +${Math.round(L.mp * 100)}% manpower · stability ${L.stab}` : 'No extra output, no strain on the home front.'}</p></div><div>${s.eco === k ? '<span class="chip ally">Current</span>' : btn('eco', k > (s.eco || 0) ? `Raise<small>${10 * k} pol</small>` : 'Lower', { lv:k }, k > (s.eco || 0))}</div></div>`).join('');
+  } else if (pl === 'SOV') {
+    const c = evacCandidates(pl);
+    h += `<div class="sect">Factories in danger</div>` + (c.length ? c.slice(0, 8).map(i => `<div class="row"><div><h4>${esc(PROV[i].name)}</h4><p>${G.prov[i].fac} factories within two provinces of the enemy.</p></div><div>${btn('evac', 'Evacuate<small>5 pol</small>', { pid:i }, true)}</div></div>`).join('') : '<div class="hint">No factory is threatened yet. When the enemy comes within two provinces of one west of the Urals, you can ship it east.</div>');
+    if (s.evac.length) h += `<div class="sect">Trains heading east</div>` + s.evac.map(e => `<div class="row"><div><h4>${e.n} factor${e.n > 1 ? 'ies' : 'y'} → ${esc(PROV[e.to].name)}</h4><p>Back in production in ${e.at - G.turn} month${e.at - G.turn > 1 ? 's' : ''}.</p></div></div>`).join('');
+  } else if (pl === 'ENG') {
+    const L = lifeline(pl);
+    h += `<div class="sect">Convoys getting through</div><div class="row"><div><h4>${Math.round(L * 100)}% of the lifeline</h4>${meter(L, 1, L < 0.5 ? 'bad' : '')}<p>Worth up to +10 production, +5 oil and +3 steel every month. Enemy control of the North Atlantic, the Channel or Biscay, and U-boat raiding, cut it.</p></div></div>`;
+    h += `<div class="row"><div><h4>Escort groups</h4><p>Destroyers and escort carriers halve the losses to U-boats for six months.${s.escort ? ` <b>${s.escort} months left.</b>` : ''}</p></div><div>${btn('escort', 'Form<small>20 pol</small>', {}, true)}</div></div>`;
+  } else if (pl === 'USA') {
+    h += `<div class="sect">Mobilisation</div><div class="row"><div><h4>${Math.round(s.mob)}% mobilised</h4>${meter(s.mob, 100)}<p>Production ×${sigIncomeMul(pl).toFixed(2)}. Rises 6 points a month at war, slowly with world tension in peace.</p></div></div>`;
+    h += `<div class="sect">Lend-Lease</div><div class="row"><div><h4>${s.ll ? 'Supplying ' + esc(natName(s.ll)) : 'Nobody supplied'}</h4><p>Costs us 8 production a month; they get 14 production and 3 oil.</p></div><div>${s.ll ? btn('ll', 'Stop', { to:null }) : ''}</div></div>`;
+    const cands = Object.keys(G.nat).filter(t => A(t) && t !== pl && !NATDEF[t].off && !canSig(pl, 'll', { to:t }) && (nat(t).major || t === 'CHI')).slice(0, 6);
+    h += cands.filter(t => t !== s.ll).map(t => `<div class="row"><div><h4>${flagImg(t)} ${esc(natName(t))}</h4><p>${enemiesOf(t).length ? 'At war with ' + enemiesOf(t).filter(A).slice(0, 2).map(natName).join(', ') : 'At peace'}</p></div><div>${btn('ll', 'Supply<small>10 pol</small>', { to:t }, true)}</div></div>`).join('');
+  } else if (pl === 'JAP') {
+    const m = oilMonths(pl);
+    h += `<div class="sect">Fuel</div><div class="row"><div><h4>${m === Infinity ? 'The tanks are filling' : m === 0 ? '<span class="tr">The tanks are empty</span>' : `${m} months of fuel left`}</h4>${meter(m === Infinity ? 24 : m, 24, m < 6 ? 'bad' : '')}<p>${G.flags.embargo ? 'The American embargo is in force: almost no oil comes in.' : 'America still sells us oil — until we provoke an embargo.'} The Dutch Indies (Palembang, Balikpapan), Brunei and Burma hold the oil we need.</p></div></div>`;
+    h += `<div class="row"><div><h4>Fleet ${s.anchor ? 'at anchor' : 'at sea'}</h4><p>Laying the fleet up cuts its oil by 60% but it fights at 60% strength until it sails again.</p></div><div>${btn('anchor', s.anchor ? 'Put to sea' : 'Lay up', {}, false)}</div></div>`;
+  } else if (pl === 'ITA') {
+    h += `<div class="sect">The regime</div><div class="row"><div><h4>${Math.round(s.reg)}% support</h4>${meter(s.reg, 100, s.reg < 35 ? 'bad' : '')}<p>Rises with victories and peace; falls with defeats and with enemy troops on Italian soil. Below 30% production suffers.</p></div></div>`;
+    h += `<div class="row"><div><h4>Depose the Duce</h4><p>The king dismisses Mussolini and signs an armistice: Italy leaves the Axis and joins the Allies — and Germany invades.</p></div><div>${btn('armistice', 'Sign', {}, true)}</div></div>`;
+  } else if (pl === 'FRA') {
+    h += `<div class="row ${s.union ? 'active' : ''}"><div><h4>Union Sacrée</h4><p>Once per war: +20 stability now and +10% defence for a year.${s.union ? ` <b>${s.union} months left.</b>` : ''}</p></div><div>${s.unionUsed ? '<span class="chip">Called</span>' : btn('union', 'Call<small>25 pol</small>', {}, true)}</div></div>`;
+    h += `<div class="row ${s.exile ? 'active' : ''}"><div><h4>Fight on from Algiers</h4><p>${s.fled ? 'The government sits in Algiers.' : s.exile ? '<b>Ready.</b> If Paris falls the government flies to Algiers instead of signing an armistice: no Vichy, and the Empire fights on.' : 'Prepare the government to leave for North Africa if Paris falls.'}</p></div><div>${s.fled ? '' : btn('exile', s.exile ? 'Cancel' : 'Prepare<small>15 pol</small>', {}, !s.exile)}</div></div>`;
+  } else if (pl === 'CHI') {
+    let occ = 0; for (const p of G.prov) if (p.core === 'CHI' && p.o !== 'CHI' && friendly(p.o, 'JAP')) occ++;
+    h += `<div class="sect">Behind Japanese lines</div><div class="row"><div><h4>${occ} occupied provinces</h4><p>Resistance in occupied China rises 3 points a month faster while we fight Japan; at 85% the partisans strike.</p></div></div>`;
+    h += `<div class="row"><div><h4>The United Front</h4><p>Make common cause with the Communists: they join our war and our alliance, +10 stability.</p></div><div>${s.ufront ? '<span class="chip ally">Formed</span>' : btn('ufront', 'Form<small>30 pol</small>', {}, true)}</div></div>`;
+  }
+  return h;
+}
+
 /* ---------- fronts ---------- */
 const FRONT_COLORS = ['#f0cd7f','#79c0e8','#e8836b','#9fd68f','#c79be8','#e8c36b','#6be0c8','#e86bb0'];
 const frontColor = (t, f) => FRONT_COLORS[frontsOf(t).indexOf(f) % FRONT_COLORS.length] || FRONT_COLORS[0];
@@ -172,6 +211,10 @@ function renderDrawer() {
     h += `<div class="sect">Operation planning</div>`;
     if (n.ops) h += `<div class="row active"><div><h4>${iconSvg('target')}Operation ${esc(n.ops.name)}</h4><p>Objectives: ${n.ops.tg.map(i => `<b class="${friendly(G.prov[i].o, pl) ? 'tg' : ''}">${esc(PROV[i].name)}</b>`).join(', ')}. ${n.ops.left} months left. Attacks on objectives get +15%; take them all for +30 politics and +6 stability.</p></div><div><button class="btn" data-cancelops ${act ? '' : 'disabled'}>Cancel</button></div></div>`;
     else h += `<div class="hint">Select an enemy province and press <b>Plan operation</b> to pick up to four objectives.</div>`;
+  } else if (view === 'nation') {
+    if (!SIGS[pl]) { subTab.plans = 'focus'; return renderDrawer(); }
+    h = dh(SIGS[pl].n, SIGS[pl].d);
+    h += sigPanel(pl, n, act);
   } else if (view === 'dec') {
     h = dh('Destiny', 'Alternate history for those who hold the right cities.');
     if (n.agendas && n.agendas.length) {
@@ -196,7 +239,7 @@ function renderDrawer() {
     h += `<div class="sect">Dispatches</div>${G.log.slice(0, 50).map(l => `<div class="logline"><time>${l.d}</time>${l.txt}</div>`).join('')}`;
   }
   h += `</div>`;
-  if (SUBS[tab]) { const bar = `<div class="subtabs" role="tablist">${SUBS[tab].map(([k, l]) => `<button role="tab" class="${subTab[tab] === k ? 'on' : ''}" data-sub="${k}">${l}${k === 'focus' && !n.focus ? ' <i class="sdot"></i>' : k === 'tech' && n.rs.length < n.slots ? ' <i class="sdot"></i>' : k === 'fronts' && !frontsOf(pl).length && enemiesOf(pl).length ? ' <i class="sdot"></i>' : ''}</button>`).join('')}</div>`; h = h.replace('<div class="db">', bar + '<div class="db">'); }
+  if (SUBS[tab]) { const bar = `<div class="subtabs" role="tablist">${SUBS[tab].filter(([k]) => k !== 'nation' || SIGS[pl]).map(([k, l]) => [k, k === 'nation' ? SIGS[pl].n : l]).map(([k, l]) => `<button role="tab" class="${subTab[tab] === k ? 'on' : ''}" data-sub="${k}">${l}${k === 'focus' && !n.focus ? ' <i class="sdot"></i>' : k === 'tech' && n.rs.length < n.slots ? ' <i class="sdot"></i>' : k === 'fronts' && !frontsOf(pl).length && enemiesOf(pl).length ? ' <i class="sdot"></i>' : ''}</button>`).join('')}</div>`; h = h.replace('<div class="db">', bar + '<div class="db">'); }
   el.innerHTML = h;
   el.querySelectorAll('[data-sub]').forEach(b => b.onclick = () => { subTab[tab] = b.dataset.sub; SFX.click(); renderDrawer(); });
   wireDrawer(el, pl, n);
@@ -221,6 +264,7 @@ function wireDrawer(el, pl, n) {
   on('[data-call]', b => Ctl.act({ c:'calltowar', tag:b.dataset.call }));
   on('[data-fauto]', () => { const r = Ctl.act({ c:'front', op:'auto' }); if (r && r.ok) { SFX.signal(); toast('⚑', `${r.made} front${r.made > 1 ? 's' : ''} formed`, 'Each holds its sector. Switch a front to Advance or Encircle to go on the offensive.', 'medal'); } frontGeoVer++; renderDrawer(); });
   on('[data-fnew]', () => startFrontPick(pl, null));
+  on('[data-sig]', b => { const c = JSON.parse(b.dataset.sig); const go = () => { const r = Ctl.act({ c:'sig', ...c }); if (r && r.ok) { SFX.confirm(); if (r.msg) toast('⚙', SIGS[pl].n, r.msg, ''); } renderDrawer(); renderTop(); }; if (c.op === 'armistice') confirmBox('Sign the armistice?', 'Italy leaves the Axis and joins the Allies. Germany will attack at once.', 'Sign', go); else go(); });
   on('[data-sr]', () => { openTab(tab); showReport({ ...G.lastSR[pl], uid:-1 }, () => {}); });
   on('[data-fedit]', b => startFrontPick(pl, frontById(pl, +b.dataset.fedit)));
   on('[data-ford]', b => { const [id, o] = b.dataset.ford.split(':'); Ctl.act({ c:'front', op:'order', id:+id, order:o }); SFX.click(); frontGeoVer++; renderDrawer(); });

@@ -17,6 +17,7 @@ function income(t) {
   if (n.totalWar > 0) s *= 1.2;
   if (t === 'CHI' && W('CHI', 'JAP')) s += 6; // Soviet credits and the Burma Road keep China in the war
   s *= stabMul(n) * (1 - (n.raid || 0));
+  s = s * sigIncomeMul(t) + sigIncomeAdd(t);
   s *= diffMul(t, 'pp');
   if (G.gm === 'blitz') s *= 1.5;
   if (G.flags.usa && isAllied(t) && t !== 'USA' && nowNum() < ymNum(1946, 0)) s += t === 'ENG' ? 14 : t === 'SOV' ? 12 : 4;
@@ -52,6 +53,7 @@ function oilBreakdown(t) {
   let arm = 0, air = 0, navy = 0;
   for (const p of G.prov) if (p.o === t) { arm += p.u.arm * UNIT.arm.up; air += p.air.ftr * UNIT.ftr.up + p.air.bmb * UNIT.bmb.up; }
   for (const z in G.fleet) { const f = G.fleet[z][t]; if (f) navy += f.cap * UNIT.cap.up + f.sub * UNIT.sub.up; }
+  if (anchored(t)) navy *= 0.4; // a fleet laid up at anchor burns little
   const peace = !enemiesOf(t).length, m = peace ? 0.5 : 1;
   return { arm:arm * m, air:air * m, navy:navy * m, peace };
 }

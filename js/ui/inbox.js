@@ -197,6 +197,7 @@ const TIPS = [
   'One <b>strategy card</b> a month. Save Blitzkrieg for the big push and Scorched Earth for the retreat. Discard cards you will never use (+2 politics) to make room.',
   'Low stability cuts production and makes you surrender sooner. Win battles, make peace, or play propaganda.',
   'Spies can map an enemy army, sabotage factories, steal tech or stage coups in neutral countries.',
+  'Every great power has a system of its own under <b>Plans</b>: Germany\'s war economy, Soviet factory evacuation, Britain\'s Atlantic lifeline, American mobilisation and Lend-Lease, Japan\'s oil clock, Italy\'s regime support, France\'s Union Sacrée and flight to Algiers, China\'s total resistance.',
   'Every January and July the chief of staff sends a <b>situation report</b>: gains and losses, threatened sectors, fuel and supply, and three recommendations you can jump straight to. The latest stays in the Ledger.',
   'Losing? Offer peace from the World panel. Winning? Demand terms and keep what you hold.',
 ].concat(WORLD ? [

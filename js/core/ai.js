@@ -153,6 +153,7 @@ function aiTurn(t, battles) {
   const mine = owned(t); if (!mine.length) return;
   const atWar = enemies.size > 0;
   aiFocus(t);
+  aiSignature(t);
   if (G.turn % 2 === (t.charCodeAt(0) % 2) || atWar) aiResearch(t);
   if (n.genSlots > G.gens.filter(g => g.tag === t).length && n.pol >= (atWar ? 30 : 60) && rnd() < 0.3) hireGeneral(t);
   const fd = atWar ? frontDistance(t, enemies) : null;

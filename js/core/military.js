@@ -1,6 +1,6 @@
 'use strict';
 /* ================= SEA CONTROL ================= */
-function fleetPower(f, t) { if (!f) return 0; const n = nat(t); const fuel = n ? fuelMul(t) : 1; return (f.cap * 3 * (n && n.tech.carrier ? 1.4 : 1) + f.sub * 0.6) * fuel; }
+function fleetPower(f, t) { if (!f) return 0; const n = nat(t); const fuel = (n ? fuelMul(t) : 1) * (anchored(t) ? 0.6 : 1); return (f.cap * 3 * (n && n.tech.carrier ? 1.4 : 1) + f.sub * 0.6) * fuel; }
 // returns 'free' | 'ours' | 'contested' | 'enemy' from t's point of view
 function seaControl(z, t) {
   let fs = 0, hs = 0;
@@ -285,6 +285,7 @@ function defenseValue(pid, atkUnits, atkTag, detail) {
   if (p.o === 'CHI' && p.core === 'CHI' && atkTag && friendly(atkTag, 'JAP')) mul('Trading space for time', P.ter === 'p' ? 1.2 : 1.35);
   mul('Hold the line', n.fx.maginot ? 1.2 : 1);
   mul('Codebreakers', n.fx.codebreak ? 1.1 : 1);
+  mul('Union sacrée', n.sig && n.sig.union > 0 ? 1.1 : 1);
   if (atkTag && nat(atkTag).fx.fifth === pid) mul('Fifth column', 0.5);
   mul('Difficulty', diffMul(p.o, 'cb'));
   mul('National spirit', n.bonus);
@@ -440,6 +441,7 @@ function checkCapitulation(d, w) {
   const small = n.nprov0 <= 4;
   // the Soviet Union traded space for time; Nationalist China never surrendered while it held any land
   const thr = (d === 'SOV' ? 0.3 : d === 'CHI' ? 0 : 0.45) + (n.stab < 25 ? 0.15 : 0);
+  if (capLost && d === 'FRA' && frenchExile(d, w)) return;
   if (capLost && (small || holdVP / Math.max(1, coreVP) < thr)) return capitulate(d, w);
   if (capLost) {
     const best = mine.sort((x, y) => PROV[y].vp - PROV[x].vp)[0];
@@ -454,7 +456,7 @@ function capitulate(d, w) {
   if (isHuman(w) && G.warStart[k] != null && G.turn - G.warStart[k] <= 3) award(w, 'blitz');
   if (isHuman(w) && !wn.major && n.major) award(w, 'underdog');
   let vichy = false;
-  if (d === 'FRA' && isAxis(w) && !G.flags.vichy && owned('FRA').length > 2) {
+  if (d === 'FRA' && isAxis(w) && !G.flags.vichy && owned('FRA').length > 2 && !(nat('FRA').sig && nat('FRA').sig.fled)) {
     vichy = true; G.flags.vichy = 1;
     const v = nat('VIC'); v.alive = true; v.pp = 20; v.mp = 20; v.oil = 10; v.steel = 10;
     for (const p of G.prov) if (p.o === 'FRA') { p.o = 'VIC'; p.u.inf = Math.ceil(p.u.inf / 2); p.u.arm = 0; p.u.art = 0; clampReady(p); }

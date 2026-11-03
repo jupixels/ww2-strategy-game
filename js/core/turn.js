@@ -53,6 +53,7 @@ function endMonth() {
       tickResearch(t);
       if (n.focus && --n.focus.left <= 0) completeFocus(t, n.focus.k);
       tickHomeFront(t);
+      sigTick(t);
       if (n.ops && --n.ops.left <= 0) { notify(t, '✕', `Operation ${n.ops.name} expires`, 'Not every objective was taken.', ''); n.ops = null; }
       drawCards(t, 1);
     }

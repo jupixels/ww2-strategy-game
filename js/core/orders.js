@@ -130,6 +130,7 @@ function doCommand(t, c, mode) {
     case 'card': return R(playCard(t, c.k, c.target));
     case 'discard': return R(discardCard(t, c.k));
     case 'front': { const r = frontCommand(t, c); return R(r.ok, r); }
+    case 'sig': { const r = sigCommand(t, c); return R(r.ok, r); }
     case 'spy': { const r = spyOp(t, c.op, c.target); return R(r, { spy:r }); }
     case 'hirespy': return R(hireSpy(t));
     case 'hiregen': return R(hireGeneral(t, false, c.name));
