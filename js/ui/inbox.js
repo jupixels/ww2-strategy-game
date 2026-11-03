@@ -30,7 +30,35 @@ function decisionText(it) {
   return { head:'A Message', dek:'', text:'', yes:'Yes', no:'No' };
 }
 let itemResolve = null;
+// the half-yearly situation report: one page, three recommendations you can jump to
+function showReport(it, res) {
+  const m = $('#modal'); m.hidden = false;
+  const pv = ids => ids.length ? ids.map(i => `<span>${esc(PROV[i].name)}</span>`).join('') : '<span class="none">none</span>';
+  const delta = (a, b) => { const d = b - a; return `<b>${b}</b><small class="${d > 0 ? 'up' : d < 0 ? 'dn' : ''}">${d > 0 ? '+' : ''}${d}</small>`; };
+  m.innerHTML = `<div class="sitrep" role="dialog" aria-modal="true" aria-label="Situation report">
+    <div class="srh"><div><h5>Situation report · most secret</h5><h2>${esc(nat(ME).name)}, ${esc(it.to)}</h2><p>Six months since ${esc(it.from)}</p></div>${flagImg(ME, 'srflag')}</div>
+    <div class="srk"><div>${delta(it.vp0, it.vp)}<span>Victory points</span></div><div>${delta(it.div0, it.div)}<span>Divisions</span></div><div><b>${it.kills}</b><small>/ ${it.losses}</small><span>Enemy / our losses</span></div><div><b>${it.oil}</b><small class="${it.oilNet < 0 ? 'dn' : 'up'}">${it.oilNet >= 0 ? '+' : ''}${it.oilNet}/mo</small><span>Oil</span></div></div>
+    <div class="srg">
+      <section><h4>Gained · ${it.gainN}</h4><div class="srl ok">${pv(it.gained)}</div><h4>Lost · ${it.lostN}</h4><div class="srl bad">${pv(it.lost)}</div></section>
+      <section><h4>Threats</h4>${it.threats.length ? it.threats.map(x => `<p class="srt" data-go="${x.pid}"><b>${esc(PROV[x.pid].name)}</b> ${x.foe} enemy divisions against our ${x.ours}</p>`).join('') : '<p class="none">No sector is outnumbered.</p>'}
+        <h4>Supply</h4><p>${it.cut ? `<b class="tr">${it.cut} division${it.cut === 1 ? '' : 's'} cut off.</b> ` : ''}${it.low ? `${it.low} on thin supply. ` : ''}${!it.cut && !it.low ? 'Every army is supplied. ' : ''}Stability ${it.stab}%.</p></section>
+    </div>
+    <h4 class="srch">The chief of staff recommends</h4>
+    <ol class="sra">${it.advice.map((a, k) => `<li><p>${esc(a.txt)}</p>${a.go ? `<button class="btn" data-adv="${k}">${a.go.pid != null ? 'Show me' : 'Open'}</button>` : ''}</li>`).join('')}</ol>
+    <div class="acts" style="justify-content:flex-end"><button class="btn gold" data-done>Dismissed</button></div></div>`;
+  SFX.type();
+  const done = go => {
+    m.hidden = true; m.innerHTML = ''; itemResolve = null;
+    Ctl.act({ c:'answer', uid:it.uid, choice:0 }); res();
+    if (go) { if (go.pid != null && go.pid >= 0) { select(go.pid); centerOn(go.pid, Math.max(cam.z, WORLD ? 1 : 1.2)); } else if (go.tab) { if (tab) openTab(tab); openTab(go.tab); } }
+  };
+  m.querySelector('[data-done]').onclick = () => { SFX.click(); done(null); };
+  m.querySelectorAll('[data-adv]').forEach(b => b.onclick = () => { SFX.click(); done(it.advice[+b.dataset.adv].go); });
+  m.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { SFX.click(); done({ pid:+b.dataset.go }); });
+  setTimeout(() => { const b = m.querySelector('[data-done]'); if (b) b.focus(); }, 60);
+}
 function showItem(it) {
+  if (it.type === 'report') return new Promise(res => { itemResolve = res; showReport(it, res); });
   return new Promise(res => {
     itemResolve = res;
     const m = $('#modal'); m.hidden = false;
@@ -169,6 +197,7 @@ const TIPS = [
   'One <b>strategy card</b> a month. Save Blitzkrieg for the big push and Scorched Earth for the retreat. Discard cards you will never use (+2 politics) to make room.',
   'Low stability cuts production and makes you surrender sooner. Win battles, make peace, or play propaganda.',
   'Spies can map an enemy army, sabotage factories, steal tech or stage coups in neutral countries.',
+  'Every January and July the chief of staff sends a <b>situation report</b>: gains and losses, threatened sectors, fuel and supply, and three recommendations you can jump straight to. The latest stays in the Ledger.',
   'Losing? Offer peace from the World panel. Winning? Demand terms and keep what you hold.',
 ].concat(WORLD ? [
   'The map spans the whole world and wraps east to west. Japan, China and the Americas fight their own wars — and yours, once Pearl Harbor drags America in.',

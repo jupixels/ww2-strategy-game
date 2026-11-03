@@ -190,6 +190,7 @@ function renderDrawer() {
     const s = n.st;
     h = dh('War Ledger', `${esc(n.name)}, ${dateStr()} · score ${scoreOf(pl)}`);
     h += kv([[s.won, 'Victories'], [s.lost, 'Defeats'], [s.caps, 'Captures'], [s.kills, 'Enemy losses'], [s.losses, 'Our losses'], [s.nav, 'Naval wins'], [medalsOf(pl).length + '/' + Object.keys(ACH).length, 'Medals'], [n.played, 'Cards played'], [scoreOf(pl), 'Score']]);
+    if (G.lastSR && G.lastSR[pl]) h += `<div class="row"><div><h4>Situation report · ${esc(G.lastSR[pl].to)}</h4><p>The chief of staff briefs you every January and July.</p></div><div><button class="btn" data-sr>Read</button></div></div>`;
     h += `<div class="sect">Share of ${REALM}</div><canvas id="vpGraph" class="graph"></canvas><div class="legendrow" id="vpLegend"></div>`;
     h += `<div class="sect">Medals</div><div class="req">${Object.entries(ACH).map(([k, a]) => `<span class="${medalsOf(pl).includes(k) ? 'ok' : ''}" title="${esc(a.d)}">${medalsOf(pl).includes(k) ? '✪ ' : ''}${a.n}</span>`).join('')}</div>`;
     h += `<div class="sect">Dispatches</div>${G.log.slice(0, 50).map(l => `<div class="logline"><time>${l.d}</time>${l.txt}</div>`).join('')}`;
@@ -220,6 +221,7 @@ function wireDrawer(el, pl, n) {
   on('[data-call]', b => Ctl.act({ c:'calltowar', tag:b.dataset.call }));
   on('[data-fauto]', () => { const r = Ctl.act({ c:'front', op:'auto' }); if (r && r.ok) { SFX.signal(); toast('⚑', `${r.made} front${r.made > 1 ? 's' : ''} formed`, 'Each holds its sector. Switch a front to Advance or Encircle to go on the offensive.', 'medal'); } frontGeoVer++; renderDrawer(); });
   on('[data-fnew]', () => startFrontPick(pl, null));
+  on('[data-sr]', () => { openTab(tab); showReport({ ...G.lastSR[pl], uid:-1 }, () => {}); });
   on('[data-fedit]', b => startFrontPick(pl, frontById(pl, +b.dataset.fedit)));
   on('[data-ford]', b => { const [id, o] = b.dataset.ford.split(':'); Ctl.act({ c:'front', op:'order', id:+id, order:o }); SFX.click(); frontGeoVer++; renderDrawer(); });
   on('[data-fpull]', b => { Ctl.act({ c:'front', op:'pull', id:+b.dataset.fpull }); SFX.click(); renderDrawer(); });

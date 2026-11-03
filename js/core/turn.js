@@ -83,6 +83,7 @@ function endMonth() {
     checkEvents();
     for (const h of humanTags()) if (A(h)) tickAgendas(h, false);
     recordHistory();
+    tickReports();
     checkVictory();
     if (G.over) for (const h of humanTags()) if (A(h)) tickAgendas(h, true);
   } finally { const l = Hooks.L.naval; if (l) l.splice(l.indexOf(navLog), 1); }

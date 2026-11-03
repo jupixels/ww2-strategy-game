@@ -258,3 +258,69 @@ function enactDecision(t, k) {
   Hooks.emit('dirty', { owners:true });
   return true;
 }
+
+/* ================= SITUATION REPORT =================
+   Every January and July each human player gets a one-page briefing: what was won and lost in the last six
+   months, where the enemy is massing, fuel and supply, and three recommendations from the chief of staff. */
+function srSnapshot(t) { const n = nat(t); return { turn:G.turn, kills:n.st.kills, losses:n.st.losses, won:n.st.won, lost:n.st.lost, div:landN(divisions(t)), vp:vpOf(t) }; }
+function situationReport(t) {
+  const n = nat(t), tags = Object.keys(NATDEF), ti = tags.indexOf(t);
+  const S0 = (G.srs && G.srs[t]) || { turn:Math.max(0, G.turn - 6), kills:0, losses:0, won:0, lost:0, div:landN(divisions(t)), vp:vpOf(t) };
+  const H = G.hist.find(h => h.t === S0.turn) || G.hist[0];
+  const was = i => H && H.o.charCodeAt(i) - 48 === ti;
+  const gained = [], lost = [];
+  for (let i = 0; i < NP; i++) { const now = G.prov[i].o === t; if (now && !was(i)) gained.push(i); else if (!now && was(i)) lost.push(i); }
+  const byVP = (a, b) => PROV[b].vp - PROV[a].vp;
+  // threats: our provinces facing far stronger enemy forces
+  const threats = [];
+  for (const i of armiesOf(t).concat(owned(t).filter(i => !unitsAt(G.prov[i])))) {
+    let foe = 0; for (const j of PROV[i].adj) if (W(t, G.prov[j].o)) foe += forcesAt(G.prov[j]);
+    const ours = forcesAt(G.prov[i]);
+    if (foe >= 4 && foe > ours * 1.5) threats.push({ pid:i, foe, ours, key:foe - ours + PROV[i].vp * 2 + (i === n.capital ? 20 : 0) });
+  }
+  threats.sort((a, b) => b.key - a.key);
+  const oi = oilIncome(t), ou = oilUpkeep(t), net = oi - ou;
+  let cut = 0, low = 0; for (const i of armiesOf(t)) { const s = G.prov[i].sup; if (!s) cut += landN(stackOf(i, t).u); else if (s < 0.75) low += landN(stackOf(i, t).u); }
+  // the chief of staff: candidate recommendations, most urgent first
+  const adv = [];
+  const say = (w, txt, go) => adv.push({ w, txt, go });
+  const enemies = enemiesOf(t).filter(A), atWar = enemies.length > 0;
+  if (threats.length && threats[0].pid === n.capital) say(10, `The enemy is massing outside ${PROV[n.capital].name}. Rush divisions to the capital and fortify it.`, { pid:n.capital });
+  else if (threats.length) say(7, `${PROV[threats[0].pid].name} faces ${threats[0].foe} enemy divisions with ${threats[0].ours} of ours. Reinforce it or put its front on Hold.`, { pid:threats[0].pid });
+  if (atWar && !frontsOf(t).length) say(6, 'Organise the army into fronts (Command → Fronts) so every sector acts each month without you moving each stack.', { tab:'fronts' });
+  if (cut) say(8, `${cut} division${cut === 1 ? ' is' : 's are'} cut off and losing a tenth of their strength every month. Break out or pull them back.`, { tab:'armies' });
+  else if (low > 8) say(4, `${low} divisions fight on thin supply. Take a big city or a port near them, or shorten the line.`, { tab:'armies' });
+  if (net < 0) { const m = n.oil > 0 ? Math.floor(n.oil / -net) : 0; say(n.oil <= 0 ? 8 : m < 6 ? 6 : 3, `Fuel: we burn ${Math.round(-net)} more oil a month than we get${n.oil > 0 ? ` — dry in ${m} months` : ' and the tanks are empty'}. Import oil, take an oil field or decommission idle ships.`, { tab:'industry' }); }
+  if (!n.focus && focusFor(t, n.major).some(f => !focusState(t, f.k))) say(5, 'No national focus is running. Start one in Plans — it is free.', { tab:'focus' });
+  if (n.rs.length < n.slots && TECHS.some(T => !techState(t, T.k))) say(4, `${n.slots - n.rs.length} laborator${n.slots - n.rs.length === 1 ? 'y sits' : 'ies sit'} idle. Start a research project in Plans.`, { tab:'tech' });
+  if (n.pp > 250) say(4, `${Math.round(n.pp)} production is sitting unspent. Build factories now, or divisions at the front.`, { pid:homeProv(t) });
+  if (n.mp < 20 && atWar) say(5, 'Manpower is nearly gone. Play Mobilisation, take the Mass Mobilisation focus, or seek peace.', { tab:'focus' });
+  if (n.stab < 35) say(6, `Stability is down to ${Math.round(n.stab)}%: output is falling and surrender comes sooner. Win a battle, play propaganda or make peace somewhere.`, { tab:'dip' });
+  for (const e of enemies) { if (facOf(t) && callTargets(t, e).length && !canCallToWar(t, e)) { say(4, `Our allies are not fighting ${natName(e)}. Call them to war (World panel, ${CALL_COST} politics).`, { tab:'dip' }); break; } }
+  for (const e of enemies) { const ws = warScore(t, e); if (ws > 0.35 && !canOfferPeace(t, e)) { say(5, `${natName(e)} is beaten (war score +${Math.round(ws * 100)}). Demand terms and keep what we hold.`, { tab:'dip' }); break; } if (ws < -0.35) { say(6, `The war with ${natName(e)} is going badly (war score ${Math.round(ws * 100)}). Consider a white peace before the home front cracks.`, { tab:'dip' }); break; } }
+  { // an opportunity: a weakly held enemy province next to a big stack
+    let best = null;
+    for (const i of armiesOf(t)) { const Sx = stackOf(i, t); if (landN(Sx.u) < 4) continue; for (const j of PROV[i].adj) { if (!W(t, G.prov[j].o)) continue; const o = forcesAt(G.prov[j]) ? attackValue(t, Sx.u, j, { from:i }) / Math.max(0.3, defenseValue(j, Sx.u, t)) : 9; if (o > 2 && (!best || PROV[j].vp > PROV[best.j].vp)) best = { i, j, o }; } }
+    if (best) say(3 + Math.min(3, PROV[best.j].vp / 3), `${PROV[best.j].name} is weakly held: our army at ${PROV[best.i].name} attacks at ${best.o >= 9 ? 'walkover' : best.o.toFixed(1) + ':1'} odds.`, { pid:best.j });
+  }
+  if (navyOf(t).cap === 0 && owned(t).some(i => PROV[i].coast) && atWar && enemies.some(e => navyOf(e).cap > 2)) say(3, 'We have no battle fleet while the enemy does. A few battle squadrons would protect our coasts and convoys.', { pid:homeProv(t) });
+  if (!atWar && G.tension > 60) say(4, `World tension is ${Math.round(G.tension)}%. War is coming: fortify the borders and build up the army.`, { tab:'army' });
+  if (n.hand.length >= HAND_MAX) say(2, 'Your hand of strategy cards is full. Play or discard one so new ones can arrive.', null);
+  if (!adv.length) say(1, 'The situation is in hand. Keep the factories busy and the labs working.', null);
+  adv.sort((a, b) => b.w - a.w);
+  const rep = { type:'report', from:H ? `${MONTHS_L[H.m]} ${H.y}` : '', to:dateStr(),
+    gained:gained.sort(byVP).slice(0, 6), lost:lost.sort(byVP).slice(0, 6), gainN:gained.length, lostN:lost.length,
+    vp0:S0.vp, vp:vpOf(t), div0:S0.div, div:landN(divisions(t)), kills:n.st.kills - S0.kills, losses:n.st.losses - S0.losses, won:n.st.won - S0.won, lostB:n.st.lost - S0.lost,
+    threats:threats.slice(0, 3).map(x => ({ pid:x.pid, foe:x.foe, ours:x.ours })), oil:Math.round(n.oil), oilNet:Math.round(net * 10) / 10, cut, low, stab:Math.round(n.stab),
+    advice:adv.slice(0, 3).map(a => ({ txt:a.txt, go:a.go })) };
+  return rep;
+}
+function tickReports() {
+  if (G.m !== 0 && G.m !== 6) return;
+  G.srs = G.srs || {};
+  for (const h of humanTags()) {
+    if (!A(h) || G.humans[h].dead) continue;
+    if (G.turn >= 3) { const r = situationReport(h); (G.lastSR || (G.lastSR = {}))[h] = r; pushInbox(h, { ...r }); }
+    G.srs[h] = srSnapshot(h);
+  }
+}
