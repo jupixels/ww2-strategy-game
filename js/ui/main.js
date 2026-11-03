@@ -58,7 +58,7 @@ const Ctl = {
   },
   async endTurn() {
     if (!G || G.over || busy || G.preview) return;
-    if (inboxOf(ME || '').some(x => x.type !== 'news') && this.mode !== 'sp') { shownUids.clear(); flushInbox(); toast('!', 'Decisions are waiting', 'Answer them before you end your turn.', 'war'); return; }
+    if (inboxOf(ME || '').some(x => x.type !== 'news' && x.type !== 'report') && this.mode !== 'sp') { shownUids.clear(); flushInbox(); toast('!', 'Decisions are waiting', 'Answer them before you end your turn.', 'war'); return; }
     if (this.mode === 'client') { Net.send({ t:'ready', v:!(G.ready && G.ready[ME]) }); return; }
     if (this.mode === 'host') { G.ready = G.ready || {}; G.ready[ME] = !G.ready[ME]; Net.checkReady(); Net.pushState(); renderAll(); return; }
     if (this.mode === 'hot') {
