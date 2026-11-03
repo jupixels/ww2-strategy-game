@@ -17,7 +17,7 @@ function renderDrawer() {
   let h = '';
   if (tab === 'army') {
     const d = divisions(pl), air = airOf(pl), navy = navyOf(pl);
-    let ready = 0; for (const p of G.prov) if (p.o === pl) ready += readyAt(p);
+    let ready = 0; for (const i of armiesOf(pl)) ready += readyAt(stackOf(i, pl));
     h = dh('High Command', 'Every army, airfield and general under your command.');
     h += kv([[iconSvg('inf') + d.inf, 'Infantry'], [iconSvg('art', 'art') + d.art, 'Artillery'], [iconSvg('arm', 'arm') + d.arm, 'Armor'], [iconSvg('mtn', 'mtn') + d.mtn, 'Mountain'], [iconSvg('par', 'par') + d.par, 'Airborne'], [ready, 'Ready'], [iconSvg('ftr') + air.ftr, 'Fighters'], [iconSvg('bmb') + air.bmb, 'Bombers'], [iconSvg('cap') + navy.cap + ' · ' + navy.sub, 'Ships · subs']]);
     // generals
@@ -32,14 +32,14 @@ function renderDrawer() {
     h += cvs.length ? cvs.map(v => `<div class="row orow" data-goto="${v.to}"><div><h4>${iconSvg('anchor')}${esc(PROV[v.from].name)} → ${esc(PROV[v.to].name)}</h4><p class="ounits">${LAND.filter(k => v.u[k]).map(k => iconSvg(k, k) + v.u[k]).join(' ')} · ${v.kind === 'invade' ? '<span class="tr">invasion</span>' : 'reinforcement'} · via ${v.route.map(z => esc(SEA[z].n)).join(', ')} · ~${Math.round(routeRisk(v.route, pl) * 100)}% risk</p></div><div><button class="btn" data-unship="${v.id}" ${act ? '' : 'disabled'} title="Bring them back to port, ready to act">Recall</button></div></div>`).join('')
       : `<div class="hint">Select an army in a port: <span style="color:#86dde2">teal</span> provinces across the sea take a convoy, <span style="color:#f0a25a">orange</span> ones an overseas invasion. Convoys cross up to ${convoyHops(pl)} sea zones and land at the end of the month. Every battle squadron adds 2 divisions of sealift and escorts convoys in its waters.</div>`;
     h += `<div class="sect">Armies</div><div class="seg filt">${[['ready','Ready'],['front','At the front'],['sup','Low supply'],['all','All']].map(([k, l]) => `<button class="${outFilter === k ? 'on' : ''}" data-filt="${k}">${l}</button>`).join('')}</div>`;
-    const stacks = owned(pl).filter(i => unitsAt(G.prov[i])).filter(i => {
-      const p = G.prov[i];
+    const stacks = armiesOf(pl).filter(i => {
+      const p = stackOf(i, pl);
       if (outFilter === 'ready') return readyAt(p) > 0;
       if (outFilter === 'front') return PROV[i].adj.some(j => W(pl, G.prov[j].o));
-      if (outFilter === 'sup') return p.sup < 1;
+      if (outFilter === 'sup') return G.prov[i].sup < 1;
       return true;
-    }).sort((a, b) => unitsAt(G.prov[b]) - unitsAt(G.prov[a]));
-    h += stacks.slice(0, 60).map(i => { const p = G.prov[i], g = genAt(i, pl); return `<div class="row orow" data-goto="${i}"><div><h4>${esc(PROV[i].name)}${g ? ' ' + iconSvg('gen') : ''}</h4><p class="ounits">${LAND.filter(k => p.u[k]).map(k => iconSvg(k, k) + p.u[k]).join(' ')}${p.sup < 1 ? ` · <span class="tr">supply ${Math.round(p.sup * 100)}%</span>` : ''}${p.dig ? ` · dug in ${p.dig}` : ''}</p></div><div>${readyAt(p) ? `<span class="chip ally">${readyAt(p)} ready</span>` : ''}</div></div>`; }).join('') || '<div class="hint">Nothing matches.</div>';
+    }).sort((a, b) => landN(stackOf(b, pl).u) - landN(stackOf(a, pl).u));
+    h += stacks.slice(0, 60).map(i => { const p = stackOf(i, pl), g = genAt(i, pl); return `<div class="row orow" data-goto="${i}"><div><h4>${esc(PROV[i].name)}${g ? ' ' + iconSvg('gen') : ''}</h4><p class="ounits">${LAND.filter(k => p.u[k]).map(k => iconSvg(k, k) + p.u[k]).join(' ')}${G.prov[i].sup < 1 ? ` · <span class="tr">supply ${Math.round(G.prov[i].sup * 100)}%</span>` : ''}${G.prov[i].o !== pl ? ` · in ${esc(natName(G.prov[i].o))}` : ''}${p.dig ? ` · dug in ${p.dig}` : ''}</p></div><div>${readyAt(p) ? `<span class="chip ally">${readyAt(p)} ready</span>` : ''}</div></div>`; }).join('') || '<div class="hint">Nothing matches.</div>';
     h += `<div class="sect">Field manual</div><div class="hint">Select a province, then click a highlighted neighbour. <b>Shift-click</b> several of your provinces to strike one target together. Defenders with nowhere to retreat are <b>encircled and destroyed</b>. Armies far from depots lose strength — watch the supply truck.</div>`;
   } else if (tab === 'industry') {
     const oi = oilIncome(pl), ou = oilUpkeep(pl), ob = oilBreakdown(pl);

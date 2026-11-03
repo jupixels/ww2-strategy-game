@@ -7,9 +7,10 @@
 // what the army at `pid` can do: Map(provinceId -> 'move'|'attack'|'naval'|'land'|'para'|'convoy'|'invade')
 // 'naval'/'land' are instant short hops; 'convoy'/'invade' sail further and arrive at month end
 function targetsFor(t, pid) {
-  const r = new Map(), p = G.prov[pid];
-  if (!p || p.o !== t || readyAt(p) === 0) return r;
-  for (const j of PROV[pid].adj) { const o = G.prov[j].o; if (o === t) r.set(j, 'move'); else if (W(t, o)) r.set(j, 'attack'); }
+  const r = new Map(), p = stackOf(pid, t);
+  if (!p || readyAt(p) === 0) return r;
+  // marching into an ally's province leaves the troops there as an expeditionary force under your command
+  for (const j of PROV[pid].adj) { const o = G.prov[j].o; if (o === t || friendly(o, t) && A(o)) r.set(j, 'move'); else if (W(t, o)) r.set(j, 'attack'); }
   if (PROV[pid].coast) for (const [j, k] of navalTargets(pid, t)) if (!r.has(j)) r.set(j, k);
   if (PROV[pid].coast && liftLeft(t) > 0) for (const [j, v] of convoyTargets(pid, t, r)) if (!r.has(j)) r.set(j, v.kind);
   if (p.r.par > 0) for (const j of paraTargets(t, pid)) if (!r.has(j)) r.set(j, 'para');
@@ -18,11 +19,12 @@ function targetsFor(t, pid) {
 function execMove(t, from, to, amt) {
   const k = targetsFor(t, from).get(to);
   if (k !== 'move' && k !== 'naval') return null;
-  const p = G.prov[from], T = G.prov[to];
-  const part = portion(p, amt); if (!landN(part)) return null;
-  const all = landN(part) >= readyAt(p) && readyAt(p) === unitsAt(p);
+  const p = stackOf(from, t), T = G.prov[to].o === t ? G.prov[to] : guestOf(to, t, true);
+  const part = portion(p, amt); if (!landN(part)) { cleanGuests(G.prov[to]); return null; }
+  const all = landN(part) >= readyAt(p) && readyAt(p) === landN(p.u);
   moveLand(p, T, part);
-  if (all || !unitsAt(p)) moveGeneral(from, to, t);
+  if (all || !landN(p.u)) moveGeneral(from, to, t);
+  cleanGuests(G.prov[from]);
   return { kind:k, from, to, part };
 }
 function execAttack(t, froms, to, amt, kindHint) {
@@ -33,9 +35,9 @@ function execAttack(t, froms, to, amt, kindHint) {
   for (const f of froms) {
     const k = targetsFor(t, f).get(to);
     if (!k || k === 'move' || k === 'naval') continue;
-    if (k === 'para') { const p = G.prov[f]; const part = emptyLand(); part.par = amt === 'one' ? 1 : amt === 'half' ? Math.ceil(p.r.par / 2) : p.r.par; srcs.push({ id:f, u:part }); kind = kind || 'para'; continue; }
-    const part = portion(G.prov[f], amt); if (!landN(part)) continue;
-    srcs.push({ id:f, u:part }); if (!kind || k === 'attack') kind = k;
+    if (k === 'para') { const p = stackOf(f, t); const part = emptyLand(); part.par = amt === 'one' ? 1 : amt === 'half' ? Math.ceil(p.r.par / 2) : p.r.par; srcs.push({ id:f, u:part, o:t }); kind = kind || 'para'; continue; }
+    const part = portion(stackOf(f, t), amt); if (!landN(part)) continue;
+    srcs.push({ id:f, u:part, o:t }); if (!kind || k === 'attack') kind = k;
   }
   if (!srcs.length) return null;
   const r = battle(srcs, to, { naval:kind === 'land', para:kind === 'para' });
@@ -50,7 +52,7 @@ function queueAttack(t, froms, to, amt) {
   for (const f of froms) {
     const k = targetsFor(t, f).get(to);
     if (!k || k === 'move' || k === 'naval') continue;
-    const p = G.prov[f];
+    const p = stackOf(f, t);
     const part = k === 'para' ? { ...emptyLand(), par:amt === 'one' ? 1 : p.r.par } : portion(p, amt);
     if (!landN(part)) continue;
     for (const kk of LAND) p.r[kk] -= part[kk];
@@ -64,7 +66,7 @@ function queueAttack(t, froms, to, amt) {
 function cancelOrder(t, id) {
   const i = G.orders.findIndex(o => o.id === id && o.t === t); if (i < 0) return false;
   const o = G.orders[i]; G.orders.splice(i, 1);
-  for (const s of o.srcs) { const p = G.prov[s.id]; if (p.o === t) for (const k of LAND) p.r[k] = Math.min(p.u[k], p.r[k] + s.u[k]); }
+  for (const s of o.srcs) { const p = stackOf(s.id, t); if (p) for (const k of LAND) p.r[k] = Math.min(p.u[k], p.r[k] + s.u[k]); }
   return true;
 }
 function resolveOrders() {
@@ -92,11 +94,11 @@ function resolveOrders() {
       const o = byT[t].shift(); if (!o) continue; left = true;
       if (!A(t)) continue;
       const srcs = [];
-      for (const s of o.srcs) { const p = G.prov[s.id]; if (p.o !== t) continue; const u = emptyLand(); for (const k of LAND) u[k] = Math.min(s.u[k], p.u[k]); if (landN(u)) srcs.push({ id:s.id, u }); }
+      for (const s of o.srcs) { const p = stackOf(s.id, t); if (!p) continue; const u = emptyLand(); for (const k of LAND) u[k] = Math.min(s.u[k], p.u[k]); if (landN(u)) srcs.push({ id:s.id, u, o:t }); }
       if (!srcs.length) continue;
-      if (!W(t, G.prov[o.to].o)) { if (G.prov[o.to].o === t && o.kind !== 'para') { for (const s of srcs) moveLand(G.prov[s.id], G.prov[o.to], s.u); } continue; }
+      if (!W(t, G.prov[o.to].o)) { if (G.prov[o.to].o === t && o.kind !== 'para') { for (const s of srcs) moveLand(stackOf(s.id, t), G.prov[o.to], s.u); } continue; }
       // reserved units were un-readied when queued; battle() expects them ready, so restore that first
-      for (const s of srcs) for (const k of LAND) G.prov[s.id].r[k] += s.u[k];
+      for (const s of srcs) { const S = stackOf(s.id, t); for (const k of LAND) S.r[k] += s.u[k]; }
       const r = battle(srcs, o.to, { naval:o.kind === 'land', para:o.kind === 'para', meeting:o.meeting });
       r.kind = o.kind; r.meeting = o.meeting; out.push(r);
     }

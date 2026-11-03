@@ -49,6 +49,42 @@ function portion(p, amt) {
   for (const k of LAND) o[k] = amt === 'half' ? Math.ceil(p.r[k] / 2) : p.r[k];
   return o;
 }
+/* ---------- expeditionary forces: a nation's army standing in an ally's province ----------
+   p.g = { TAG:{ u, r, xp, dig } }. The province owner's own army stays in p.u/p.r. */
+function guestOf(pid, t, make) {
+  const p = G.prov[pid]; if (!p) return null;
+  if (!p.g) { if (!make) return null; p.g = {}; }
+  return p.g[t] || (make ? (p.g[t] = { u:emptyLand(), r:emptyLand(), xp:0, dig:0 }) : null);
+}
+// the army t commands at pid: its own stack, or its expeditionary force there
+function stackOf(pid, t) { const p = G.prov[pid]; if (!p) return null; return p.o === t ? p : p.g && p.g[t] || null; }
+const guestN = p => { let s = 0; if (p.g) for (const t in p.g) s += landN(p.g[t].u); return s; };
+const forcesAt = p => unitsAt(p) + guestN(p);
+const guestTags = p => p.g ? Object.keys(p.g).filter(t => landN(p.g[t].u) > 0) : [];
+function cleanGuests(p) { if (!p.g) return; for (const t in p.g) if (!landN(p.g[t].u)) delete p.g[t]; if (!Object.keys(p.g).length) delete p.g; }
+// put troops of t down at pid: into its own province, or as guests in an ally's. False if neither.
+function depositAt(pid, t, u) {
+  const p = G.prov[pid]; if (!p || !A(t)) return false;
+  let S = null;
+  if (p.o === t) S = p; else if (friendly(p.o, t) && A(p.o)) S = guestOf(pid, t, true);
+  if (!S) return false;
+  for (const k of LAND) S.u[k] += u[k];
+  return true;
+}
+// guests whose host is no longer an ally (peace, a new alliance, a capture) go home; a host's own land absorbs them
+function sanitizeGuests() {
+  for (let i = 0; i < NP; i++) {
+    const p = G.prov[i]; if (!p.g) continue;
+    for (const t of Object.keys(p.g)) {
+      const S = p.g[t];
+      if (p.o === t) { for (const k of LAND) { p.u[k] += S.u[k]; p.r[k] += S.r[k]; } delete p.g[t]; continue; }
+      if (A(t) && friendly(p.o, t) && A(p.o)) continue;
+      delete p.g[t];
+      if (A(t)) { const h = homeProv(t); if (h >= 0) for (const k of LAND) G.prov[h].u[k] += S.u[k]; }
+    }
+    cleanGuests(p);
+  }
+}
 function moveLand(from, to, part) {
   for (const k of LAND) { const n = Math.min(part[k], from.u[k]); from.u[k] -= n; from.r[k] = Math.max(0, from.r[k] - n); to.u[k] += n; }
   // veterancy blends by size
@@ -143,7 +179,8 @@ function fleetOf(z, t) { return G.fleet[z][t] || { cap:0, sub:0, mv:0 }; }
 
 function rebuildWarSet() { G.warSet = new Set(G.wars); }
 function resetReady() {
-  for (const p of G.prov) { for (const k of LAND) p.r[k] = p.u[k]; p.ad = 0; }
+  sanitizeGuests();
+  for (const p of G.prov) { for (const k of LAND) p.r[k] = p.u[k]; p.ad = 0; if (p.g) for (const t in p.g) for (const k of LAND) p.g[t].r[k] = p.g[t].u[k]; }
   for (const z in G.fleet) for (const t in G.fleet[z]) G.fleet[z][t].mv = 0;
   for (const t in G.nat) { G.nat[t].rocket = false; G.nat[t].imports = 0; G.nat[t].lift = 0; }
 }
@@ -151,7 +188,9 @@ function log(txt) { G.log.unshift({ d:MONTHS[G.m] + ' ' + G.y, txt }); if (G.log
 function tension(n) { G.tension = clamp(G.tension + n, 0, 100); }
 function news(txt) { G.news.unshift(txt); if (G.news.length > 10) G.news.length = 10; Hooks.emit('news', txt); }
 function owned(t) { const r = []; for (let i = 0; i < NP; i++) if (G.prov[i].o === t) r.push(i); return r; }
-function divisions(t) { const o = emptyLand(); for (const p of G.prov) if (p.o === t) for (const k of LAND) o[k] += p.u[k]; return o; }
+function divisions(t) { const o = emptyLand(); for (const p of G.prov) { if (p.o === t) for (const k of LAND) o[k] += p.u[k]; else if (p.g && p.g[t]) for (const k of LAND) o[k] += p.g[t].u[k]; } return o; }
+// every province where t has an army: its own and its expeditionary forces
+function armiesOf(t) { const r = []; for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (p.o === t ? unitsAt(p) : p.g && p.g[t] && landN(p.g[t].u)) r.push(i); } return r; }
 function airOf(t) { let f = 0, b = 0; for (const p of G.prov) if (p.o === t) { f += p.air.ftr; b += p.air.bmb; } return { ftr:f, bmb:b }; }
 function navyOf(t) { let c = 0, s = 0; for (const z in G.fleet) { const f = G.fleet[z][t]; if (f) { c += f.cap; s += f.sub; } } return { cap:c, sub:s }; }
 let _tvp = 0; function totalVP() { return _tvp || (_tvp = sum(PROV, p => p.vp)); }

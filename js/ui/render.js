@@ -643,6 +643,7 @@ function drawCounters(c) {
       const tw = c.measureText(txt).width + 18; c.fillRect(ax - 2, ay - 1, tw, 13); c.strokeStyle = mine ? '#f0cd7f' : 'rgba(255,255,255,.25)'; c.lineWidth = 1; c.strokeRect(ax - 1.5, ay - 0.5, tw - 1, 12);
       drawIcon(c, p.air.ftr ? 'ftr' : 'bmb', 10, ax, ay + 0.5, p.ad ? '#888' : '#cfe3ff'); c.fillStyle = '#dfeaf5'; c.textAlign = 'left'; c.fillText(txt, ax + 13, ay + 6);
     }
+    if (p.g) drawGuests(c, i, sx, sy);
     const tot = unitsAt(p); if (!tot) continue;
     if (sliding.has(i) && sliding.get(i) > now) continue;
     if (compact && !mine && !war && !ally) continue;

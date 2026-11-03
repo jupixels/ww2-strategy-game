@@ -196,6 +196,7 @@ function aiTurn(t, battles) {
     }
   }
   aiConvoys(t, n, fd, enemies, pacific);
+  aiGuests(t, enemies, battles);
   // paratroopers drop behind the lines when the odds are good
   for (const i of order) {
     const p = G.prov[i]; if (!p.r.par) continue;
@@ -282,13 +283,42 @@ function aiConvoys(t, n, fd, enemies, pacific) {
     // reinforce a front across the water
     if (fd[i] === 99 && rnd() < 0.6) {
       let best = null;
-      for (const [j, v] of tg) { if (v.kind !== 'convoy' || fd[j] !== 0 || v.risk > 0.15) continue; const th = threatAt(t, j) + PROV[j].vp; if (!best || th > best[0]) best = [th, j]; }
+      for (const [j, v] of tg) { if (v.kind !== 'convoy' || v.risk > 0.15 || !PROV[j].adj.some(x => enemies.has(G.prov[x].o))) continue;
+        if (G.prov[j].o !== t && (nowNum() < ymNum(1942, 10) || guestN(G.prov[j]) > 12)) /* allied fronts: from late 1942, and not without limit */ continue; const th = threatAt(t, j) + PROV[j].vp + (G.prov[j].o === t ? 2 : 0); if (!best || th > best[0]) best = [th, j]; }
       if (best) { const part = portion(p, 'half'); if (PROV[i].vp >= 4 && part.inf > 0) part.inf--; if (landN(part)) shipConvoy(t, i, best[1], part); }
     }
   }
 }
 // nations with a tradition of neutrality: they fight if attacked but never join an alliance by themselves
 const NEUTRAL_MINDED = new Set(['SWE','SWI','IRE','POR','SPA','TUR','ICE','AFG','SAU','ARG']);
+// distance (in provinces, through friendly land) to the nearest province touching an enemy
+function friendlyFront(t, enemies) {
+  const d = new Int16Array(NP).fill(99), q = [];
+  for (let i = 0; i < NP; i++) if (friendly(G.prov[i].o, t) && PROV[i].adj.some(j => enemies.has(G.prov[j].o))) { d[i] = 0; q.push(i); }
+  for (let h = 0; h < q.length; h++) { const i = q[h]; for (const j of PROV[i].adj) if (d[j] > d[i] + 1 && friendly(G.prov[j].o, t)) { d[j] = d[i] + 1; q.push(j); } }
+  return d;
+}
+// expeditionary forces in allied provinces: strike when the odds are good, otherwise make for the front
+function aiGuests(t, enemies, battles) {
+  let fd = null;
+  for (let i = 0; i < NP; i++) {
+    const p = G.prov[i]; if (!p.g || !p.g[t]) continue;
+    const S = p.g[t]; if (!readyAt(S)) continue;
+    let best = null;
+    for (const j of PROV[i].adj) {
+      if (!enemies.has(G.prov[j].o)) continue;
+      const part = portion(S, 'all'), T = G.prov[j];
+      const odds = forcesAt(T) ? attackValue(t, part, j, { from:i }) / Math.max(0.3, defenseValue(j, part, t)) : 9;
+      const sc = odds * (1 + PROV[j].vp * 0.08);
+      if (odds >= 1.2 && (!best || sc > best[0])) best = [sc, j];
+    }
+    if (best) { battles.push(battle([{ id:i, u:portion(S, 'all'), o:t }], best[1])); continue; }
+    if (PROV[i].adj.some(j => enemies.has(G.prov[j].o))) continue; // hold the line beside the enemy
+    fd = fd || friendlyFront(t, enemies);
+    const nb = PROV[i].adj.filter(j => fd[j] < fd[i] && friendly(G.prov[j].o, t) && A(G.prov[j].o));
+    if (nb.length) execMove(t, i, nb.sort((a, b) => threatAt(t, b) - threatAt(t, a))[0], 'all');
+  }
+}
 function aiDiplomacy() {
   // dictatorships pick new fights from 1942 on
   if (G.y >= 1942) for (const t of ['GER','ITA','SOV','VIC','SPA','TUR','JAP']) {

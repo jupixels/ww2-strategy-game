@@ -23,7 +23,8 @@ function endMonth() {
       if (host && A(host) && src !== -1) { const c = homeProv(host); if (c >= 0) {
         const arm = src != null ? Math.min(1, G.prov[src].u.arm) : 1;
         if (src != null) { G.prov[src].u.inf -= 2; G.prov[src].u.arm -= arm; clampReady(G.prov[src]); }
-        G.prov[c].u.inf += 2; G.prov[c].u.arm += arm; notify(host, '★', 'US Expeditionary Force arrives', `2 infantry${arm ? ' and 1 armored division' : ' divisions'} land at ${PROV[c].name}.`, 'medal'); } }
+        // on the world map they stay American: an expeditionary force under US command in the host's capital
+        const S = src != null && friendly('USA', host) ? guestOf(c, 'USA', true) : G.prov[c]; S.u.inf += 2; S.u.arm += arm; notify(host, '★', 'US Expeditionary Force arrives', `2 infantry${arm ? ' and 1 armored division' : ' divisions'} land at ${PROV[c].name}.`, 'medal'); } }
     }
     // 4. the war at sea
     for (const z in G.fleet) { const tags = Object.keys(G.fleet[z]); for (let i = 0; i < tags.length; i++) for (let j = i + 1; j < tags.length; j++) if (W(tags[i], tags[j]) && G.fleet[z][tags[i]] && G.fleet[z][tags[j]]) navalBattle(z, tags[i], tags[j]); }
@@ -61,6 +62,10 @@ function endMonth() {
       if (isWinter() && unitsAt(p) && A(p.o) && PROV[G.prov.indexOf(p)].cold && p.sup < 1 && !WINTER_LANDS.has(p.o) && !nat(p.o).fx.weather) { const l = takeLosses(p.u, rr(unitsAt(p) * 0.04)); nat(p.o).lm = (nat(p.o).lm || 0) + landN(l); }
       if (!p.sup && unitsAt(p) && A(p.o)) { const g = G.gens.find(x => x.pid === G.prov.indexOf(p) && x.tag === p.o); if (!(g && g.tr === 'logistics')) { const l = takeLosses(p.u, rr(unitsAt(p) * 0.1)); nat(p.o).lm = (nat(p.o).lm || 0) + landN(l); } }
     }
+    // expeditionary forces share their host's supply, and its hardships
+    for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (!p.g) continue; for (const gt of guestTags(p)) { const S = p.g[gt]; let l = 0;
+      if (!p.sup) l += rr(landN(S.u) * 0.1); else if (isWinter() && PROV[i].cold && p.sup < 1 && !WINTER_LANDS.has(gt)) l += rr(landN(S.u) * 0.04);
+      if (l) { const x = takeLosses(S.u, l); clampReady(S); nat(gt).lm = (nat(gt).lm || 0) + landN(x); } } cleanGuests(p); }
     tickResistance();
     fixGenerals();
     resetReady();

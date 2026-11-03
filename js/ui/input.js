@@ -33,10 +33,10 @@ function click(sx, sy, right, shift) {
   if (fb && !pickMode) { SFX.click(); if (selFleet && selFleet.z === fb.z) clearSelection(); else selectFleet(fb.z); return; }
   const id = pickAt(sx, sy);
   if (pickMode) { pickClick(id); return; }
-  if (sel && id >= 0 && targets.has(id) && !(shift && G.prov[id].o === ME)) { execOrder(id); return; }
+  if (sel && id >= 0 && targets.has(id) && !(shift && stackOf(id, ME))) { execOrder(id); return; }
   if (right) return;
   if (id < 0) { clearSelection(); return; }
-  if (shift && sel && G.prov[id].o === ME && G.prov[sel.id].o === ME) { SFX.click(); select(id, true); return; }
+  if (shift && sel && stackOf(id, ME) && stackOf(sel.id, ME)) { SFX.click(); select(id, true); return; }
   if (sel && sel.id === id && !sel.multi) { clearSelection(); return; }
   SFX.click(); select(id);
 }

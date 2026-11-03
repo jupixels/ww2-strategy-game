@@ -22,7 +22,7 @@ function navalTargets(pid, t) {
   for (const z of zs) for (const j of ZONE_PROVS[z]) {
     if (j === pid || PROV[pid].adj.includes(j) || out.has(j) || dist(pid, j) > 760) continue;
     const o = G.prov[j].o;
-    if (o === t) out.set(j, 'naval'); else if (W(t, o)) out.set(j, 'land');
+    if (o === t || friendly(o, t) && A(o)) out.set(j, 'naval'); else if (W(t, o)) out.set(j, 'land');
   }
   return out;
 }
@@ -77,7 +77,7 @@ function convoyTargets(pid, t, skip) {
   const routes = seaRoutes(pid, t);
   for (const [z, route] of routes) for (const j of ZONE_PROVS[z]) {
     if (j === pid || (skip && skip.has(j))) continue;
-    const o = G.prov[j].o, kind = o === t ? 'convoy' : W(t, o) ? 'invade' : null; if (!kind) continue;
+    const o = G.prov[j].o, kind = o === t || friendly(o, t) && A(o) ? 'convoy' : W(t, o) ? 'invade' : null; if (!kind) continue;
     const prev = out.get(j);
     if (!prev || route.length < prev.route.length) out.set(j, { kind, route, risk:0 });
   }
@@ -88,7 +88,7 @@ function convoyInfo(t, from, to) { const m = convoyTargets(from, t); return m.ge
 // trim a stack to n divisions, shedding the most numerous types first
 function trimTo(u, n) { while (landN(u) > n) { let k = LAND[0]; for (const kk of LAND) if (u[kk] > u[k]) k = kk; u[k]--; } return u; }
 function shipConvoy(t, from, to, amt) {
-  const p = G.prov[from]; if (!p || p.o !== t) return null;
+  const p = stackOf(from, t); if (!p) return null;
   const k = targetsFor(t, from).get(to); if (k !== 'convoy' && k !== 'invade') return null;
   const info = convoyInfo(t, from, to); if (!info) return null;
   const left = liftLeft(t); if (left <= 0) return null;
@@ -96,17 +96,18 @@ function shipConvoy(t, from, to, amt) {
   for (const kk of LAND) { p.u[kk] -= part[kk]; p.r[kk] -= part[kk]; }
   clampReady(p);
   const n = nat(t); n.lift = (n.lift || 0) + landN(part);
-  const g = genAt(from, t), gid = g && !unitsAt(p) ? g.id : null;
+  const g = genAt(from, t), gid = g && !landN(p.u) ? g.id : null;
   const c = { id:(G.cid = (G.cid || 0) + 1), t, u:part, from, to, route:info.route, kind:info.kind, gid, xp:p.xp };
   (G.convoys || (G.convoys = [])).push(c);
-  if (!unitsAt(p)) { p.dig = 0; p.xp = 0; }
+  if (!landN(p.u)) { p.dig = 0; p.xp = 0; }
+  cleanGuests(G.prov[from]);
   return c;
 }
 function cancelConvoy(t, id) {
   const L = G.convoys || [], i = L.findIndex(c => c.id === id && c.t === t); if (i < 0) return false;
-  const c = L[i], p = G.prov[c.from]; if (p.o !== t) return false;
+  const c = L[i]; if (!depositAt(c.from, t, c.u)) return false;
   L.splice(i, 1);
-  for (const k of LAND) { p.u[k] += c.u[k]; p.r[k] += c.u[k]; }
+  const p = stackOf(c.from, t); for (const k of LAND) p.r[k] = Math.min(p.u[k], p.r[k] + c.u[k]);
   nat(t).lift = Math.max(0, (nat(t).lift || 0) - landN(c.u));
   return true;
 }
@@ -121,12 +122,12 @@ function landConvoys(out) {
     const lost = landN(takeLosses(c.u, rr(n0 * risk)));
     const n = nat(t); if (lost) { n.lm = (n.lm || 0) + lost; n.st.losses += lost; }
     const T = G.prov[c.to], g = c.gid != null ? G.gens.find(x => x.id === c.gid && x.tag === t) : null;
-    const home = G.prov[c.from].o === t ? c.from : homeProv(t);
+    const home = stackOf(c.from, t) || friendly(G.prov[c.from].o, t) && A(G.prov[c.from].o) ? c.from : homeProv(t);
     const rep = { t, from:c.from, to:c.to, lost, n:n0, kind:c.kind };
     if (!landN(c.u)) { rep.sunk = true; }
-    else if (T.o === t) {
-      for (const k of LAND) T.u[k] += c.u[k];
-      const b = unitsAt(T) - landN(c.u); T.xp = b > 0 ? (T.xp * b + (c.xp || 0) * landN(c.u)) / unitsAt(T) : (c.xp || 0);
+    else if (T.o === t || friendly(T.o, t) && A(T.o)) {
+      depositAt(c.to, t, c.u); const S = stackOf(c.to, t);
+      const b = landN(S.u) - landN(c.u); S.xp = b > 0 ? ((S.xp || 0) * b + (c.xp || 0) * landN(c.u)) / landN(S.u) : (c.xp || 0);
       if (g && !genAt(c.to, t)) g.pid = c.to;
       rep.landed = true;
     } else if (W(t, T.o)) {
@@ -135,7 +136,7 @@ function landConvoys(out) {
       if (r.win && g && !genAt(c.to, t)) g.pid = c.to;
       out.battles.push(r); rep.battle = true; rep.win = r.win;
       if (r.win && PROV[c.to].vp >= 3) news(`${n.adj.toUpperCase()} TROOPS STORM THE BEACHES AT ${PROV[c.to].name.toUpperCase()}`);
-    } else if (home >= 0) { for (const k of LAND) G.prov[home].u[k] += c.u[k]; rep.back = true; }
+    } else if (home >= 0) { depositAt(home, t, c.u); rep.back = true; }
     if (isHuman(t)) {
       const nm = PROV[c.to].name;
       if (rep.sunk) notify(t, '⚓', `Convoy to ${nm} lost`, `All ${n0} divisions went down with their transports.`, 'war');
@@ -230,7 +231,7 @@ function genBonus(g, kind, ter, u) {
   return m;
 }
 function genXP(g, n) { if (!g) return; g.xp += n; const lv = g.xp >= 8 ? 3 : g.xp >= 3 ? 2 : 1; if (lv > g.lv) { g.lv = lv; notify(g.tag, '★', `${g.name} promoted`, `Now rank ${lv}: +${(lv - 1) * 5}% in every battle.`, 'medal'); if (lv === 3) award(g.tag, 'general'); } }
-function fixGenerals() { G.gens = G.gens.filter(g => A(g.tag)); for (const g of G.gens) if (!G.prov[g.pid] || G.prov[g.pid].o !== g.tag) { const h = homeProv(g.tag); if (h >= 0 && !genAt(h, g.tag)) g.pid = h; else { const alt = owned(g.tag).find(i => !genAt(i, g.tag)); if (alt != null) g.pid = alt; } } }
+function fixGenerals() { G.gens = G.gens.filter(g => A(g.tag)); for (const g of G.gens) if (!G.prov[g.pid] || !stackOf(g.pid, g.tag)) { const h = homeProv(g.tag); if (h >= 0 && !genAt(h, g.tag)) g.pid = h; else { const alt = owned(g.tag).find(i => !genAt(i, g.tag)); if (alt != null) g.pid = alt; } } }
 // a general whose army leaves goes with it; one whose province falls retreats or is captured
 function moveGeneral(from, to, t) { const g = genAt(from, t); if (g && !genAt(to, t)) g.pid = to; }
 function displaceGeneral(pid, t, retreatTo) {
@@ -265,8 +266,10 @@ function defenseValue(pid, atkUnits, atkTag, detail) {
   const p = G.prov[pid], P = PROV[pid], n = nat(p.o);
   const f = detail || [];
   let s = unitStrength(n, p.u, false, P.ter);
-  if (unitsAt(p) > 0 && P.vp >= 8) s += 1.5;
+  for (const gt of guestTags(p)) s += unitStrength(nat(gt), p.g[gt].u, false, P.ter);
+  if (forcesAt(p) > 0 && P.vp >= 8) s += 1.5;
   f.push(['Troops', s]);
+  if (guestTags(p).length) f.push(['Allied troops', 1.0001]);
   const mul = (label, m) => { if (Math.abs(m - 1) > 0.005) { s *= m; f.push([label, m]); } };
   mul(TER[P.ter].n, TER[P.ter].d);
   const artShare = atkUnits && landN(atkUnits) ? atkUnits.art / landN(atkUnits) : 0;
@@ -303,7 +306,7 @@ function attackValue(t, u, pid, opts, detail) {
   const winterProof = WINTER_LANDS.has(t) || n.fx.weather || (opts.from >= 0 && genAt(opts.from, t) && genAt(opts.from, t).tr === 'winter');
   if (isWinter() && P.cold && !winterProof) mul('Winter', 0.65);
   if (mud && !winterProof) mul('Mud', 0.8);
-  if (opts.from >= 0) { const sp = G.prov[opts.from]; mul('Veterancy', 1 + 0.08 * sp.xp); if (sp.sup < 1) { const g = genAt(opts.from, t); if (!(g && g.tr === 'logistics')) mul(sp.sup ? 'Supply lines' : 'Out of supply', 0.55 + 0.45 * sp.sup); } mul('General', genBonus(genAt(opts.from, t), 'atk', P.ter, u)); }
+  if (opts.from >= 0) { const sp = G.prov[opts.from], st = stackOf(opts.from, t) || sp; mul('Veterancy', 1 + 0.08 * (st.xp || 0)); if (sp.sup < 1) { const g = genAt(opts.from, t); if (!(g && g.tr === 'logistics')) mul(sp.sup ? 'Supply lines' : 'Out of supply', 0.55 + 0.45 * sp.sup); } mul('General', genBonus(genAt(opts.from, t), 'atk', P.ter, u)); }
   if (n.fx.march && (P.vp >= 5 || (A(d.o) && nat(d.o).capital === pid))) mul('March on the capital', 1.3);
   if (n.ops && n.ops.tg.includes(pid)) mul('Operation ' + n.ops.name, 1.15);
   if (A(d.o) && nat(d.o).fx.scorched) mul('Scorched earth', 0.8);
@@ -315,14 +318,16 @@ function attackValue(t, u, pid, opts, detail) {
   return s;
 }
 function battle(srcs, tid, opts = {}) {
-  const a = srcs[0].id >= 0 ? G.prov[srcs[0].id].o : srcs[0].o;
+  // srcs may carry o (the attacker) — needed when they march out of an ally's province
+  const a = srcs[0].o || G.prov[srcs[0].id].o;
   const an = nat(a), T = G.prov[tid], d = T.o, P = PROV[tid];
   const au = emptyLand();
-  for (const s of srcs) { for (const k of LAND) au[k] += s.u[k]; if (s.id >= 0) { const sp = G.prov[s.id]; for (const k of LAND) { sp.u[k] -= s.u[k]; sp.r[k] = Math.max(0, sp.r[k] - s.u[k]); } clampReady(sp); } }
-  const res = { a, d, tid, from:srcs.map(s => s.id), win:false, walk:false, r:0, al:0, dl:0, kessel:0, blitz:false, naval:!!opts.naval, para:!!opts.para, af:[], df:[], au:{ ...au }, du:{ ...T.u } };
-  const mainFrom = srcs[0].id;
+  for (const s of srcs) { for (const k of LAND) au[k] += s.u[k]; if (s.id >= 0) { const sp = stackOf(s.id, a); if (!sp) continue; for (const k of LAND) { sp.u[k] -= s.u[k]; sp.r[k] = Math.max(0, sp.r[k] - s.u[k]); } clampReady(sp); cleanGuests(G.prov[s.id]); } }
+  const du0 = { ...T.u }; for (const gt of guestTags(T)) for (const k of LAND) du0[k] += T.g[gt].u[k];
+  const res = { a, d, tid, from:srcs.map(s => s.id), win:false, walk:false, r:0, al:0, dl:0, kessel:0, blitz:false, naval:!!opts.naval, para:!!opts.para, af:[], df:[], au:{ ...au }, du:du0 };
+  const mainFrom = srcs[0].id, mainStack = mainFrom >= 0 ? stackOf(mainFrom, a) : null;
   const g = mainFrom >= 0 ? genAt(mainFrom, a) : null;
-  if (unitsAt(T) === 0) {
+  if (forcesAt(T) === 0) {
     res.win = res.walk = true;
     capture(tid, a, au, res, mainFrom);
     return res;
@@ -335,7 +340,10 @@ function battle(srcs, tid, opts = {}) {
   an.nextAtk = 1;
   const r = atk * roll / (def * roll2); res.r = r; res.odds = atk / def;
   const dLoss = clamp(0.16 * r, 0.05, 0.85), aLoss = clamp(0.16 / r, 0.04, 0.7);
-  const dl = takeLosses(T.u, rr(unitsAt(T) * dLoss)), al = takeLosses(au, rr(landN(au) * aLoss));
+  // defenders' losses fall on the host's army and any allied expeditionary forces alike, by size
+  const dl = emptyLand(), dTot = forcesAt(T), dN = rr(dTot * dLoss);
+  for (const S of [T, ...guestTags(T).map(gt => T.g[gt])]) { const l = takeLosses(S.u, Math.round(dN * landN(S.u) / dTot)); for (const k of LAND) dl[k] += l[k]; clampReady(S); }
+  const al = takeLosses(au, rr(landN(au) * aLoss));
   clampReady(T);
   res.al = landN(al); res.dl = landN(dl); res.alU = al; res.dlU = dl;
   an.lm = (an.lm || 0) + res.al; if (A(d)) nat(d).lm = (nat(d).lm || 0) + res.dl;
@@ -354,9 +362,16 @@ function battle(srcs, tid, opts = {}) {
       } else { res.kessel = unitsAt(T); res.dl += res.kessel; }
     }
     clearLand(T);
+    // allied expeditionary forces fall back too: to their own land, or an ally's, or they are lost
+    for (const gt of guestTags(T)) {
+      const S = T.g[gt], n0 = landN(S.u);
+      const to = PROV[tid].adj.filter(j => { const o = G.prov[j].o; return o === gt || friendly(o, gt) && A(o) && !W(o, a); }).sort((x, y) => (G.prov[y].o === gt) - (G.prov[x].o === gt))[0];
+      if (to != null && !opts.para && depositAt(to, gt, S.u)) displaceGeneral(tid, gt, to); else { res.kessel += n0; res.dl += n0; displaceGeneral(tid, gt, -1); }
+    }
+    delete T.g;
     displaceGeneral(tid, d, retreatTo);
     res.blitz = (an.tech.blitz || an.fx.blitz) && au.arm > 0 && r >= 2;
-    G.prov[tid].xp = Math.min(3, (mainFrom >= 0 ? G.prov[mainFrom].xp : 0) + 0.35);
+    G.prov[tid].xp = Math.min(3, (mainStack ? mainStack.xp || 0 : 0) + 0.35);
     if (g) { genXP(g, 1); g.pid = tid; }
     capture(tid, a, au, res, mainFrom);
   } else {
@@ -366,8 +381,10 @@ function battle(srcs, tid, opts = {}) {
     srcs.forEach((s, i) => {
       const last = i === srcs.length - 1, sh = landN(s.u) / tot, part = emptyLand();
       for (const k of LAND) { part[k] = last ? left[k] : Math.min(left[k], Math.round(au[k] * sh)); left[k] -= part[k]; }
-      const home = s.id >= 0 && G.prov[s.id].o === a ? s.id : s.back != null && s.back >= 0 && G.prov[s.back].o === a ? s.back : homeProv(a);
-      if (home >= 0 && G.prov[home].o === a && !opts.para) for (const k of LAND) G.prov[home].u[k] += part[k];
+      if (opts.para) return;
+      const ok = pid => pid != null && pid >= 0 && (G.prov[pid].o === a || friendly(G.prov[pid].o, a) && A(G.prov[pid].o));
+      const home = s.id >= 0 && ok(s.id) ? s.id : ok(s.back) ? s.back : homeProv(a);
+      if (home >= 0) depositAt(home, a, part);
     });
     T.xp = Math.min(3, T.xp + 0.25);
     const dg = genAt(tid, d); if (dg) genXP(dg, 1);
@@ -386,8 +403,9 @@ function capture(tid, a, u, res, from) {
   // air wings caught on the ground fly to a nearby friendly field, or are lost
   for (const k of AIR) if (T.air[k]) { const alt = PROV[tid].adj.find(j => G.prov[j].o === prev); if (alt != null) G.prov[alt].air[k] += T.air[k]; T.air[k] = 0; }
   if (A(prev) && nat(prev).fx.scorched) T.fac = 0;
-  T.o = newOwner; T.u = { ...u }; T.r = emptyLand(); T.ht = G.turn;
-  if (res && res.blitz) T.r.arm = u.arm;
+  T.o = newOwner; T.r = emptyLand(); T.ht = G.turn; delete T.g;
+  if (newOwner !== a) { T.u = emptyLand(); T.u.inf = 1; const S = guestOf(tid, a, true); S.u = { ...u }; S.r = emptyLand(); } else T.u = { ...u };
+  if (res && res.blitz && newOwner === a) T.r.arm = u.arm;
   T.dig = 0;
   if (newOwner !== a && res) res.liberated = newOwner;
   if (T.fort > 0 && !(res && res.walk)) T.fort--;
@@ -589,7 +607,7 @@ function airRaid(t, from, tid) {
   return { fac, kills, lost, esc };
 }
 function paraTargets(t, from) {
-  const p = G.prov[from]; if (p.o !== t || !p.r.par) return [];
+  const p = stackOf(from, t); if (!p || !p.r.par) return [];
   const h = hops(from);
   return G.prov.map((x, i) => i).filter(i => h[i] === PARA_RANGE && W(t, G.prov[i].o));
 }

@@ -162,6 +162,7 @@ const TIPS = [
   'Never attack Russia or Finland in winter unless you are Russian or Finnish: attackers lose 35% and freeze.',
   'Control the sea: landings and sea supply need waters the enemy does not control. Submarines strangle island economies and sink convoys.',
   '<b>Convoys</b>: select an army in a port and click a <span style="color:#86dde2">teal</span> province to ship it, or an <span style="color:#f0a25a">orange</span> one to invade. It lands at month end; escort the route with battle squadrons. Each battle squadron adds 2 divisions of sealift.',
+  'March or ship troops into an <b>ally\'s</b> provinces: they stand there as an expeditionary force under your command, defend beside your ally and draw its supply. Their tab shows under the province counter.',
   'Your allies only fight your wars by themselves when you are attacked. Started one? Press <b>Call to war</b> in the World panel.',
   'Oil is burned by ships, aircraft and tanks — never by marching or shipping troops — and only half as fast in peacetime. Running dry weakens them in proportion to the shortfall; decommission idle ships to save fuel.',
   'One <b>strategy card</b> a month. Save Blitzkrieg for the big push and Scorched Earth for the retreat. Discard cards you will never use (+2 politics) to make room.',

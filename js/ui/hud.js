@@ -125,7 +125,7 @@ function computeTargets() {
 function select(id, add) {
   if (id == null || id < 0) { clearSelection(); return; }
   selFleet = null; fleetTargetsSet = new Set();
-  if (add && sel && G.prov[id].o === ME && sel.id !== id) { sel.multi = sel.multi || new Set(); if (sel.multi.has(id)) sel.multi.delete(id); else sel.multi.add(id); }
+  if (add && sel && stackOf(id, ME) && sel.id !== id) { sel.multi = sel.multi || new Set(); if (sel.multi.has(id)) sel.multi.delete(id); else sel.multi.add(id); }
   else sel = { id, amt:sel && sel.amt || 'all' };
   computeTargets(); rebuildOverlay(); staticDirty = true; renderCard(); if (tab === 'army') renderDrawer();
   $('#legend').hidden = !targets.size; hoverId = -1;
@@ -155,11 +155,11 @@ function execOrder(to) {
     if (G.tut) G.tut.attacked = 1;
   }
   if (!sel) return;
-  const p = G.prov[sel.id];
-  if (!readyAt(p) && G.prov[to].o === ME && readyAt(G.prov[to]) > 0 && !sel.multi) select(to); else select(sel.id);
+  const p = stackOf(sel.id, ME) || G.prov[sel.id], T = stackOf(to, ME);
+  if (!readyAt(p) && T && readyAt(T) > 0 && !sel.multi) select(to); else select(sel.id);
 }
 function oddsFor(srcs, to, kind) {
-  const u = emptyLand(); for (const s of srcs) { const part = kind === 'para' ? { ...emptyLand(), par:G.prov[s].r.par } : portion(G.prov[s], sel ? sel.amt : 'all'); for (const k of LAND) u[k] += part[k]; }
+  const u = emptyLand(); for (const s of srcs) { const S = stackOf(s, ME) || G.prov[s]; const part = kind === 'para' ? { ...emptyLand(), par:S.r.par } : portion(S, sel ? sel.amt : 'all'); for (const k of LAND) u[k] += part[k]; }
   const T = G.prov[to]; if (!unitsAt(T)) return { odds:Infinity, af:[], df:[] };
   const af = [], df = [];
   const atk = attackValue(ME, u, to, { naval:kind === 'land', para:kind === 'para', from:srcs[0] }, af);
@@ -195,11 +195,17 @@ function renderCard() {
   if (vis && p.xp >= 0.5) extras.push(`${'★'.repeat(Math.floor(p.xp)) || '☆'} veterans`);
   if (P.zones.length) extras.push(`${iconSvg('anchor')} ${P.zones.map(z => SEA[z].n).join(', ')}`);
   if (extras.length) h += `<div class="extras">${extras.map(x => `<span>${x}</span>`).join('')}</div>`;
+  const gts = guestTags(p), myG = pl ? guestOf(i, pl) : null;
   h += `<div class="units"><div class="u">${unitRow(p.u, vis)}</div>`;
-  if (mine && canAct) h += `<div class="seg" role="group" aria-label="Order size">${['all','half','one'].map(a => `<button class="${sel.amt === a ? 'on' : ''}" data-amt="${a}">${a}</button>`).join('')}</div>`;
+  if ((mine || myG) && canAct) h += `<div class="seg" role="group" aria-label="Order size">${['all','half','one'].map(a => `<button class="${sel.amt === a ? 'on' : ''}" data-amt="${a}">${a}</button>`).join('')}</div>`;
   h += `</div>`;
+  if (gts.length && vis) h += `<div class="sect">${myG && gts.length === 1 ? 'Your expeditionary force' : 'Allied forces here'}</div>` + gts.map(gt => `<div class="units"><div class="u">${flagImg(gt)}<b style="font-size:14px">${esc(natName(gt))}</b></div><div class="u">${unitRow(p.g[gt].u, true)}</div></div>`).join('');
   if (g) h += `<div class="gen">${iconSvg('gen')}<div><b>${esc(g.name)}</b> <span class="lv">${'★'.repeat(g.lv)}</span><p>${TRAITS[g.tr].n}: ${TRAITS[g.tr].d}</p></div></div>`;
   if ((p.air.ftr || p.air.bmb) && vis) h += `<div class="airbase">${iconSvg('ftr')} ${p.air.ftr} fighters &nbsp; ${iconSvg('bmb')} ${p.air.bmb} bombers${mine && p.ad ? ' · flown this month' : ''}</div>`;
+  if (!mine && myG && canAct) {
+    const ready = readyAt(myG);
+    h += ready ? `<div class="hint"><b>${ready} of your divisions ready</b> in ${esc(natName(p.o))}'s territory. They fight beside your ally and draw its supply. Click <span class="tg">green</span> to move, <span class="tr">red</span> to attack, <span style="color:#86dde2">teal</span> or <span style="color:#f0a25a">orange</span> to sail.</div>` : '<div class="hint">Your expeditionary force has acted this month.</div>';
+  }
   if (mine && canAct) {
     const ready = readyAt(p);
     if (sel.multi && sel.multi.size) h += `<div class="hint"><b>${sel.multi.size + 1} provinces selected.</b> Click a highlighted province to move or attack with all of them. Shift-click to add or remove.</div>`;
@@ -296,9 +302,9 @@ function closeModal() { const m = $('#modal'); m.hidden = true; m.innerHTML = ''
 let armyCycle = 0;
 function readyStacks() {
   const r = []; if (!ME) return r;
-  for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (p.o === ME && readyAt(p) > 0) r.push(i); }
+  for (const i of armiesOf(ME)) if (readyAt(stackOf(i, ME)) > 0) r.push(i);
   const front = i => PROV[i].adj.some(j => W(ME, G.prov[j].o)) ? 1 : 0;
-  return r.sort((a, b) => front(b) - front(a) || readyAt(G.prov[b]) - readyAt(G.prov[a]));
+  return r.sort((a, b) => front(b) - front(a) || readyAt(stackOf(b, ME)) - readyAt(stackOf(a, ME)));
 }
 function nextArmy() {
   if (!G || busy || !Ctl.canAct()) return;
@@ -321,6 +327,27 @@ function renderActions() {
   const lbl = Ctl.endLabel();
   et.querySelector('.l1').textContent = lbl[0]; $('#etSub').textContent = lbl[1];
   et.classList.toggle('waiting', !!lbl[2]);
+}
+
+/* ---------- expeditionary forces on the map ---------- */
+// small flag-and-number tabs under a province's counter, one per allied army standing there
+function drawGuests(c, i, sx, sy) {
+  const p = G.prov[i]; if (!p.g || cam.z < 0.45) return;
+  const gts = guestTags(p); if (!gts.length) return;
+  if (ME && !friendly(ME, p.o) && !visibleTo(ME, i)) return;
+  c.save(); c.font = `700 10px ${FONT_BODY}`; c.textBaseline = 'middle'; c.textAlign = 'left';
+  let x = Math.round(sx - gts.length * 17), y = Math.round(sy + (cam.z < 0.85 ? 20 : 24));
+  for (const gt of gts) {
+    const txt = String(landN(p.g[gt].u)), w = Math.round(c.measureText(txt).width + 19);
+    c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(x + 1, y + 1, w, 12);
+    c.fillStyle = darkOf(natColor(gt)); c.fillRect(x, y, w, 12);
+    c.drawImage(flagSprite(gt), x + 2, y + 2, 11, 8);
+    c.lineWidth = 1; c.strokeStyle = gt === ME ? '#f0cd7f' : ME && W(ME, gt) ? '#ff8a6a' : '#9fd68f'; c.strokeRect(x + 0.5, y + 0.5, w - 1, 11);
+    c.fillStyle = '#fff'; c.fillText(txt, x + 15, y + 6.5);
+    if (gt === ME && readyAt(p.g[gt])) { c.beginPath(); c.arc(x + w, y, 2.6, 0, 7); c.fillStyle = '#f0cd7f'; c.fill(); }
+    x += w + 3;
+  }
+  c.restore();
 }
 
 /* ---------- convoys at sea ---------- */
@@ -375,7 +402,7 @@ function hover(e) {
     else if (k === 'convoy' || k === 'invade') {
       const v = convoyInfo(ME, sel.id, id);
       if (v) {
-        const nDiv = Math.min(landN(portion(G.prov[sel.id], sel.amt)), liftLeft(ME)), risk = Math.round(v.risk * 100);
+        const nDiv = Math.min(landN(portion(stackOf(sel.id, ME), sel.amt)), liftLeft(ME)), risk = Math.round(v.risk * 100);
         if (k === 'invade') { const o = oddsFor([sel.id], id, 'land'); h += `<em class="${o.odds >= 1.3 ? 'good' : o.odds >= 1 ? 'even' : 'bad'}">Overseas invasion · ${o.odds === Infinity ? 'undefended shore' : 'odds now ' + o.odds.toFixed(2) + ':1'}</em>`; }
         else h += `<em class="good">Convoy here</em>`;
         h += `<span>${nDiv} division${nDiv === 1 ? '' : 's'} sail via ${v.route.map(z => SEA[z].n).join(' → ')}. Lands at the end of the month.</span>`;

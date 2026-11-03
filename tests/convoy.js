@@ -85,5 +85,35 @@ ok(ev(`oilUpkeep('ENG')`) === pe, 'neutral nation keeps peacetime upkeep');
 ev(`nat('GER').oil = 0; nat('GER').fuel = fuelLevel('GER');`);
 ok(ev(`fuelMul('GER')`) > 0.6, `graded fuel penalty (${ev(`fuelMul('GER').toFixed(2)`)})`);
 
+// 7. expeditionary forces in allied territory
+api.newGame({ humans:{ GER:{ name:'p' } }, scenario:1939, seed:5 });
+const it = ev(`(() => { for (const i of owned('GER')) for (const j of PROV[i].adj) if (G.prov[j].o === 'ITA' && G.prov[i].u.inf >= 2) return [i, j]; return null; })()`);
+ok(ev(`isAxis('ITA')`), 'Italy is an ally in 1939');
+if (it) {
+  ev(`resetReady()`);
+  ok(ev(`targetsFor('GER', ${it[0]}).get(${it[1]})`) === 'move', 'can march into an ally\'s province');
+  const mv = api.doCommand('GER', { c:'move', from:it[0], to:it[1], amt:'one' }, 'instant');
+  ok(mv.ok && ev(`guestOf(${it[1]}, 'GER') && landN(guestOf(${it[1]}, 'GER').u)`) === 1, 'troops stand there as guests');
+  ok(ev(`divisions('GER').inf`) >= 1 && ev(`armiesOf('GER').includes(${it[1]})`), 'guests count as our army');
+  // defend together: an attack on the province hits host and guests
+  ev(`G.prov[${it[1]}].g.GER.u.inf = 6; G.prov[${it[1]}].u.inf = 1;`);
+  const enemy = ev(`(() => { for (const j of PROV[${it[1]}].adj) if (!friendly(G.prov[j].o, 'GER')) return G.prov[j].o; return null; })()`);
+  if (enemy) {
+    const d0 = ev(`defenseValue(${it[1]}, null, '${enemy}')`); ev(`G.prov[${it[1]}].g.GER.u.inf = 0`); const d1 = ev(`defenseValue(${it[1]}, null, '${enemy}')`); ev(`G.prov[${it[1]}].g.GER.u.inf = 6`);
+    ok(d0 > d1 * 2, `guests add to the defence (${d0.toFixed(1)} vs ${d1.toFixed(1)})`);
+  }
+  // leaving the alliance sends them home at month end
+  ev(`leaveFaction('ITA'); for (const e of enemiesOf('ITA')) endWar('ITA', e); resetReady();`);
+  ok(!ev(`guestOf(${it[1]}, 'GER')`), 'guests go home when the alliance breaks');
+}
+if (WORLD) {
+  api.newGame({ humans:{ USA:{ name:'p' } }, scenario:1941, seed:5 });
+  ev(`G.facs.ALLIES.m.push('USA'); G.prov[ID['New York']].u.inf += 6; resetReady();`);
+  ok(ev(`targetsFor('USA', ID['New York']).get(ID['London'])`) === 'convoy', 'convoy to an ally\'s port (London)');
+  api.doCommand('USA', { c:'ship', from:ev(`ID['New York']`), to:ev(`ID['London']`), amt:'all' }, 'instant');
+  api.endMonth();
+  ok(ev(`!!guestOf(ID['London'], 'USA')`), 'American troops are in Britain: ' + ev(`JSON.stringify(guestOf(ID['London'], 'USA') && guestOf(ID['London'], 'USA').u)`));
+}
+
 console.log(fails ? `${fails} FAILED` : 'all passed');
 process.exit(fails ? 1 : 0);
