@@ -134,7 +134,7 @@ function showEnd() {
     ${multi ? `<table class="score"><tr><th></th><th>Nation</th><th>${WORLD ? 'World' : 'Europe'}</th><th>Agendas</th><th>Score</th></tr>${rows.map((r, i) => `<tr class="${o.winners.includes(r.t) ? 'win' : ''}"><td>${i + 1}</td><td>${flagImg(r.t)} ${esc(natName(r.t))} <small>${esc(G.humans[r.t] ? G.humans[r.t].name || '' : '')}</small></td><td>${Math.round(vpOf(r.t) / totalVP() * 100)}%</td><td>${r.ag.filter(a => a.st === 'done').length}/${r.ag.length}</td><td><b>${r.s}</b></td></tr>`).join('')}</table>`
     : n ? `<p class="copy" style="columns:1">Victories ${n.st.won}, defeats ${n.st.lost}, provinces captured ${n.st.caps}. Enemy divisions destroyed: ${n.st.kills}. Medals: ${medalsOf(ME).length} of ${Object.keys(ACH).length}. Final dominion: ${share}% of ${REALM}. Score: <b>${scoreOf(ME)}</b>.</p>` : ''}
     ${n && n.agendas && n.agendas.length ? `<div class="agendas">${n.agendas.map(a => `<span class="${a.st}">${a.st === 'done' ? '✓' : '✕'} ${esc(agendaText(a))}</span>`).join('')}</div>` : ''}
-    ${leaderboardPostBox()}
+    ${leaderboardPostBox()}${ME && !multi && Ctl.mode === 'sp' ? scoreHelpHTML() : ''}
     <div class="choices">
       <button class="choice" data-a="lapse"><span>Watch the war unfold</span><em>Timelapse of every month</em></button>
       ${o.type !== 'defeat' && !multi ? '<button class="choice" data-a="keep"><span>Keep playing</span><em>The map is still yours</em></button>' : ''}
@@ -167,17 +167,23 @@ function rankOf(xp = 0) { let r = RANKS[0], next = null; for (let i = 0; i < RAN
 /* ---------- timelapse ---------- */
 function playTimelapse(done) {
   const tags = Object.keys(NATDEF), H = G.hist; if (!H.length) { done && done(); return; }
+  playFilm(H.map(h => ({ y:h.y, m:h.m, t:h.t, owners:[...h.o].map(ch => tags[ch.charCodeAt(0) - 48]) })), f => `${MONTHS_L[f.m]} ${f.y}`, null, done);
+}
+// plays month frames {y, m, owners[]} on the map; caption(frame) is the bar's text; Stop or the last frame calls done
+function playFilm(frames, caption, tag, done) {
+  if (!frames.length) { done && done(); return; }
   const bar = $('#lapse'); bar.hidden = false;
   clearSelection(); const savedCam = { ...cam };
   centerXY(WW * 0.5, WH * 0.45, Math.max(VW / WW, VH / WH) * 1.05);
+  if (tag && NATDEF[tag] && ID[NATDEF[tag].cap] != null) centerOn(ID[NATDEF[tag].cap], Math.max(VW / WW, VH / WH) * (WORLD ? 2.2 : 1.4)); // follow the commander's nation
   let i = 0, stop = false;
   bar.querySelector('button').onclick = () => { stop = true; };
   const step = () => {
-    if (stop || i >= H.length) { timelapseOwners = null; ownersDirty = true; fogKey = ''; wxKey = ''; markDirty(true); bar.hidden = true; Object.assign(cam, savedCam); done && done(); return; }
-    const f = H[i++]; timelapseOwners = [...f.o].map(ch => tags[ch.charCodeAt(0) - 48]);
-    bar.querySelector('b').textContent = `${MONTHS_L[f.m]} ${f.y}`;
+    if (stop || i >= frames.length) { timelapseOwners = null; ownersDirty = true; fogKey = ''; wxKey = ''; markDirty(true); bar.hidden = true; Object.assign(cam, savedCam); done && done(); return; }
+    const f = frames[i++]; timelapseOwners = f.owners;
+    bar.querySelector('b').textContent = caption(f);
     ownersDirty = true; staticDirty = true;
-    setTimeout(step, H.length > 100 ? 110 : 220);
+    setTimeout(step, frames.length > 100 ? 110 : 220);
   };
   step();
 }
@@ -203,7 +209,8 @@ const TIPS = [
   'Every great power has a system of its own under <b>Plans</b>: Germany\'s war economy, Soviet factory evacuation, Britain\'s Atlantic lifeline, American mobilisation and Lend-Lease, Japan\'s oil clock, Italy\'s regime support, France\'s Union Sacrée and flight to Algiers, China\'s total resistance.',
   'Every January and July the chief of staff sends a <b>situation report</b>: gains and losses, threatened sectors, fuel and supply, and three recommendations you can jump straight to. The latest stays in the Ledger.',
   'Losing? Offer peace from the World panel. Winning? Demand terms and keep what you hold.',
-  'Leaderboard scores are <b>rated</b>: Veteran difficulty, a later start and a weaker nation all count for more, so a small country played well can top the board. Each <b>weekly challenge</b> gives everyone the same nation and dice; the next three are listed on its screen.'
+  'Leaderboard scores are <b>rated</b>: Veteran difficulty, a later start and a weaker nation all count for more, so a small country played well can top the board. Each <b>weekly challenge</b> gives everyone the same nation and dice; the next three are listed on its screen, and while you play it the top bar shows <b>You / #1</b>: your score against the leader\'s at the same date. Press ▶ on any leaderboard entry to watch that campaign.',
+  'Single player saves every campaign in its own slot (main menu → <b>Saved campaigns</b>; <b>Save a copy</b> keeps a moment to come back to). <b>Undo</b> (<kbd>Ctrl</kbd>+<kbd>Z</kbd>) rewinds this month, then earlier ones — but an undone campaign no longer counts for the leaderboard.'
 ].concat(WORLD ? [
   'The map spans the whole world and wraps east to west. Japan, China and the Americas fight their own wars — and yours, once Pearl Harbor drags America in.',
   'Ocean war: from New York a convoy reaches Normandy in one month; from San Francisco, Hawaii. Japan and America stage their armies at ports facing the enemy and island-hop.',

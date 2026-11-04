@@ -66,6 +66,7 @@
       <div class="stat"><span class="k">Stability</span><span class="v" id="sStab">0</span></div>
       <div class="stat" title="Land divisions · armor"><span class="k">Divisions</span><span class="v" id="sDiv">0</span></div>
       <div class="stat" title="Share of Europe's victory points you control"><span class="k">Dominion</span><span class="v" id="sDom">0%</span></div>
+      <div class="stat pace" id="sPaceW" hidden><span class="k">You / #1</span><span class="v" id="sPace">—</span></div>
       <div class="stat tension" title="World tension: democracies may only declare war cheaply above 50%"><span class="k">Tension <b id="sTenN" style="color:var(--paper)">0%</b></span><div class="tbar"><i id="sTen"></i></div></div>
     </div>
     <div class="date"><div class="d" id="sDate">JAN 1936</div><div class="s" id="sSeason">Turn 1</div></div>
@@ -97,6 +98,7 @@
   <div id="hand" hidden></div>
   <div id="actions" hidden>
     <button id="inboxBtn" title="Newspapers and decisions waiting" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h13v14H6a2 2 0 0 1-2-2zM17 9h3v8a2 2 0 0 1-2 2"/><path d="M7 9h7M7 13h7"/></svg><b>0</b></button>
+    <button id="undoBtn" hidden><i class="ico" data-icon="undo"></i><span>Undo<br><small>this month</small></span></button>
     <button id="nextArmy" title="Next army with orders left (N)"><i class="ico" data-icon="inf"></i><span><b>0</b><small>ready</small></span></button>
     <button id="endTurn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l9 8-9 8M13 4l9 8-9 8"/></svg><span><span class="l1">END MONTH</span><br><span class="l2" id="etSub">Space</span></span></button>
   </div>
@@ -152,6 +154,7 @@ document.write('<script src="data/' + (MAPKIND === 'world' ? 'map.js' : 'map-eur
 <script src="js/net/leaderboard.js"></script>
 <script src="js/ui/input.js"></script>
 <script src="js/ui/tutorial.js"></script>
+<script src="js/ui/saves.js"></script>
 <script src="js/ui/menu.js"></script>
 <script src="js/ui/main.js"></script>
 </body>

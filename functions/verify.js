@@ -32,12 +32,16 @@ function verify(sub) {
     const W = JSON.parse(ev(`JSON.stringify(weeklySpec(${JSON.stringify(String(rec.o.daily))}))`));
     if (W.tag !== tag0 || W.sc !== rec.o.scenario || W.seed !== rec.o.seed || rec.o.diff !== W.diff || W.map !== rec.o.map || (rec.o.gm || 'grand') !== 'grand') no('this is not the weekly challenge it claims to be');
   }
-  ctx.__rec = rec;
-  if (!ev('replayGame(__rec, __rec.end)')) no('the moves are out of order');
+  ctx.__rec = rec; ctx.__pace = [];
+  // the rated score at the start of every month: the pace line the next players race against
+  if (!ev('replayGame(__rec, __rec.end, t => { const h = humanTags()[0]; __pace[t] = h ? ratedScore(h) : 0; })')) no('the moves are out of order');
   if (!ev('!!G.over')) no('the campaign is not finished');
   const tag = ev('humanTags()[0]');
   const card = JSON.parse(ev(`JSON.stringify(scoreCard(${JSON.stringify(tag)}))`));
   if (card.score !== sub.claim) no(`it replayed to a score of ${card.score}, not ${sub.claim}`);
-  return { ...card, build:ev('GAME_BUILD') };
+  // what "Watch" plays back: every month's map (one character per province, indexing tags) and the pace line
+  const film = JSON.parse(ev(`JSON.stringify({ tags:Object.keys(NATDEF), months:G.hist.map(h => [h.y, h.m, h.o, h.t]) })`));
+  film.pace = Array.from(ctx.__pace, v => v | 0); film.tag = tag; film.map = rec.o.map; film.sc = rec.o.scenario;
+  return { ...card, build:ev('GAME_BUILD'), film };
 }
 module.exports = { verify };

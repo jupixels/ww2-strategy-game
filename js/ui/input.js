@@ -53,6 +53,7 @@ window.addEventListener('keydown', e => {
   else if (e.key === 'Escape') { if (pickMode) endPick(); else if (tab) openTab(tab); else clearSelection(); }
   else if (e.key === '+' || e.key === '=') zoomAt(innerWidth / 2, innerHeight / 2, 1.25);
   else if (e.key === '-' || e.key === '_') zoomAt(innerWidth / 2, innerHeight / 2, 0.8);
+  else if (k === 'z' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); Undo.run(); }
   else if (k === 'n') nextArmy();
   else if (k === 'm') cycleMapMode();
   else if (k === 'h' || e.key === '?') showHelp();
@@ -65,6 +66,7 @@ window.addEventListener('blur', () => KEYS.clear());
 $$('.tab').forEach(b => b.onclick = () => openTab(b.dataset.tab));
 $('#endTurn').onclick = () => { SFX.init(); $('#endTurn').blur(); Ctl.endTurn(); };
 $('#nextArmy').onclick = () => { SFX.init(); nextArmy(); };
+$('#undoBtn').onclick = () => { SFX.init(); Undo.run(); };
 $('#bHelp').onclick = () => showHelp();
 $('#zIn').onclick = () => zoomAt(innerWidth / 2, innerHeight / 2, 1.3);
 $('#zOut').onclick = () => zoomAt(innerWidth / 2, innerHeight / 2, 1 / 1.3);

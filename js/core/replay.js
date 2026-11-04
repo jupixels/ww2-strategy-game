@@ -21,8 +21,9 @@ function introNews(t) {
   if (G.rec) G.rec.intro = 1;
   sendNews(t, { title:'A New Year Dawns', head:`${n.name} Prepares for the Storm`, dek:`${dateStr()}: the cabinet meets as ${REALM} ${G.y >= 1939 ? 'burns' : 'slides toward war'}`, text:`${NATDEF[t].brief || SCENARIOS[G.sc].d} Select a province to command its armies, pick a National Focus, start research and play your cards. Press End Month when done.${n.agendas && n.agendas.length ? ' You have been handed secret agendas — see the Ledger.' : ''}`, plate:t });
 }
-// rebuild a recorded game up to the start of `turn` (or until the record runs out); returns G
-function replayGame(rec, turn) {
+// rebuild a recorded game up to the start of `turn` (or until the record runs out); returns G.
+// onMonth(turn), if given, runs at the start of every month before the player's orders (the verifier samples the score there)
+function replayGame(rec, turn, onMonth) {
   newGame({ ...JSON.parse(JSON.stringify(rec.o)), mode:'sp' });
   G.rec = null;
   const tag = Object.keys(rec.o.humans)[0];
@@ -30,6 +31,7 @@ function replayGame(rec, turn) {
   const cmds = rec.c; let k = 0, guard = 0;
   const end = turn != null ? turn : cmds.length ? cmds[cmds.length - 1][0] : 0;
   while (guard++ < 2000) {
+    if (onMonth) onMonth(G.turn);
     while (k < cmds.length && cmds[k][0] === G.turn) { const [, t, c] = cmds[k++]; doCommand(t, c, 'instant'); checkVictory(); }
     if (G.turn >= end) break;
     if (k < cmds.length && cmds[k][0] < G.turn) return null; // out of order: not a real record

@@ -17,7 +17,10 @@ const Ctl = {
   act(c) {
     if (!this.canAct() && c.c !== 'answer' && c.c !== 'endless') return null;
     if (this.mode === 'client') { Net.send({ t:'cmd', c }); return null; }
+    // reading a newspaper or report is not a move: it doesn't make "undo this month" worth offering
+    const it = c.c === 'answer' ? inboxOf(ME || '').find(x => x.uid === c.uid) : null, reading = it && (it.type === 'news' || it.type === 'report');
     const r = doCommand(ME, c, this.queueMode());
+    if (r && r.ok !== false && !reading) Undo.acts++;
     this.after(c, r);
     if (this.mode === 'host') Net.pushState();
     return r;
@@ -90,12 +93,15 @@ const Ctl = {
     for (const nb of out.naval || []) navalFX(nb.zone);
     SFX.thump(); if (ME && A(ME) && nat(ME).hand.length) setTimeout(() => SFX.draw(), 600);
     monthReport(out);
+    if (G.daily) lbFetchPace();
+    if (Undo.on() && !G.over) Undo.snap();
     if (G.over) { this.save(); setTimeout(() => flushInbox().then(showEnd), 600); }
     else { this.save(); flushInbox(); }
   },
   save() {
     if (!G || G.preview || this.mode === 'client' || this.mode === 'watch') return;
-    const key = G.tutGame ? SAVE_KEY + '-tutorial' : this.mode === 'hot' ? SAVE_KEY + '-hot' : this.mode === 'host' ? SAVE_KEY + '-mp' : SAVE_KEY;
+    if (this.mode === 'sp' && !G.tutGame) { saveSlot(); return; }
+    const key = G.tutGame ? SAVE_KEY + '-tutorial' : this.mode === 'hot' ? SAVE_KEY + '-hot' : SAVE_KEY + '-mp';
     try { localStorage.setItem(key, serial()); } catch (e) {}
   },
   setMe(t) { ME = t; ownersDirty = true; fogKey = ''; painted.fill(''); markDirty(true); renderAll(); },
@@ -138,7 +144,9 @@ function startPlay(fresh) {
   document.body.classList.toggle('mp', !$('#mpbar').hidden);
   ownersDirty = true; fogKey = ''; wxKey = ''; rebuildOverlay(); markDirty(true);
   if (ME) centerOn(homeProv(ME), VW < 820 ? 1.15 : 1.25);
+  Undo.reset();
   renderAll();
+  if (G.daily) lbFetchPace(true);
   if (fresh && ME && Ctl.mode !== 'hot') {
     Ctl.save();
     const n = nat(ME);
@@ -162,6 +170,9 @@ function boot() {
   const q = new URLSearchParams(location.search);
   if (q.get('join')) setTimeout(() => showJoin(q.get('join')), 200);
   if (q.get('weekly')) { history.replaceState(null, '', location.pathname); setTimeout(() => showWeekly(), 200); }
+  // "Watch" from the board on the other map reloads here with ?watch=<score id>
+  else if (q.get('watch')) { const id = q.get('watch'); history.replaceState(null, '', location.pathname); setTimeout(async () => { try { const row = await LB.get('scores', id); if (row) lbWatch(row, null); } catch (e) {} }, 600); }
+  else if (!q.get('join')) setTimeout(() => lbLastWeekNews(), 1500);
 }
 window.addEventListener('resize', resize);
 try { document.fonts && document.fonts.ready.then(() => { staticDirty = true; }); } catch (e) {}

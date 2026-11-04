@@ -3,13 +3,16 @@
 const { onDocumentCreated } = require('firebase-functions/v2/firestore');
 const admin = require('firebase-admin');
 const { verify } = require('./verify');
+const zlib = require('zlib');
 admin.initializeApp();
 const db = admin.firestore();
 exports.verifyScore = onDocumentCreated({ document:'submissions/{id}', memory:'1GiB', timeoutSeconds:300, maxInstances:5 }, async ev => {
   const snap = ev.data; if (!snap) return;
   const sub = snap.data(), id = ev.params.id;
   try {
-    const card = verify(sub);
+    const { film, ...card } = verify(sub);
+    // the replay film is kept apart from the score so the boards stay small: gzipped JSON in one string field
+    await db.collection('replays').doc(id).set({ data:zlib.gzipSync(JSON.stringify(film), { level:9 }).toString('base64'), at:admin.firestore.FieldValue.serverTimestamp() });
     await db.collection('scores').doc(id).set({ ...card, name:String(sub.name || 'Commander').replace(/[<>]/g, '').slice(0, 20), at:admin.firestore.FieldValue.serverTimestamp(), verified:true });
     await snap.ref.delete();
   } catch (err) {

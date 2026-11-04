@@ -33,7 +33,8 @@ function showStart() {
   const st = $('#start'); st.hidden = false;
   previewWorld();
   const p = profile(), rk = rankOf(p.xp || 0);
-  const saved = loadSaved(), savedHot = loadSaved(SAVE_KEY + '-hot'), savedMp = loadSaved(SAVE_KEY + '-mp');
+  Slots.migrate();
+  const slots = Slots.list(), saved = slots[0], savedHot = loadSaved(SAVE_KEY + '-hot'), savedMp = loadSaved(SAVE_KEY + '-mp');
   const inGame = G && !G.preview && !G.over;
   st.innerHTML = `<div class="menu">
     <div class="brand"><div class="eye">A grand strategy game · ${WORLD ? 'The world' : 'Europe'} 1936–1950</div>
@@ -44,13 +45,15 @@ function showStart() {
     <div class="mcol"><div class="mapsel" role="group" aria-label="Map"><span>Map</span>${[['europe','Europe','The original theatre: 234 provinces, 31 nations'],['world','The World','Every continent: 687 provinces, 70 nations, the Pacific war']].map(([k, l, d]) => `<button class="${MAPKIND === k ? 'on' : ''}" data-map="${k}" title="${d}"><b>${l}</b><em>${d}</em></button>`).join('')}</div>
     <div class="mbtns">
       ${inGame && Ctl.mode !== 'client' && Ctl.mode !== 'watch' ? `<button class="mbtn gold" data-go="back"><b>Return to the war</b><span>${esc(ME ? natName(ME) : '')}, ${MONTHS_L[G.m]} ${G.y}</span></button>` : ''}
-      ${saved && !inGame ? `<button class="mbtn gold" data-go="cont"><b>Continue</b><span>${esc(saved.nat[Object.keys(saved.humans)[0]] ? saved.nat[Object.keys(saved.humans)[0]].name : '')}, ${MONTHS_L[saved.m]} ${saved.y}</span></button>` : ''}
+      ${saved && !inGame ? `<button class="mbtn gold" data-go="cont"><b>Continue</b><span>${esc(String(saved.nation))}, ${MONTHS_L[saved.m] || ''} ${saved.y}</span></button>` : ''}
       <button class="mbtn" data-go="camp"><b>${iconSvg('gen')} Campaign</b><span>Choose a nation and a start date: 1936, 1939, 1941 or 1944</span></button>
       <button class="mbtn" data-go="mp"><b>${iconSvg('pol')} Multiplayer</b><span>Online rooms with a code: Grand Campaign, Team War, Blitz, Co-op</span></button>
       <button class="mbtn" data-go="hot"><b>${iconSvg('mp')} Hot-seat</b><span>2–6 players take turns on this device</span></button>
       <button class="mbtn" data-go="weekly"><b>${iconSvg('target')} Weekly challenge</b><span>${esc(weeklyBrief().line)}</span></button>
       <button class="mbtn" data-go="lb"><b>${iconSvg('medal')} Leaderboard</b><span>The best campaigns of every commander online</span></button>
       <button class="mbtn" data-go="tut"><b>${iconSvg('card')} Tutorial</b><span>Learn to command in five minutes</span></button>
+      ${inGame && Ctl.mode === 'sp' && !G.tutGame ? `<button class="mbtn small" data-go="copy"><b>Save a copy</b><span>Keep this moment as a separate save to come back to</span></button>` : ''}
+      ${slots.length > (inGame ? 0 : 1) ? `<button class="mbtn small" data-go="slots"><b>Saved campaigns</b><span>${slots.length} on this map</span></button>` : ''}
       ${savedHot ? `<button class="mbtn small" data-go="conthot"><b>Continue hot-seat</b><span>${MONTHS_L[savedHot.m]} ${savedHot.y} · ${Object.keys(savedHot.humans).length} players</span></button>` : ''}
       ${savedMp ? `<button class="mbtn small" data-go="contmp"><b>Re-host saved online game</b><span>${MONTHS_L[savedMp.m]} ${savedMp.y} · ${Object.keys(savedMp.humans).length} players</span></button>` : ''}
     </div></div></div>`;
@@ -60,7 +63,9 @@ function showStart() {
     const g = b.dataset.go;
     if (g === 'lb') { showLeaderboard(); return; }
     if (g === 'back') startPlay(false);
-    else if (g === 'cont') { Ctl.mode = 'sp'; adopt(saved); Ctl.setMe(Object.keys(G.humans)[0]); startPlay(false); if (G.tut) tutShow(); }
+    else if (g === 'cont') openSlot(saved.id);
+    else if (g === 'slots') showSlots();
+    else if (g === 'copy') { saveCopy(); showStart(); }
     else if (g === 'conthot') { Ctl.mode = 'hot'; adopt(savedHot); startPlay(false); passScreen(G.hs || activeHumans()[0]); }
     else if (g === 'contmp') showHost(savedMp);
     else if (g === 'camp') showCampaign();
@@ -148,7 +153,8 @@ function showWeekly() {
   const st = $('#start');
   st.innerHTML = `<div class="setup">${backBtn()}<h2>Weekly challenge</h2>
     <div class="daily">${flagImg(D.tag, 'bigflag')}<div><b>${esc(NATDEF[D.tag].n)}</b><span>${esc(SCENARIOS[D.sc].n)} · ${D.sc}–${D.endY} · ${D.map === 'world' ? 'World map' : 'Europe map'} · Veteran difficulty</span><p>${esc(NATDEF[D.tag].brief || SCENARIOS[D.sc].d)}</p></div></div>
-    <p class="hint">Everyone in the world gets the same nation, start date and random seed until Sunday. Play to January ${D.endY} (or until you win), post your score, and climb this week's leaderboard. A new challenge starts every Monday.${best ? ` Your best this week: <b>${best}</b>.` : ''}</p>
+    <p class="hint">Everyone in the world gets the same nation, start date and random seed until Sunday. Play to January ${D.endY} (or until you win), post your score, and climb this week's leaderboard. While you play, the top bar shows your score against the current #1's at the same date. A new challenge starts every Monday.${best ? ` Your best this week: <b>${best}</b>.` : ''}</p>
+    ${scoreHelpHTML()}
     <div class="sect">Coming up</div><div class="wknext">${weeklyNext(D.key, 3).map(N => { const m = new Date(weekMonday(N.key)); return `<div>${flagImg(N.tag, 'wkflag')}<b>${esc(NATDEF[N.tag].n)}</b><span>${N.sc} · ${N.map === 'world' ? 'World' : 'Europe'} · from ${m.toLocaleDateString(undefined, { month:'short', day:'numeric', timeZone:'UTC' })}</span></div>`; }).join('')}</div>
     <div class="go"><button class="btn" id="bWeekLb">This week's leaderboard</button><button class="btn gold" id="bBegin">Accept the challenge</button></div></div>`;
   wireBack(st); camHi(D.tag);

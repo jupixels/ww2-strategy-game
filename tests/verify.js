@@ -27,6 +27,8 @@ console.log(`${key}: ${W.tag} ${W.sc} on ${W.map}, ${rec.c.length} moves, ${api.
 let fails = 0;
 const expect = (name, s, good) => { if (good === 'either') { try { verify(s); console.log('ok   ' + name + ' → accepted (same outcome)'); } catch (e) { console.log('ok   ' + name + ' → refused: ' + e.message); } return; } const t0 = Date.now(); try { const r = verify(s); console.log((good ? 'ok   ' : 'FAIL ') + name + ` → accepted, score ${r.score} (${Date.now() - t0} ms)`); if (!good) fails++; } catch (e) { console.log((good ? 'FAIL ' : 'ok   ') + name + ` → refused: ${e.message}`); if (good) fails++; } };
 expect('honest submission', sub, true);
+{ const r = verify(sub), F = r.film; const ok = F && F.pace.length === rec.end + 1 && F.months.length >= rec.end && F.tags.includes(tag) && F.months[0][2].length === api.eval('NP');
+  console.log((ok ? 'ok   ' : 'FAIL ') + `replay film: ${F.months.length} months, pace ${F.pace.slice(0, 3).join(',')}…${F.pace[F.pace.length - 1]}`); if (!ok) fails++; }
 expect('inflated score', { ...sub, claim:card.score + 50 }, false);
 const r2 = JSON.parse(JSON.stringify(rec)); r2.c = r2.c.filter(([, , c]) => c.c !== 'front' && c.c !== 'focus'); expect('moves removed', { ...sub, rec:pack(r2) }, api.G.turn < 24 ? 'either' : false);
 const r3 = JSON.parse(JSON.stringify(rec)); r3.o.seed = (r3.o.seed + 1) >>> 0; expect('different dice for the weekly', { ...sub, rec:pack(r3) }, false);

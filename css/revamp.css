@@ -354,3 +354,24 @@ body.picking #toasts{top:calc(env(safe-area-inset-top,0px) + 128px)}
 .lbst{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13.5px;color:#3a3020}
 .lbst .tr{color:#a3301f}
 .lbwhy{flex-basis:100%;margin:0;color:#6a5a40}
+/* weekly pace, scoring help, watch, last week's results */
+.stat.pace .v{font-variant-numeric:tabular-nums}
+.stat.pace .v.good{color:#a8dd96}.stat.pace .v.bad{color:#ff9b80}
+.scorehelp{margin:8px 0 12px;border:1px solid rgba(201,162,90,.25);border-radius:6px;background:rgba(0,0,0,.22);padding:6px 12px;font-size:13px;line-height:1.45}
+.scorehelp summary{cursor:pointer;color:var(--brass-hi);font-size:12px;letter-spacing:.1em;text-transform:uppercase;padding:2px 0}
+.scorehelp ul{margin:6px 0;padding-left:18px}.scorehelp li{margin:2px 0}.scorehelp p{margin:6px 0 2px;opacity:.85}
+.paper .scorehelp{background:rgba(0,0,0,.05);border-color:rgba(0,0,0,.2);color:inherit}.paper .scorehelp summary{color:inherit}
+.lbt .lbw{width:30px;height:30px;padding:0;display:inline-grid;place-items:center}
+.lbt .lbw .uicon{width:12px;height:12px}
+.lwk{list-style:none;padding:0;margin:10px 0;font-size:17px}.lwk li{padding:4px 0;border-bottom:1px solid rgba(0,0,0,.15)}
+.lwk b{display:inline-block;min-width:38px}.lwk span{opacity:.7;font-size:14px;margin-left:6px}
+#undoBtn{height:66px;padding:0 12px;border-radius:12px;background:var(--panel);border:1px solid var(--line-hi);display:flex;align-items:center;gap:6px;color:var(--paper);box-shadow:0 10px 30px rgba(0,0,0,.45)}
+#undoBtn .uicon{width:20px;height:16px;color:var(--brass-hi)}
+#undoBtn small{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+#undoBtn:hover{border-color:var(--brass)}
+@media (max-width:820px){#undoBtn{height:56px;padding:0 10px}#undoBtn small{display:none}}
+.slots{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.slot{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid rgba(201,162,90,.25);border-radius:8px;background:rgba(0,0,0,.28)}
+.slot b{font-family:var(--f-display);font-size:18px;letter-spacing:.03em;display:block}
+.slot span{font-size:12px;color:var(--muted);letter-spacing:.05em}
+.slot .slflag{width:36px;height:24px}

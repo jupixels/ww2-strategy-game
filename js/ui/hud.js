@@ -39,6 +39,8 @@ function renderTop() {
   $('#sTen').style.width = G.tension + '%'; $('#sTenN').textContent = Math.round(G.tension) + '%';
   $('#sStab').title = `Stability ${Math.round(n.stab)}%. War weariness ${Math.round(n.ww || 0)}. Production ×${stabMul(n).toFixed(2)}.`;
   { const b = oilBreakdown(t); $('#sOil').title = `Oil: +${oilIncome(t)} income, −${oilUpkeep(t)} upkeep (ships ${b.navy.toFixed(1)}, aircraft ${b.air.toFixed(1)}, tanks ${b.arm.toFixed(1)}${b.peace ? '; halved in peacetime' : ''}). Moving troops costs no oil.${n.oil <= 0 ? ` FUEL SHORTAGE: mechanised forces at ${Math.round(fuelMul(t) * 100)}%.` : ''}`; }
+  { const P = typeof paceInfo === 'function' ? paceInfo() : null, w = $('#sPaceW'); w.hidden = !P;
+    if (P) { const v = $('#sPace'); v.textContent = P.txt; v.className = 'v ' + (P.cls || ''); w.title = P.tip; } }
   $('#sDate').textContent = MONTHS[G.m] + ' ' + G.y;
   $('#sSeason').textContent = (isWinter() ? 'Winter · ' : isMud() ? 'Mud season · ' : '') + 'Turn ' + (G.turn + 1);
 }
@@ -358,6 +360,7 @@ function renderActions() {
   b.querySelector('small').textContent = `${r.length} stack${r.length > 1 ? 's' : ''}${atWar ? ' · at war' : ''}`;
   b.classList.toggle('hot', !!atWar && r.some(i => PROV[i].adj.some(j => W(ME, G.prov[j].o))));
   const box = ME ? inboxOf(ME) : [];
+  renderUndo();
   $('#inboxBtn').hidden = !box.length; $('#inboxBtn b').textContent = box.length;
   const et = $('#endTurn');
   const lbl = Ctl.endLabel();
