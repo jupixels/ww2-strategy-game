@@ -579,7 +579,7 @@ function dropBomb(t, tid) {
   const killed = unitsAt(p);
   clearLand(p); p.fac = Math.max(0, p.fac - 3); p.fort = 0; p.burn = 6; p.smoke = 6;
   for (const k of AIR) p.air[k] = 0;
-  tension(25);
+  tension(25); if (G.act) G.act.doom = Math.min(DOOM_MAX, G.act.doom + 25);
   if (A(d)) nat(d).stab = Math.max(0, nat(d).stab - 20);
   if (A(d) && nat(d).capital === tid) {
     let coreVP = 0, holdVP = 0;

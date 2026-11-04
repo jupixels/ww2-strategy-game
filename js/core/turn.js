@@ -82,6 +82,7 @@ function endMonth() {
     if (G.y >= 1946) for (const h of humanTags()) if (A(h)) award(h, 'survive');
     // 9. history moves on
     checkEvents();
+    checkSecondAct();
     for (const h of humanTags()) if (A(h)) tickAgendas(h, false);
     recordHistory();
     tickReports();
@@ -101,7 +102,7 @@ function checkVictory() {
   const alive = hs.filter(h => A(h) && !G.humans[h].dead);
   const share = t => vpOf(t) / totalVP();
   const caps = WORLD_CAPS;
-  const endTurn = G.gm === 'blitz' ? ymNum(1942, 2) : ymNum(1950, 0);
+  const endTurn = actEndTurn();
   if (!hs.length) { if (nowNum() >= endTurn) G.over = { type:'time', winners:[], reason:'Observer game over.' }; return; }
   if (!alive.length) { G.over = { type:'defeat', winners:[], reason:'Every human-led nation has fallen.' }; return; }
   if (G.gm === 'team' || G.gm === 'coop') {

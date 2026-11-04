@@ -235,7 +235,8 @@ function tickAgendas(t, final) {
 function scoreOf(t) {
   const n = nat(t);
   const ag = sum((n.agendas || []).filter(a => a.st === 'done'), a => a.pts);
-  return Math.round(vpOf(t) / totalVP() * 100) * (A(t) ? 1 : 0) + ag * 10 + medalsOf(t).length * 2 + Math.round(n.st.kills / 10);
+  const bloc = G.act && A(t) && facOf(t) && facOf(t) === actBlocWinner() ? 15 : 0; // the second act: belonging to the strongest bloc
+  return Math.round(vpOf(t) / totalVP() * 100) * (A(t) ? 1 : 0) + ag * 10 + medalsOf(t).length * 2 + Math.round(n.st.kills / 10) + bloc;
 }
 
 /* ================= DESTINY ================= */

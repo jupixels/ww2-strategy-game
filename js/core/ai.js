@@ -327,7 +327,8 @@ function aiDiplomacy() {
     const n = nat(t); if (n.ide !== 'F' && n.ide !== 'C') continue;
     if (enemiesOf(t).length || rnd() > 0.04) continue;
     const nbs = new Set(); for (const i of owned(t)) for (const j of PROV[i].adj) { const o = G.prov[j].o; if (o !== t && A(o) && !friendly(o, t) && !pactWith(o, t) && !truceWith(o, t)) nbs.add(o); }
-    const list = [...nbs].filter(o => !nat(o).major || rnd() < 0.3);
+    // after the war, AI aggression stays below the threshold of a bloc war: only the unaligned are fair game
+    const list = [...nbs].filter(o => (!nat(o).major || rnd() < 0.3) && !(G.act && facOf(o)));
     if (list.length) declareWar(t, pickR(list));
   }
   for (const t in G.nat) {

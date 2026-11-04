@@ -54,7 +54,7 @@ const Ctl = {
     if (this.mode === 'hot') return ['END TURN', `${natName(G.hs)} · Space`];
     if (this.mode === 'host' || this.mode === 'client') { const r = G.ready || {}; const hs = activeHumans(); const n = hs.filter(t => r[t]).length; return r[ME] ? ['WAITING', `${n}/${hs.length} ready`, 1] : ['READY', `${n}/${hs.length} ready · Space`]; }
     if (this.mode === 'watch') return ['WATCHING', 'Spectator'];
-    return ['END MONTH', G.y >= 1949 && G.m >= 6 && !G.flags.endless ? 'Final months' : 'Space'];
+    return ['END MONTH', nowNum() >= actEndTurn() - 6 && !G.flags.endless ? 'Final months' : 'Space'];
   },
   async endTurn() {
     if (!G || G.over || busy || G.preview) return;

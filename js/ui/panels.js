@@ -168,6 +168,13 @@ function renderDrawer() {
     }
   } else if (tab === 'dip') {
     h = dh('The World', 'Alliances, wars, pacts and peace. Hover a nation to find it.');
+    if (G.act) {
+      const AC = ACTS[G.act.k], fk = facOf(pl), dm = G.act.doom;
+      h += `<div class="act"><h5>The second act · until ${ACT_END}</h5><h4>${esc(AC.n)}</h4><p>${esc(AC.d)}</p>
+        ${G.act.k !== 'exhaust' ? `<div class="doom"><span>Doomsday Clock</span>${meter(dm, DOOM_MAX, dm >= 75 ? 'bad' : '')}<b>${G.act.ww3 ? 'Midnight' : `${Math.max(1, Math.round((DOOM_MAX - dm) / 8))} min to midnight`}</b></div>` : ''}
+        <p class="small">${fk ? `Your bloc: <b>${esc(G.facs[fk].n)}</b> · ${blocVP(membersOf(fk))} VP${actBlocWinner() === fk ? ' · <b class="tg">the strongest bloc (+15 score)</b>' : ''}` : 'You belong to no bloc. Found or join one to compete for the world.'}</p></div>`;
+      if (fk) { const tg = sphereTargets(pl).slice(0, 5); if (tg.length) h += `<div class="sect">Bring into the bloc · ${SPHERE_COST} politics</div>` + tg.map(o => { const why = canSphere(pl, o); return `<div class="row" data-hover="${o}"><div><h4>${flagImg(o)} ${esc(natName(o))}</h4><p>${IDEO[nat(o).ide]} · ${owned(o).length} prov</p></div><div><button class="btn" data-sphere="${o}" ${why || !act ? `disabled title="${esc(why)}"` : ''}>Court</button></div></div>`; }).join(''); }
+    }
     h += `<div class="sect">Alliances</div>`;
     for (const fk in G.facs) {
       const F = G.facs[fk], ms = membersOf(fk); if (!ms.length) continue;
@@ -261,6 +268,7 @@ function wireDrawer(el, pl, n) {
   on('[data-leave]', () => confirmBox('Leave your alliance?', 'You will stop fighting your allies\' wars — and they will stop fighting yours.', 'Leave', () => Ctl.act({ c:'leave' })));
   on('[data-found]', () => { const name = prompt('Name your alliance', `${nat(pl).adj} Pact`); if (name) Ctl.act({ c:'found', name:name.slice(0, 32) }); });
   on('[data-war]', b => Ctl.act({ c:'declare', tag:b.dataset.war }));
+  on('[data-sphere]', b => Ctl.act({ c:'sphere', tag:b.dataset.sphere }));
   on('[data-call]', b => Ctl.act({ c:'calltowar', tag:b.dataset.call }));
   on('[data-fauto]', () => { const r = Ctl.act({ c:'front', op:'auto' }); if (r && r.ok) { SFX.signal(); toast('⚑', `${r.made} front${r.made > 1 ? 's' : ''} formed`, 'Each holds its sector. Switch a front to Advance or Encircle to go on the offensive.', 'medal'); } frontGeoVer++; renderDrawer(); });
   on('[data-fnew]', () => startFrontPick(pl, null));

@@ -315,3 +315,11 @@ body.picking #toasts{top:calc(env(safe-area-inset-top,0px) + 128px)}
 .meter{height:6px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;margin:5px 0 4px}
 .meter i{display:block;height:100%;background:linear-gradient(90deg,var(--brass-lo),var(--brass-hi))}
 .meter.bad i{background:linear-gradient(90deg,#7a2a1a,#e2683f)}
+
+/* ---------- the second act ---------- */
+.act{border:1px solid var(--brass-lo);border-radius:9px;padding:12px 14px;background:linear-gradient(180deg,rgba(199,155,69,.1),rgba(0,0,0,0))}
+.act h5{margin:0;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:#d0634a}
+.act h4{margin:3px 0 4px;font-family:var(--f-display);font-size:24px;letter-spacing:.04em}
+.act p{margin:0 0 6px;font-size:13px;color:var(--paper-dim)} .act p.small{margin:6px 0 0}
+.doom{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.doom b{color:var(--paper);letter-spacing:.04em}

@@ -324,6 +324,7 @@ function resolveDecision(h, it, yes) {
   else if (it.kind === 'pact') { if (yes && !W(it.from, h)) signPact(it.from, h); else notify(it.from, '✕', 'Pact refused', `${natName(h)} declined.`, ''); }
   else if (it.kind === 'demand') { if (yes) cede(h, it.from, it.provs.filter(i => G.prov[i].o === h)); else { (nat(it.from).claims || (nat(it.from).claims = [])).push(h); notify(it.from, '✕', 'Demands rejected', `${natName(h)} refuses. War with them now costs only 10 politics.`, 'war'); } }
   else if (it.kind === 'alliance') { if (yes && G.facs[it.fk]) joinFaction(h, it.fk); }
+  else if (it.kind === 'conference') resolveConference(h, it, yes);
   else if (it.kind === 'calltowar') {
     if (yes && answerCall(h, it.from, it.enemy)) { if (isHuman(it.from)) notify(it.from, '⚑', `${natName(h)} answers the call`, `${natName(h)} is now at war with ${natName(it.enemy)}.`, 'medal'); }
     else if (!yes) { notify(it.from, '✕', 'Call to arms refused', `${natName(h)} will not join the war against ${natName(it.enemy)}.`, ''); nat(h).stab = Math.max(0, nat(h).stab - 2); }
