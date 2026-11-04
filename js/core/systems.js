@@ -252,6 +252,10 @@ function enactDecision(t, k) {
   const n = nat(t), st = decisionState(t, D);
   if (!st || !st.ok || st.done || n.pol < 50) return false;
   n.pol -= 50; n.dec.push(D.k); n.bonus *= 1.15; n.pp += 100; n.stab = Math.min(100, n.stab + 15);
+  // the new state's lands become its heartland: no more resistance, full output
+  let cored = 0; const abs = new Set(D.absorb || []);
+  for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (p.o === t && p.core !== t && (abs.has(p.core) && (!A(p.core) || p.core === 'ENG' && abs.size === 1 && !D.who.includes('ENG')) || Array.isArray(D.need) && D.need.includes(PROV[i].name))) { p.core = t; p.res = 0; cored++; } }
+  for (const o of abs) if (o !== t && A(o) && friendly(o, t) && !nat(o).major && !isHuman(o) && owned(o).length) annex(o, t);
   if (D.name) { n.name = D.name; n.color = D.color; n.adj = D.name.split(' ').pop() === 'Empire' ? D.name.replace(' Empire', '') : n.adj; }
   award(t, 'empire');
   news(`${D.name ? D.name.toUpperCase() + ' PROCLAIMED' : `A NEW MASTER OF ${REALM.toUpperCase()}`}`);

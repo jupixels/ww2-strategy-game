@@ -48,3 +48,6 @@ function hops(a) {
 // straight-line distance (the short way round the globe on the world map)
 const wrapDX = dx => { if (!WORLD) return Math.abs(dx); dx = Math.abs(dx) % WW; return dx > WW / 2 ? WW - dx : dx; };
 const dist = (a, b) => Math.hypot(wrapDX(PROV[a].x - PROV[b].x), PROV[a].y - PROV[b].y);
+
+// formable nations need every one of their cities on this map
+for (let i = DECISIONS.length - 1; i >= 0; i--) { const D = DECISIONS[i]; if (Array.isArray(D.need) && D.need.some(nm => ID[nm] == null) || D.who && D.who.every(t => NATDEF[t] && NATDEF[t].off)) DECISIONS.splice(i, 1); }

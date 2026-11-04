@@ -154,6 +154,8 @@ function aiTurn(t, battles) {
   const atWar = enemies.size > 0;
   aiFocus(t);
   aiSignature(t);
+  // form a new nation when the cities are held
+  if (n.pol >= 60 && rnd() < 0.3) for (const D of DECISIONS) { const st = decisionState(t, D); if (st && st.ok && !st.done && D.who) { enactDecision(t, D.k); break; } }
   if (G.turn % 2 === (t.charCodeAt(0) % 2) || atWar) aiResearch(t);
   if (n.genSlots > G.gens.filter(g => g.tag === t).length && n.pol >= (atWar ? 30 : 60) && rnd() < 0.3) hireGeneral(t);
   const fd = atWar ? frontDistance(t, enemies) : null;
