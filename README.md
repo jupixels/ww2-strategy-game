@@ -18,19 +18,30 @@ A grand strategy game of the Second World War, in the browser. Play on the origi
 - **National focus branches** for every great power, including the USA (Two-Ocean Navy, Liberty Ships, Arsenal of Democracy) and Japan (Kantai Kessen, Fuel Reserve, Kwantung Army, Southern Operation).
 - **Strategy cards** (one a month; discard the ones you don't want), **spies**, **operations** with objectives, timed **research** in four branches, a **national focus tree** with branches for the great powers, alternate-history **Destiny** decisions (45 formable nations on the world map — Gran Colombia, the Arab Federation, the Danubian Federation, Benelux, the Great Qing, a free India and more — whose lands become your heartland when you form them), ~50 historical events, peace treaties, pacts, guarantees and ultimatums.
 - **Situation reports** every January and July: six months of gains and losses, the sectors where you are outnumbered, fuel and supply warnings, and three recommendations from the chief of staff that jump you to the right place.
-- **Secret agendas**, medals, a career rank, a daily challenge, an end-of-war timelapse and an **online leaderboard** (no account needed: post your score from the end screen, browse by map or today's challenge).
+- **Secret agendas**, medals, a career rank, a weekly challenge (the same nation, start and dice for everyone, Monday to Sunday), an end-of-war timelapse and an **online leaderboard** (no account needed). Posted campaigns are replayed move by move on the server before they appear, so every score on the board was really played. Scores are *rated* against expectations — difficulty, start date and how hard the nation is — so a strong Finland can outrank an easy Germany. Browse the overall board, each map, this week's challenge, or the board for any single nation; after posting you see where you placed and how far behind the next commander you are. The weekly schedule is fixed in advance (the next three are shown on the weekly screen), goes to a great power about two weeks in three, and never repeats a nation within four weeks.
 - **Install it as an app**: in Chrome or Edge, use the install icon in the address bar (or "Add to Home screen" on a phone). It opens in its own window and keeps working offline once loaded.
 
 ## Multiplayer
 Host-authoritative over WebRTC (PeerJS, vendored in `js/vendor`), or between tabs of one browser for testing. Modes: Grand Campaign, Team War, Blitz (1939–42), Co-op. Simultaneous turns: everyone plans, attacks are queued and resolved together (armies that march into each other fight a meeting engagement). Dropped players are taken over by the AI until they rejoin.
 
 ## Online leaderboard setup (Google Firebase)
-The leaderboard is off until it is connected to a Firestore database. It costs nothing on Firebase's free tier and needs no player accounts.
+The leaderboard is off until it is connected to a Firestore database, and needs no player accounts. Players post a compressed record of their campaign (start options + every order they gave) to a `submissions` collection; a Cloud Function (`functions/`) replays it with the game's own simulation and, if it reproduces the claimed score, publishes it to `scores`. Nobody can write to `scores` directly.
 1. Create a project at [console.firebase.google.com](https://console.firebase.google.com) (Analytics can stay off).
 2. **Build → Firestore Database → Create database** (production mode, any region).
-3. **Firestore → Rules**: paste the contents of `firestore.rules` from this repo and **Publish**. They let anyone read the board and add one well-formed score, and nobody edit or delete one.
-4. **Project settings → General → Your apps → Web (</>)**: register an app and copy `projectId` and `apiKey` into `js/net/leaderboard-config.js`. The web API key is a public identifier, not a secret; the rules protect the data.
-5. Push to `main`. Scores appear under **Leaderboard** on the main menu. To clear spam, delete documents in the `scores` collection from the Firebase console.
+3. **Project settings → General → Your apps → Web (</>)**: register an app and copy `projectId` and `apiKey` into `js/net/leaderboard-config.js`. The web API key is a public identifier, not a secret; the rules protect the data.
+4. Upgrade the project to the **Blaze** (pay-as-you-go) plan — Cloud Functions require it. The free allowance (2 million function calls a month) covers far more than a hobby leaderboard; you can set a budget alert of a few dollars under **Usage and billing**.
+5. On your computer, with Node 20+ installed, from the repo root:
+   ```bash
+   npm install -g firebase-tools
+   firebase login
+   firebase use --add            # pick your project
+   (cd functions && npm install)
+   firebase deploy --only firestore,functions
+   ```
+   This publishes `firestore.rules` (replacing any rules you pasted by hand earlier), the indexes in `firestore.indexes.json` (needed for the per-nation and weekly boards; they take a few minutes to build) and the `verifyScore` function.
+6. Push to `main`. Scores appear under **Leaderboard** on the main menu. To clear spam, delete documents in `scores` from the Firebase console; refused posts stay in `submissions` with the reason in `why`.
+
+**After changing the game's simulation** (`js/core/` or `data/`): run `node functions/sync.js`, commit `js/core/build.js` and `functions/builds/`, and run `firebase deploy --only functions` again. The verifier keeps the last 12 builds, so campaigns started before an update can still be posted.
 
 ## Code
 - `js/core/` — the simulation, DOM-free (it reports through `Hooks`). Runs in Node for tests.

@@ -140,6 +140,7 @@ function newGame(opts) {
   recordHistory();
   G.srs = {}; for (const t of humanTags()) G.srs[t] = srSnapshot(t);
   for (const t in SIGS) if (G.nat[t]) sigOf(t);
+  G.rec = recStart(opts);
   log(`${humanTags().length === 1 ? `You lead <b>${natName(humanTags()[0])}</b>.` : 'The war begins.'} ${SCENARIOS[G.sc].d}`);
   Hooks.emit('newgame', {});
   return G;

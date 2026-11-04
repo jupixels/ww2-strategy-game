@@ -194,7 +194,8 @@ function decolonise() {
     sendNews('*', { title:'Indian Independence', head:'A Tryst with Destiny', dek:'At the stroke of midnight, India awakes to life and freedom', text:'The British Raj is no more. The new India leaves the alliance and charts its own course between the blocs.', plate:'RAJ' });
   }
 }
-const actEndTurn = () => G.gm === 'blitz' ? ymNum(1942, 2) : G.act ? ymNum(ACT_END, 0) : ymNum(1950, 0);
+// the weekly challenge (G.daily holds its week key) runs six years from its start
+const actEndTurn = () => G.gm === 'blitz' ? ymNum(1942, 2) : G.daily ? ymNum(Math.min(1950, G.sc + 6), 0) : G.act ? ymNum(ACT_END, 0) : ymNum(1950, 0);
 // score at the end: members of the bloc that holds the most of the world
 function actBlocWinner() {
   if (!G.act) return null;

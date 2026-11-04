@@ -30,7 +30,9 @@ function aiFocus(t) {
   if (!avail.length) return;
   const atWar = enemiesOf(t).length > 0;
   const score = f => (f.who || f.minor ? 3 : 0) + (atWar && ['mil_mob','air_min','pol_unity','mil_mech'].includes(f.k) ? 2 : 0) + (!atWar && ['ind_plan','ind_shadow','res_univ','ind_steel'].includes(f.k) ? 2 : 0) + rnd() * 2;
-  startFocus(t, avail.sort((a, b) => score(b) - score(a))[0].k);
+  // score once per focus: rnd() inside a sort comparator would make the number of draws depend on the JS engine's sort
+  let best = null, bs = -1; for (const f of avail) { const v = score(f); if (v > bs) { bs = v; best = f; } }
+  startFocus(t, best.k);
 }
 function aiCards(t, enemies, fd) {
   const n = nat(t); if (!n.hand.length || n.playedThis) return;

@@ -22,11 +22,11 @@ const TUT = [
   { h:'Industry and the home front', b:'Open <b>Industry</b>: your oil and steel income, the world market for imports, Total War, convoy losses and your fleets. Keep stability up — low stability cuts production and makes nations surrender sooner.', el:'.tab[data-tab="industry"]', done:() => tab === 'industry', next:'Next' },
   { h:'End the month', b:'Press <b>End Month</b> or <kbd>Space</kbd>. Every other nation moves, fleets clash, supply and stability update, and you draw a new card.', el:'#endTurn', enter() { if (tab) openTab(tab); }, done:() => G.turn >= 1 },
   { h:'History by newspaper', b:'Crises arrive as front pages, often with a choice, and every January and July your chief of staff sends a situation report with three recommendations; enemies may send peace offers or ultimatums the same way. Open <b>Ledger → Destiny</b> to see your <b>secret agendas</b> — bonus objectives that score at the end — and alternate-history decisions.', el:'.tab[data-tab="log"]', enter() { subTab.log = 'dec'; }, next:'Next' },
-  { h:'You have the basics', b:'<ul class="tips">' + TIPS.slice(0, 5).map(t => `<li>${t}</li>`).join('') + '</ul>When you are ready, try other start dates, <b>hot-seat</b> with friends, an <b>online room</b>, or the <b>daily challenge</b>. Press <kbd>H</kbd> any time for the field manual.', next:'Finish' },
+  { h:'You have the basics', b:'<ul class="tips">' + TIPS.slice(0, 5).map(t => `<li>${t}</li>`).join('') + '</ul>When you are ready, try other start dates, <b>hot-seat</b> with friends, an <b>online room</b>, or the <b>weekly challenge</b>. Press <kbd>H</kbd> any time for the field manual.', next:'Finish' },
 ];
 function startTutorial() {
   startGame({ humans:{ GER:{ name:'You' } }, diff:'easy', scenario:1936, mode:'sp', seed:1936, noIntro:true });
-  G.tutGame = true; G.tut = { i:0 }; nat('GER').pol += 120;
+  G.tutGame = true; G.tut = { i:0 }; G.rec = null; nat('GER').pol += 120;
   const m = G.prov[ID['Munich']]; m.u.inf = Math.max(m.u.inf, 6); m.u.arm = Math.max(m.u.arm, 1); m.r = { ...m.u };
   G.inbox.GER = []; shownUids.clear();
   camMovedTotal = 0;

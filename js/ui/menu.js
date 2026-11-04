@@ -48,7 +48,7 @@ function showStart() {
       <button class="mbtn" data-go="camp"><b>${iconSvg('gen')} Campaign</b><span>Choose a nation and a start date: 1936, 1939, 1941 or 1944</span></button>
       <button class="mbtn" data-go="mp"><b>${iconSvg('pol')} Multiplayer</b><span>Online rooms with a code: Grand Campaign, Team War, Blitz, Co-op</span></button>
       <button class="mbtn" data-go="hot"><b>${iconSvg('mp')} Hot-seat</b><span>2–6 players take turns on this device</span></button>
-      <button class="mbtn" data-go="daily"><b>${iconSvg('target')} Daily challenge</b><span>${esc(dailyBrief().line)}</span></button>
+      <button class="mbtn" data-go="weekly"><b>${iconSvg('target')} Weekly challenge</b><span>${esc(weeklyBrief().line)}</span></button>
       <button class="mbtn" data-go="lb"><b>${iconSvg('medal')} Leaderboard</b><span>The best campaigns of every commander online</span></button>
       <button class="mbtn" data-go="tut"><b>${iconSvg('card')} Tutorial</b><span>Learn to command in five minutes</span></button>
       ${savedHot ? `<button class="mbtn small" data-go="conthot"><b>Continue hot-seat</b><span>${MONTHS_L[savedHot.m]} ${savedHot.y} · ${Object.keys(savedHot.humans).length} players</span></button>` : ''}
@@ -66,7 +66,7 @@ function showStart() {
     else if (g === 'camp') showCampaign();
     else if (g === 'mp') showMultiplayer();
     else if (g === 'hot') showHotseat();
-    else if (g === 'daily') showDaily();
+    else if (g === 'weekly') showWeekly();
     else if (g === 'tut') startTutorial();
   });
 }
@@ -131,22 +131,28 @@ function showHotseat() {
   };
 }
 
-/* ---------- daily challenge ---------- */
-function dailyBrief() {
-  const d = new Date(), key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`, h = hashStr('idom' + key);
-  const sc = [1936, 1939, 1939, 1941, 1936, 1944][h % 6];
-  const pool = ['GER','ENG','FRA','ITA','SOV','POL','SPA','TUR','SWE','FIN','ROM','YUG','GRE','HUN','CZE'].filter(t => aliveAt(sc).includes(t));
-  const tag = pool[(h >>> 4) % pool.length];
-  return { key, sc, tag, seed:h, line:`Today: ${NATDEF[tag].n}, ${SCENARIOS[sc].n} (${sc}) — same map and dice for everyone` };
+/* ---------- weekly challenge ---------- */
+// one challenge a week (ISO week, Monday to Sunday): the same map, nation, start date and dice for everyone
+function isoWeek(d = new Date()) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day); const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return { y:t.getUTCFullYear(), w:Math.ceil(((t - y0) / 86400000 + 1) / 7) };
 }
-function showDaily() {
-  const D = dailyBrief(), p = profile(), best = p.daily && p.daily[D.key];
+function weeklyBrief() {
+  const W = isoWeek(), D = weeklySpec(`${W.y}-W${String(W.w).padStart(2, '0')}`);  // the schedule is fixed for years ahead (weeklySpec in replay.js)
+  return { ...D, line:`This week: ${NATDEF[D.tag].n}, ${D.sc}, ${D.map === 'world' ? 'world map' : 'Europe'} — the same dice for everyone` };
+}
+function showWeekly() {
+  const D = weeklyBrief(), p = profile(), best = p.weekly && p.weekly[D.key];
+  if (D.map !== MAPKIND) { if (G && !G.preview && !G.over) Ctl.save(); switchMap(D.map, '?weekly=1'); return; }
   const st = $('#start');
-  st.innerHTML = `<div class="setup">${backBtn()}<h2>Daily challenge</h2>
-    <div class="daily">${flagImg(D.tag, 'bigflag')}<div><b>${esc(NATDEF[D.tag].n)}</b><span>${esc(SCENARIOS[D.sc].n)} · ${D.sc} · Veteran difficulty</span><p>${esc(NATDEF[D.tag].brief || SCENARIOS[D.sc].d)}</p></div></div>
-    <p class="hint">Everyone gets the same nation, start date and random seed today. Play until 1950 (or until you win) and beat your best score.${best ? ` Your best today: <b>${best}</b>.` : ''}</p>
-    <div class="go"><button class="btn gold" id="bBegin">Accept the challenge</button></div></div>`;
+  st.innerHTML = `<div class="setup">${backBtn()}<h2>Weekly challenge</h2>
+    <div class="daily">${flagImg(D.tag, 'bigflag')}<div><b>${esc(NATDEF[D.tag].n)}</b><span>${esc(SCENARIOS[D.sc].n)} · ${D.sc}–${D.endY} · ${D.map === 'world' ? 'World map' : 'Europe map'} · Veteran difficulty</span><p>${esc(NATDEF[D.tag].brief || SCENARIOS[D.sc].d)}</p></div></div>
+    <p class="hint">Everyone in the world gets the same nation, start date and random seed until Sunday. Play to January ${D.endY} (or until you win), post your score, and climb this week's leaderboard. A new challenge starts every Monday.${best ? ` Your best this week: <b>${best}</b>.` : ''}</p>
+    <div class="sect">Coming up</div><div class="wknext">${weeklyNext(D.key, 3).map(N => { const m = new Date(weekMonday(N.key)); return `<div>${flagImg(N.tag, 'wkflag')}<b>${esc(NATDEF[N.tag].n)}</b><span>${N.sc} · ${N.map === 'world' ? 'World' : 'Europe'} · from ${m.toLocaleDateString(undefined, { month:'short', day:'numeric', timeZone:'UTC' })}</span></div>`; }).join('')}</div>
+    <div class="go"><button class="btn" id="bWeekLb">This week's leaderboard</button><button class="btn gold" id="bBegin">Accept the challenge</button></div></div>`;
   wireBack(st); camHi(D.tag);
+  $('#bWeekLb').onclick = () => { lbFilter = 'week'; showLeaderboard(); };
   $('#bBegin').onclick = () => startGame({ humans:{ [D.tag]:{ name:'You' } }, diff:'hard', scenario:D.sc, mode:'sp', seed:D.seed, daily:D.key });
 }
 

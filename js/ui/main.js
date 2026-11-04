@@ -15,7 +15,7 @@ const Ctl = {
   },
   queueMode() { return this.mode === 'host' || this.mode === 'client' ? 'queue' : 'instant'; },
   act(c) {
-    if (!this.canAct() && c.c !== 'answer') return null;
+    if (!this.canAct() && c.c !== 'answer' && c.c !== 'endless') return null;
     if (this.mode === 'client') { Net.send({ t:'cmd', c }); return null; }
     const r = doCommand(ME, c, this.queueMode());
     this.after(c, r);
@@ -142,7 +142,7 @@ function startPlay(fresh) {
   if (fresh && ME && Ctl.mode !== 'hot') {
     Ctl.save();
     const n = nat(ME);
-    sendNews(ME, { title:'A New Year Dawns', head:`${n.name} Prepares for the Storm`, dek:`${dateStr()}: the cabinet meets as ${REALM} ${G.y >= 1939 ? 'burns' : 'slides toward war'}`, text:`${NATDEF[ME].brief || SCENARIOS[G.sc].d} Select a province to command its armies, pick a National Focus, start research and play your cards. Press ${Ctl.mode === 'sp' ? 'End Month' : 'Ready'} when done.${n.agendas && n.agendas.length ? ' You have been handed secret agendas — see the Destiny panel.' : ''}`, plate:ME });
+    introNews(ME);
     flushInbox();
   } else if (ME && Ctl.mode !== 'hot') { shownUids.clear(); flushInbox(); }
 }
@@ -161,6 +161,7 @@ function boot() {
   // joining from a shared link: ?join=CODE
   const q = new URLSearchParams(location.search);
   if (q.get('join')) setTimeout(() => showJoin(q.get('join')), 200);
+  if (q.get('weekly')) { history.replaceState(null, '', location.pathname); setTimeout(() => showWeekly(), 200); }
 }
 window.addEventListener('resize', resize);
 try { document.fonts && document.fonts.ready.then(() => { staticDirty = true; }); } catch (e) {}

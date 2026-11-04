@@ -111,6 +111,7 @@ function doCommand(t, c, mode) {
   // mode: 'instant' (single player / hot-seat) or 'queue' (simultaneous multiplayer)
   if (!G || G.over && G.over.final || !A(t)) return { ok:false, why:'Not available' };
   const n = nat(t), q = mode === 'queue';
+  recCommand(t, c);
   const R = (ok, extra) => Object.assign({ ok:!!ok }, extra || {});
   switch (c.c) {
     case 'move': { const r = execMove(t, c.from, c.to, c.amt); return R(r, { move:r }); }
@@ -119,6 +120,7 @@ function doCommand(t, c, mode) {
       const r = execAttack(t, c.from, c.to, c.amt); if (r) Hooks.emit('battle', r); return R(r, { battle:r });
     }
     case 'cancel': return R(cancelOrder(t, c.id));
+    case 'endless': if (!G.over || G.over.type === 'defeat') return R(false); G.over = false; G.flags.endless = 1; return R(true);
     case 'build': { const ok = build(t, c.k, c.pid, c.zone); return R(ok); }
     case 'buildN': { let made = 0; for (let i = 0; i < c.n; i++) if (build(t, c.k, c.pid, c.zone)) made++; return R(made, { made }); }
     case 'factory': return R(buildFactory(t, c.pid));

@@ -121,6 +121,7 @@ window.MAPKIND = (() => { try { const q = new URLSearchParams(location.search).g
 document.getElementById('ldMap').textContent = MAPKIND === 'world' ? 'Theatre · The World' : 'Theatre · Europe';
 document.write('<script src="data/' + (MAPKIND === 'world' ? 'map.js' : 'map-europe.js') + '"><\/script>');
 </script>
+<script src="js/core/build.js"></script>
 <script src="js/core/util.js"></script>
 <script src="js/core/data.js"></script>
 <script src="js/core/map.js"></script>
@@ -137,6 +138,7 @@ document.write('<script src="data/' + (MAPKIND === 'world' ? 'map.js' : 'map-eur
 <script src="js/core/ai.js"></script>
 <script src="js/core/scenario.js"></script>
 <script src="js/core/turn.js"></script>
+<script src="js/core/replay.js"></script>
 <script>document.write('<script src="js/ui/' + (MAPKIND === 'world' ? 'render.js' : 'render-europe.js') + '"><\/script>');</script>
 <script src="js/ui/icons.js"></script>
 <script src="js/ui/fx.js"></script>

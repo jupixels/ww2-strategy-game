@@ -1,24 +1,26 @@
 rules_version = '2';
-// Iron Dominion leaderboard: anyone may read; anyone may add one well-formed score; nobody may edit or delete.
+// Iron Dominion leaderboard.
+//   submissions: anyone may create one well-formed submission (a gzipped game record); the Cloud Function
+//                replays it and either publishes it to scores or marks it rejected. Readable by id only.
+//   scores:      written only by the Cloud Function (the Admin SDK bypasses these rules); readable by everyone.
 service cloud.firestore {
   match /databases/{db}/documents {
+    match /submissions/{id} {
+      allow get: if true;
+      allow list, update, delete: if false;
+      allow create: if request.resource.data.keys().hasOnly(['name','rec','claim','tag','map','week','v','at'])
+        && request.resource.data.name is string && request.resource.data.name.size() >= 1 && request.resource.data.name.size() <= 20
+        && request.resource.data.rec is string && request.resource.data.rec.size() <= 900000
+        && request.resource.data.claim is int && request.resource.data.claim >= 0 && request.resource.data.claim <= 10000
+        && request.resource.data.tag is string && request.resource.data.tag.size() <= 4
+        && request.resource.data.map in ['world', 'europe']
+        && (request.resource.data.week == null || request.resource.data.week is string && request.resource.data.week.size() <= 10)
+        && request.resource.data.v is string && request.resource.data.v.size() <= 4
+        && request.resource.data.at is timestamp && request.resource.data.at < request.time + duration.value(10, 'm') && request.resource.data.at > request.time - duration.value(10, 'm');
+    }
     match /scores/{id} {
       allow read: if true;
-      allow create: if request.resource.data.keys().hasOnly(['name','tag','nation','score','share','result','sc','map','diff','mode','year','medals','kills','won','lost','daily','v','at'])
-        && request.resource.data.name is string && request.resource.data.name.size() >= 1 && request.resource.data.name.size() <= 20
-        && request.resource.data.tag is string && request.resource.data.tag.size() <= 4
-        && request.resource.data.nation is string && request.resource.data.nation.size() <= 40
-        && request.resource.data.score is int && request.resource.data.score >= 0 && request.resource.data.score <= 3000
-        && request.resource.data.share is int && request.resource.data.share >= 0 && request.resource.data.share <= 100
-        && request.resource.data.result in ['victory', 'time', 'defeat']
-        && request.resource.data.map in ['world', 'europe']
-        && request.resource.data.kills is int && request.resource.data.kills >= 0 && request.resource.data.kills <= 100000
-        && request.resource.data.year is int && request.resource.data.medals is int && request.resource.data.won is int && request.resource.data.lost is int
-        && request.resource.data.sc is string && request.resource.data.sc.size() <= 6 && request.resource.data.diff is string && request.resource.data.diff.size() <= 8
-        && request.resource.data.mode is string && request.resource.data.mode.size() <= 8 && request.resource.data.v is string && request.resource.data.v.size() <= 4
-        && (!('daily' in request.resource.data) || request.resource.data.daily is string && request.resource.data.daily.size() <= 12)
-        && request.resource.data.at is timestamp && request.resource.data.at < request.time + duration.value(10, 'm') && request.resource.data.at > request.time - duration.value(10, 'm');
-      allow update, delete: if false;
+      allow write: if false;
     }
   }
 }

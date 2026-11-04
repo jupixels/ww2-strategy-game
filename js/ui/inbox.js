@@ -145,8 +145,8 @@ function showEnd() {
   m.querySelectorAll('.choice').forEach(b => b.onclick = () => {
     const a = b.dataset.a; m.hidden = true; m.innerHTML = ''; document.body.classList.remove('defeated');
     if (a === 'lapse') playTimelapse(() => showEnd());
-    else if (a === 'keep') { G.over = false; G.flags.endless = 1; Ctl.save(); renderAll(); }
-    else if (a === 'ally') { const al = membersOf(facOf(ME)).find(t => t !== ME && A(t)); G.over = false; G.humans[al] = { name:'You' }; delete G.humans[ME]; Ctl.setMe(al); Ctl.save(); renderAll(); }
+    else if (a === 'keep') { Ctl.act({ c:'endless' }); Ctl.save(); renderAll(); }
+    else if (a === 'ally') { const al = membersOf(facOf(ME)).find(t => t !== ME && A(t)); recBad('switched'); G.over = false; G.humans[al] = { name:'You' }; delete G.humans[ME]; Ctl.setMe(al); Ctl.save(); renderAll(); }
     else Ctl.toMenu();
   });
 }
@@ -158,7 +158,7 @@ function recordCareer(won, type) {
   const xp = Math.round(G.turn * 0.6 + n.st.won * 1.5 + n.st.caps + medalsOf(ME).length * 8 + (won ? 120 : 0) + (type === 'time' ? 30 : 0));
   p.xp = (p.xp || 0) + xp; p.games = (p.games || 0) + 1; if (won) p.wins = (p.wins || 0) + 1;
   p.best = Math.max(p.best || 0, scoreOf(ME));
-  if (G.daily) { p.daily = p.daily || {}; p.daily[G.daily] = Math.max(p.daily[G.daily] || 0, scoreOf(ME)); }
+  if (G.daily) { p.weekly = p.weekly || {}; p.weekly[G.daily] = Math.max(p.weekly[G.daily] || 0, ratedScore(ME)); }
   try { localStorage.setItem('idom-profile', JSON.stringify(p)); } catch (e) {}
   toast('★', `+${xp} career experience`, rankOf(p.xp).n + (rankOf(p.xp).next ? ` · ${rankOf(p.xp).next - p.xp} to next rank` : ''), 'medal');
 }
@@ -203,6 +203,7 @@ const TIPS = [
   'Every great power has a system of its own under <b>Plans</b>: Germany\'s war economy, Soviet factory evacuation, Britain\'s Atlantic lifeline, American mobilisation and Lend-Lease, Japan\'s oil clock, Italy\'s regime support, France\'s Union Sacrée and flight to Algiers, China\'s total resistance.',
   'Every January and July the chief of staff sends a <b>situation report</b>: gains and losses, threatened sectors, fuel and supply, and three recommendations you can jump straight to. The latest stays in the Ledger.',
   'Losing? Offer peace from the World panel. Winning? Demand terms and keep what you hold.',
+  'Leaderboard scores are <b>rated</b>: Veteran difficulty, a later start and a weaker nation all count for more, so a small country played well can top the board. Each <b>weekly challenge</b> gives everyone the same nation and dice; the next three are listed on its screen.'
 ].concat(WORLD ? [
   'The map spans the whole world and wraps east to west. Japan, China and the Americas fight their own wars — and yours, once Pearl Harbor drags America in.',
   'Ocean war: from New York a convoy reaches Normandy in one month; from San Francisco, Hawaii. Japan and America stage their armies at ports facing the enemy and island-hop.',

@@ -90,7 +90,7 @@ function endMonth() {
     checkVictory();
     if (G.over) for (const h of humanTags()) if (A(h)) tickAgendas(h, true);
   } finally { const l = Hooks.L.naval; if (l) l.splice(l.indexOf(navLog), 1); }
-  for (const h of humanTags()) { const now = new Set(owned(h)); out.gained[h] = [...now].filter(i => !before[h].has(i)); out.lost[h] = [...before[h]].filter(i => !now.has(i)); }
+  for (const h of humanTags()) { const now = new Set(owned(h)); const b = before[h] || new Set(); out.gained[h] = [...now].filter(i => !b.has(i)); out.lost[h] = [...b].filter(i => !now.has(i)); }
   Hooks.emit('month', out);
   return out;
 }
