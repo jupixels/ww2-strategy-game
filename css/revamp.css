@@ -375,3 +375,5 @@ body.picking #toasts{top:calc(env(safe-area-inset-top,0px) + 128px)}
 .slot b{font-family:var(--f-display);font-size:18px;letter-spacing:.03em;display:block}
 .slot span{font-size:12px;color:var(--muted);letter-spacing:.05em}
 .slot .slflag{width:36px;height:24px}
+/* side panels sit above the minimap, ticker, card hand and action buttons (all share #app's stacking layer) */
+#drawer,#card{z-index:7}
