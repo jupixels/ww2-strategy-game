@@ -54,12 +54,13 @@ function autoFronts(t) {
   }
   for (const e of Object.keys(groups).sort((a, b) => groups[b].size - groups[a].size)) {
     if (frontsOf(t).length >= FRONT_MAX) break;
-    const f = createFront(t, [...groups[e]], `${nat(e).adj} Front`, 'hold'); if (f) made.push(f);
+    const used = new Set(frontsOf(t).map(x => x.name)); let nm = `${nat(e).adj} Front`; for (let k = 2; used.has(nm); k++) nm = `${nat(e).adj} Front ${k}`;
+    const f = createFront(t, [...groups[e]], nm, 'hold'); if (f) made.push(f);
   }
   return made;
 }
 function frontCommand(t, c) {
-  if (c.op === 'create') { const f = createFront(t, c.pids || [], c.name, c.order); return f ? { ok:true, front:f } : { ok:false, why:canCreateFront(t, c.pids || []) }; }
+  if (c.op === 'create') { const f = createFront(t, Array.isArray(c.pids) ? c.pids.filter(Number.isInteger) : [], typeof c.name === 'string' ? c.name : null, c.order); return f ? { ok:true, front:f } : { ok:false, why:canCreateFront(t, c.pids || []) }; }
   if (c.op === 'auto') { const m = autoFronts(t); return m.length ? { ok:true, made:m.length } : { ok:false, why:'No unassigned provinces face an enemy' }; }
   const f = frontById(t, c.id); if (!f) return { ok:false, why:'No such front' };
   switch (c.op) {
@@ -73,7 +74,7 @@ function frontCommand(t, c) {
     case 'pull': f.pull = !f.pull; return { ok:true };
     case 'rename': f.name = String(c.name || f.name).slice(0, 28); return { ok:true };
     case 'edit': {
-      const add = (c.add || []).filter(i => G.prov[i] && frontable(t, i)), rem = new Set(c.rem || []);
+      const add = (Array.isArray(c.add) ? c.add : []).filter(i => Number.isInteger(i) && G.prov[i] && frontable(t, i)), rem = new Set(Array.isArray(c.rem) ? c.rem : []);
       for (const o of frontsOf(t)) if (o !== f) o.z = o.z.filter(i => !add.includes(i));
       f.z = [...new Set(f.z.filter(i => !rem.has(i)).concat(add))];
       nat(t).fronts = frontsOf(t).filter(o => o.z.length);
@@ -199,7 +200,7 @@ function runFront(t, f, out) {
   return rep;
 }
 const _bfsCache = {};
-function bfsDist(t, f, i) { const k = G.turn + t + f.id; if (!_bfsCache[k]) { for (const x in _bfsCache) delete _bfsCache[x]; _bfsCache[k] = bfsFrom(t, frontLine(t, f), standable(t)); } return _bfsCache[k][i]; }
+function bfsDist(t, f, i) { const k = G.seed + ':' + G.turn + t + f.id + ':' + G.prov.reduce((s, p, i) => p.o === t ? s + i : s, 0); if (!_bfsCache[k]) { for (const x in _bfsCache) delete _bfsCache[x]; _bfsCache[k] = bfsFrom(t, frontLine(t, f), standable(t)); } return _bfsCache[k][i]; }
 // month end, for every human nation that is at the table
 function runFronts(out) {
   for (const t of humanTags()) {

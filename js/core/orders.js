@@ -34,7 +34,7 @@ function execAttack(t, froms, to, amt, kindHint) {
   let kind = null;
   for (const f of froms) {
     const k = targetsFor(t, f).get(to);
-    if (!k || k === 'move' || k === 'naval') continue;
+    if (k !== 'attack' && k !== 'land' && k !== 'para') continue;
     if (k === 'para') { const p = stackOf(f, t); const part = emptyLand(); part.par = amt === 'one' ? 1 : amt === 'half' ? Math.ceil(p.r.par / 2) : p.r.par; srcs.push({ id:f, u:part, o:t }); kind = kind || 'para'; continue; }
     const part = portion(stackOf(f, t), amt); if (!landN(part)) continue;
     srcs.push({ id:f, u:part, o:t }); if (!kind || k === 'attack') kind = k;
@@ -51,7 +51,7 @@ function queueAttack(t, froms, to, amt) {
   const srcs = []; let kind = null;
   for (const f of froms) {
     const k = targetsFor(t, f).get(to);
-    if (!k || k === 'move' || k === 'naval') continue;
+    if (k !== 'attack' && k !== 'land' && k !== 'para') continue;
     const p = stackOf(f, t);
     const part = k === 'para' ? { ...emptyLand(), par:amt === 'one' ? 1 : p.r.par } : portion(p, amt);
     if (!landN(part)) continue;
@@ -129,7 +129,7 @@ function doCommand(t, c, mode) {
     case 'focus': return R(startFocus(t, c.k));
     case 'card': return R(playCard(t, c.k, c.target));
     case 'discard': return R(discardCard(t, c.k));
-    case 'front': { const r = frontCommand(t, c); return R(r.ok, r); }
+    case 'front': { try { const r = frontCommand(t, c); return R(r.ok, r); } catch (err) { return R(false, { why:'Bad front order' }); } }
     case 'sphere': { const why = canSphere(t, c.tag); if (why) return R(false, { why }); return R(true, { result:bringIntoBloc(t, c.tag) }); }
     case 'sig': { const r = sigCommand(t, c); return R(r.ok, r); }
     case 'spy': { const r = spyOp(t, c.op, c.target); return R(r, { spy:r }); }
@@ -139,7 +139,7 @@ function doCommand(t, c, mode) {
     case 'declare': { const why = canDeclare(t, c.tag); if (why) return R(false, { why }); n.pol -= warCost(t, c.tag); declareWar(t, c.tag); return R(true); }
     case 'join': if (G.flags.teamLock) return R(false, { why:'Teams are fixed in Team War' }); { const why = canJoin(t, c.fk); if (why) return R(false, { why }); n.pol -= 20; joinFaction(t, c.fk); return R(true); }
     case 'found': if (G.flags.teamLock) return R(false, { why:'Teams are fixed in Team War' }); return R(createFaction(t, c.name));
-    case 'leave': if (!facOf(t) || G.flags.teamLock) return R(false); leaveFaction(t); for (const e of enemiesOf(t)) if (!W(t, e)) endWar(t, e); return R(true);
+    case 'leave': if (!facOf(t) || G.flags.teamLock) return R(false); leaveFaction(t); for (const e of enemiesOf(t)) if (!W(t, e)) endWar(t, e); sanitizeGuests(); return R(true);
     case 'invite': { const fk = facOf(t); if (!fk || G.facs[fk].lead !== t || facOf(c.tag) || W(t, c.tag) || n.pol < 15) return R(false); n.pol -= 15;
       if (isHuman(c.tag)) { sendDecision(c.tag, { kind:'invite', fk, from:t, to:c.tag }); return R(true, { sent:true }); }
       const ok = nat(c.tag).ide === n.ide || G.tension > 50 && rnd() < 0.5 || enemiesOf(c.tag).some(e => W(e, t)); if (ok) joinFaction(c.tag, fk); return R(true, { accepted:ok }); }

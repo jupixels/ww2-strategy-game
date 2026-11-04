@@ -144,7 +144,7 @@ function select(id, add) {
   computeTargets(); rebuildOverlay(); staticDirty = true; renderCard(); if (tab === 'army') renderDrawer();
   hoverId = -1;
 }
-function clearSelection() { sel = null; selFleet = null; fleetTargetsSet = new Set(); targets = new Map(); rebuildOverlay(); staticDirty = true; renderCard(); $('#legend').hidden = true; hoverId = -1; }
+function clearSelection() { sel = null; selFleet = null; fleetTargetsSet = new Set(); targets = new Map(); rebuildOverlay(); staticDirty = true; renderCard(); hoverId = -1; }
 function selectFleet(z) {
   sel = null; targets = new Map();
   selFleet = { z, part:selFleet && selFleet.part || 'all' };
@@ -174,7 +174,7 @@ function execOrder(to) {
 }
 function oddsFor(srcs, to, kind) {
   const u = emptyLand(); for (const s of srcs) { const S = stackOf(s, ME) || G.prov[s]; const part = kind === 'para' ? { ...emptyLand(), par:S.r.par } : portion(S, sel ? sel.amt : 'all'); for (const k of LAND) u[k] += part[k]; }
-  const T = G.prov[to]; if (!unitsAt(T)) return { odds:Infinity, af:[], df:[] };
+  const T = G.prov[to]; if (!forcesAt(T)) return { odds:Infinity, af:[], df:[] };
   const af = [], df = [];
   const atk = attackValue(ME, u, to, { naval:kind === 'land', para:kind === 'para', from:srcs[0] }, af);
   const def = defenseValue(to, u, ME, df);

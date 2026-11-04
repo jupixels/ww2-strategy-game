@@ -320,7 +320,7 @@ function switchSides(t) {
   if (G.facs.ALLIES) joinFaction(t, 'ALLIES', true);
   if (A('GER')) setWar('GER', t);
   for (const a of membersOf('AXIS')) setWar(a, t);
-  syncFaction('ALLIES');
+  syncFaction('ALLIES'); sanitizeGuests();
   news(`${natName(t).toUpperCase()} JOINS THE ALLIES`);
   Hooks.emit('dirty', { owners:true });
 }

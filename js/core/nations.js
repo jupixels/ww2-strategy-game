@@ -70,7 +70,7 @@ function sigTick(t) {
     s.reg = clamp(s.reg + (w > l ? 2 : w < l ? -2 : 0.5) - occ * 2 - (n.stab < 40 ? 1.5 : 0) + (!atWar ? 1 : 0), 0, 100);
   }
   if (t === 'CHI' && W('CHI', 'JAP')) for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (p.core === 'CHI' && friendly(p.o, 'JAP')) p.res = Math.min(100, p.res + 3); }
-  if (t === 'FRA' && s.union > 0) s.union--;
+  if (s.union > 0) s.union--;
   if (t === 'JAP') s.clock = oilMonths(t) === Infinity ? null : oilMonths(t);
 }
 // factories within two provinces of the enemy, west of the Urals
@@ -80,7 +80,9 @@ function evacCandidates(t) {
   return r.sort((a, b) => G.prov[b].fac - G.prov[a].fac);
 }
 const EVAC_DEST = ['Sverdlovsk','Perm','Ufa','Kuibyshev','Omsk','Novosibirsk','Kazan'];
+const SIG_OPS = { GER:['eco'], SOV:['evac'], ENG:['escort'], USA:['ll'], JAP:['anchor'], ITA:['armistice'], FRA:['union','exile'], CHI:['ufront'] };
 function canSig(t, op, c) {
+  if (!SIG_OPS[t] || !SIG_OPS[t].includes(op)) return 'Not a power of this nation';
   const n = nat(t), s = sigOf(t); if (!s) return 'No national system';
   const atWar = enemiesOf(t).length > 0;
   switch (op) {
@@ -102,9 +104,10 @@ function sigCommand(t, c) {
   switch (c.op) {
     case 'eco': { const lv = c.lv | 0; if (lv > (s.eco || 0)) n.pol -= 10 * lv; s.eco = lv; return { ok:true }; }
     case 'evac': {
-      const p = G.prov[c.pid], k = Math.min(p.fac, 3); n.pol -= 5;
+      const p = G.prov[c.pid], k = Math.min(p.fac, 3);
       const dest = EVAC_DEST.map(nm => ID[nm]).filter(i => i != null && G.prov[i].o === t).sort((a, b) => G.prov[a].fac - G.prov[b].fac)[0];
       if (dest == null) return { ok:false, why:'Nowhere safe to send them' };
+      n.pol -= 5;
       p.fac -= k; s.evac.push({ to:dest, n:k, at:G.turn + 2 });
       return { ok:true, msg:`${k} factor${k > 1 ? 'ies' : 'y'} leave ${PROV[c.pid].name} for ${PROV[dest].name}; back in production in two months.` };
     }

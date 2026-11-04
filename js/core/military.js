@@ -285,7 +285,7 @@ function defenseValue(pid, atkUnits, atkTag, detail) {
   if (p.o === 'CHI' && p.core === 'CHI' && atkTag && friendly(atkTag, 'JAP')) mul('Trading space for time', P.ter === 'p' ? 1.2 : 1.35);
   mul('Hold the line', n.fx.maginot ? 1.2 : 1);
   mul('Codebreakers', n.fx.codebreak ? 1.1 : 1);
-  mul('Union sacrée', n.sig && n.sig.union > 0 ? 1.1 : 1);
+  mul('Union sacrée', p.o === 'FRA' && n.sig && n.sig.union > 0 ? 1.1 : 1);
   if (atkTag && nat(atkTag).fx.fifth === pid) mul('Fifth column', 0.5);
   mul('Difficulty', diffMul(p.o, 'cb'));
   mul('National spirit', n.bonus);
@@ -406,7 +406,7 @@ function capture(tid, a, u, res, from) {
   for (const k of AIR) if (T.air[k]) { const alt = PROV[tid].adj.find(j => G.prov[j].o === prev); if (alt != null) G.prov[alt].air[k] += T.air[k]; T.air[k] = 0; }
   if (A(prev) && nat(prev).fx.scorched) T.fac = 0;
   T.o = newOwner; T.r = emptyLand(); T.ht = G.turn; delete T.g;
-  if (newOwner !== a) { T.u = emptyLand(); T.u.inf = 1; const S = guestOf(tid, a, true); S.u = { ...u }; S.r = emptyLand(); } else T.u = { ...u };
+  if (newOwner !== a) { T.u = emptyLand(); const S = guestOf(tid, a, true); S.u = { ...u }; S.r = emptyLand(); } else T.u = { ...u };
   if (res && res.blitz && newOwner === a) T.r.arm = u.arm;
   T.dig = 0;
   if (newOwner !== a && res) res.liberated = newOwner;
@@ -479,6 +479,7 @@ function capitulate(d, w) {
   G.gens = G.gens.filter(g => g.tag !== d || vichy);
   if (vichy) G.gens.forEach(g => { if (g.tag === 'FRA') g.tag = 'VIC'; });
   killNation(d, w);
+  sanitizeGuests();
   const head = vichy ? 'FRANCE SIGNS ARMISTICE — VICHY REGIME FORMED' : `${n.name.toUpperCase()} CAPITULATES`;
   news(head);
   log(`<b>${n.name}</b> capitulated to <b>${wn.name}</b>.`);

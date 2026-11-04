@@ -13,6 +13,10 @@ service cloud.firestore {
         && request.resource.data.result in ['victory', 'time', 'defeat']
         && request.resource.data.map in ['world', 'europe']
         && request.resource.data.kills is int && request.resource.data.kills >= 0 && request.resource.data.kills <= 100000
+        && request.resource.data.year is int && request.resource.data.medals is int && request.resource.data.won is int && request.resource.data.lost is int
+        && request.resource.data.sc is string && request.resource.data.sc.size() <= 6 && request.resource.data.diff is string && request.resource.data.diff.size() <= 8
+        && request.resource.data.mode is string && request.resource.data.mode.size() <= 8 && request.resource.data.v is string && request.resource.data.v.size() <= 4
+        && (!('daily' in request.resource.data) || request.resource.data.daily is string && request.resource.data.daily.size() <= 12)
         && request.resource.data.at is timestamp && request.resource.data.at < request.time + duration.value(10, 'm') && request.resource.data.at > request.time - duration.value(10, 'm');
       allow update, delete: if false;
     }

@@ -25,16 +25,17 @@ const ACTS = {
 };
 const DOOM_MAX = 100;
 const majorsAlive = () => MAJORS.filter(t => A(t));
+const onMap = t => A(t) && !NATDEF[t].off;
 function majorWar() { const ms = majorsAlive(); for (let i = 0; i < ms.length; i++) for (let j = i + 1; j < ms.length; j++) if (W(ms[i], ms[j])) return true; return false; }
 function blocVP(tags) { return sum(tags.filter(A), vpOf); }
 function classifyWorld() {
-  const axis = ['GER','ITA','JAP'].filter(t => A(t) && isAxis(t)), west = ['ENG','FRA','USA'].filter(t => A(t) && nat(t).ide !== 'F' && nat(t).ide !== 'C');
+  const axis = ['GER','ITA','JAP'].filter(t => A(t) && isAxis(t)), west = ['ENG','FRA','USA'].filter(t => onMap(t) && nat(t).ide !== 'F' && nat(t).ide !== 'C');
   const sov = A('SOV') && nat('SOV').ide === 'C', tot = totalVP();
   if (majorWar()) return 'exhaust';
   if (axis.length && blocVP(membersOf('AXIS')) > tot * 0.3) return 'reich';
   if (sov && (!west.length || vpOf('SOV') > 1.5 * blocVP(west))) return 'redtide';
   if (sov && west.length) return 'coldwar';
-  if (A('USA')) return 'american';
+  if (onMap('USA')) return 'american';
   return 'coldwar';
 }
 function checkSecondAct() {
@@ -51,10 +52,12 @@ function startAct(k) {
   if (k === 'coldwar') {
     // the Grand Alliance splits: Moscow and the communists form their own bloc
     const east = Object.keys(G.nat).filter(t => A(t) && nat(t).ide === 'C' && !NATDEF[t].off);
+    if (A('SOV') && east.includes('SOV')) {
     for (const t of east) if (facOf(t) && facOf(t) !== 'EAST') leaveFaction(t);
     G.facs.EAST = { n:'Eastern Bloc', lead:'SOV', m:east.filter(t => t !== 'SOV') };
     G.facs.EAST.m.unshift('SOV');
     delete G.facs.COMINTERN;
+    }
     westernBloc();
   } else if (k === 'reich') {
     // the victors fall out: Japan goes its own way in Asia
@@ -69,6 +72,7 @@ function startAct(k) {
   } else if (k === 'exhaust') {
     G.act.doom = 10;
   }
+  sanitizeGuests();
   news(`${A0.n.toUpperCase()}`);
   log(`<b>The second act begins: ${A0.n}.</b> ${A0.short}.`);
   sendNews('*', { title:A0.n, head:A0.n, dek:A0.short, text:A0.d + ' The war years are over: the story now runs to ' + ACT_END + '. Open the World panel to see your bloc and the Doomsday Clock.', plate:k === 'reich' ? 'GER' : k === 'redtide' ? 'SOV' : 'USA' });
@@ -76,7 +80,7 @@ function startAct(k) {
 }
 // the democracies close ranks under American (or British) leadership
 function westernBloc(name) {
-  const lead = A('USA') && nat('USA').ide === 'D' ? 'USA' : A('ENG') && nat('ENG').ide === 'D' ? 'ENG' : null; if (!lead) return;
+  const lead = onMap('USA') && nat('USA').ide === 'D' ? 'USA' : onMap('ENG') && nat('ENG').ide === 'D' ? 'ENG' : membersOf('ALLIES').find(t => onMap(t) && nat(t).ide === 'D') || null; if (!lead) return;
   if (!G.facs.ALLIES) G.facs.ALLIES = { n:'Allies', lead, m:[lead] };
   const F = G.facs.ALLIES; F.n = name || 'Western Alliance'; F.lead = lead;
   if (!F.m.includes(lead)) { leaveFaction(lead); F.m.push(lead); }
@@ -148,7 +152,7 @@ function sphereTargets(t) {
   }).sort((a, b) => b[1] - a[1]).map(x => x[0]);
 }
 const SPHERE_COST = 25;
-function canSphere(t, o) { if (!G.act) return 'Only after the war'; if (!facOf(t)) return 'Lead or join a bloc first'; if (!A(o) || facOf(o) || nat(o).major || W(t, o)) return 'Unavailable'; if (nat(t).pol < SPHERE_COST) return `Needs ${SPHERE_COST} politics`; return ''; }
+function canSphere(t, o) { if (!G.act) return 'Only after the war'; if (!facOf(t)) return 'Lead or join a bloc first'; if (!A(o) || facOf(o) || nat(o).major || W(t, o) || isHuman(o)) return 'Unavailable'; if (nat(t).pol < SPHERE_COST) return `Needs ${SPHERE_COST} politics`; return ''; }
 function bringIntoBloc(t, o) {
   if (canSphere(t, o)) return 'refused';
   nat(t).pol -= SPHERE_COST;

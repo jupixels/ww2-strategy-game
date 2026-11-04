@@ -83,6 +83,7 @@ function endMonth() {
     // 9. history moves on
     checkEvents();
     checkSecondAct();
+    sanitizeGuests();
     for (const h of humanTags()) if (A(h)) tickAgendas(h, false);
     recordHistory();
     tickReports();

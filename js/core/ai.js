@@ -203,7 +203,7 @@ function aiTurn(t, battles) {
   // paratroopers drop behind the lines when the odds are good
   for (const i of order) {
     const p = G.prov[i]; if (!p.r.par) continue;
-    const tg = paraTargets(t, i).map(j => [j, attackValue(t, { ...emptyLand(), par:p.r.par }, j, { para:true, from:i }) / Math.max(0.3, unitsAt(G.prov[j]) ? defenseValue(j, null, t) : 0.01)]).filter(x => x[1] > 1.6).sort((a, b) => PROV[b[0]].vp - PROV[a[0]].vp)[0];
+    const tg = paraTargets(t, i).map(j => [j, attackValue(t, { ...emptyLand(), par:p.r.par }, j, { para:true, from:i }) / Math.max(0.3, forcesAt(G.prov[j]) ? defenseValue(j, null, t) : 0.01)]).filter(x => x[1] > 1.6).sort((a, b) => PROV[b[0]].vp - PROV[a[0]].vp)[0];
     if (tg) battles.push(battle([{ id:i, u:{ ...emptyLand(), par:p.r.par } }], tg[0], { para:true }));
   }
   for (const i of order) {
@@ -217,7 +217,7 @@ function aiTurn(t, battles) {
         const sumU = portion(p, 'all');
         for (const k of helpers) { const hp = portion(G.prov[k], 'all'); hp.inf = Math.max(0, hp.inf - (k === n.capital ? 3 : 1)); for (const kk of LAND) sumU[kk] += hp[kk]; }
         const atk = attackValue(t, sumU, j, { from:i });
-        const def = unitsAt(T) === 0 ? 0.01 : defenseValue(j, sumU, t);
+        const def = forcesAt(T) === 0 ? 0.01 : defenseValue(j, sumU, t);
         const odds = atk / def;
         const obj = n.ops && n.ops.tg.includes(j) ? 1.3 : 1;
         const score = odds * obj * (1 + PROV[j].vp * 0.08 + (A(T.o) && j === nat(T.o).capital ? 0.4 : 0));
@@ -277,7 +277,7 @@ function aiConvoys(t, n, fd, enemies, pacific) {
         if (fortress && nowNum() < ymNum(1942, 10)) continue;
         const part = trimTo(portion(p, 'all'), liftLeft(t)); if (PROV[i].vp >= 4) part.inf = Math.max(0, part.inf - 2);
         if (landN(part) < 3) continue;
-        const o = unitsAt(G.prov[j]) ? attackValue(t, part, j, { naval:true }) * (1 - v.risk) / Math.max(0.3, defenseValue(j, part, t)) : 9;
+        const o = forcesAt(G.prov[j]) ? attackValue(t, part, j, { naval:true }) * (1 - v.risk) / Math.max(0.3, defenseValue(j, part, t)) : 9;
         const sc = o * (1 + PROV[j].vp * 0.1 + (A(G.prov[j].o) && nat(G.prov[j].o).capital === j ? 0.5 : 0));
         if (o > (fortress ? 2.8 : 2) && (!best || sc > best[0])) best = [sc, j, part];
       }

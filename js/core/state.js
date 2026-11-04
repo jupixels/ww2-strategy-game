@@ -57,10 +57,12 @@ function guestOf(pid, t, make) {
   return p.g[t] || (make ? (p.g[t] = { u:emptyLand(), r:emptyLand(), xp:0, dig:0 }) : null);
 }
 // the army t commands at pid: its own stack, or its expeditionary force there
-function stackOf(pid, t) { const p = G.prov[pid]; if (!p) return null; return p.o === t ? p : p.g && p.g[t] || null; }
-const guestN = p => { let s = 0; if (p.g) for (const t in p.g) s += landN(p.g[t].u); return s; };
+function stackOf(pid, t) { const p = G.prov[pid]; if (!p) return null; return p.o === t ? p : p.g && p.g[t] && guestOk(p, t) ? p.g[t] : null; }
+const guestN = p => { let s = 0; for (const t of guestTags(p)) s += landN(p.g[t].u); return s; };
 const forcesAt = p => unitsAt(p) + guestN(p);
-const guestTags = p => p.g ? Object.keys(p.g).filter(t => landN(p.g[t].u) > 0) : [];
+// only allies count: a stack whose host is no longer friendly is on its way home and cannot fight from here
+const guestOk = (p, t) => t !== p.o && A(t) && A(p.o) && friendly(p.o, t);
+const guestTags = p => p.g ? Object.keys(p.g).filter(t => landN(p.g[t].u) > 0 && guestOk(p, t)) : [];
 function cleanGuests(p) { if (!p.g) return; for (const t in p.g) if (!landN(p.g[t].u)) delete p.g[t]; if (!Object.keys(p.g).length) delete p.g; }
 // put troops of t down at pid: into its own province, or as guests in an ally's. False if neither.
 function depositAt(pid, t, u) {
@@ -137,6 +139,7 @@ function newGame(opts) {
   resetReady(); updateSupply();
   recordHistory();
   G.srs = {}; for (const t of humanTags()) G.srs[t] = srSnapshot(t);
+  for (const t in SIGS) if (G.nat[t]) sigOf(t);
   log(`${humanTags().length === 1 ? `You lead <b>${natName(humanTags()[0])}</b>.` : 'The war begins.'} ${SCENARIOS[G.sc].d}`);
   Hooks.emit('newgame', {});
   return G;

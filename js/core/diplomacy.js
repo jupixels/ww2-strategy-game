@@ -147,6 +147,7 @@ function makePeace(a, b, terms) {
   news(head); log(`<b>Peace</b> between ${natName(a)} and ${natName(b)} (${terms === 'white' ? 'status quo' : 'territory ceded'}).`);
   for (const h of [a, b]) if (isHuman(h)) award(h, 'peacemaker');
   for (const h of humanTags()) if (sa.includes(h) || sb.includes(h)) notify(h, '☮', 'Peace signed', head.charAt(0) + head.slice(1).toLowerCase() + '.', 'medal');
+  sanitizeGuests();
   Hooks.emit('dirty', { owners:true });
 }
 function offerPeace(t, e, terms) {
