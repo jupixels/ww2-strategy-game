@@ -18,11 +18,19 @@ A grand strategy game of the Second World War, in the browser. Play on the origi
 - **National focus branches** for every great power, including the USA (Two-Ocean Navy, Liberty Ships, Arsenal of Democracy) and Japan (Kantai Kessen, Fuel Reserve, Kwantung Army, Southern Operation).
 - **Strategy cards** (one a month; discard the ones you don't want), **spies**, **operations** with objectives, timed **research** in four branches, a **national focus tree** with branches for the great powers, alternate-history **Destiny** decisions (45 formable nations on the world map — Gran Colombia, the Arab Federation, the Danubian Federation, Benelux, the Great Qing, a free India and more — whose lands become your heartland when you form them), ~50 historical events, peace treaties, pacts, guarantees and ultimatums.
 - **Situation reports** every January and July: six months of gains and losses, the sectors where you are outnumbered, fuel and supply warnings, and three recommendations from the chief of staff that jump you to the right place.
-- **Secret agendas**, medals, a career rank, a daily challenge and an end-of-war timelapse.
+- **Secret agendas**, medals, a career rank, a daily challenge, an end-of-war timelapse and an **online leaderboard** (no account needed: post your score from the end screen, browse by map or today's challenge).
 - **Install it as an app**: in Chrome or Edge, use the install icon in the address bar (or "Add to Home screen" on a phone). It opens in its own window and keeps working offline once loaded.
 
 ## Multiplayer
 Host-authoritative over WebRTC (PeerJS, vendored in `js/vendor`), or between tabs of one browser for testing. Modes: Grand Campaign, Team War, Blitz (1939–42), Co-op. Simultaneous turns: everyone plans, attacks are queued and resolved together (armies that march into each other fight a meeting engagement). Dropped players are taken over by the AI until they rejoin.
+
+## Online leaderboard setup (Google Firebase)
+The leaderboard is off until it is connected to a Firestore database. It costs nothing on Firebase's free tier and needs no player accounts.
+1. Create a project at [console.firebase.google.com](https://console.firebase.google.com) (Analytics can stay off).
+2. **Build → Firestore Database → Create database** (production mode, any region).
+3. **Firestore → Rules**: paste the contents of `firestore.rules` from this repo and **Publish**. They let anyone read the board and add one well-formed score, and nobody edit or delete one.
+4. **Project settings → General → Your apps → Web (</>)**: register an app and copy `projectId` and `apiKey` into `js/net/leaderboard-config.js`. The web API key is a public identifier, not a secret; the rules protect the data.
+5. Push to `main`. Scores appear under **Leaderboard** on the main menu. To clear spam, delete documents in the `scores` collection from the Firebase console.
 
 ## Code
 - `js/core/` — the simulation, DOM-free (it reports through `Hooks`). Runs in Node for tests.

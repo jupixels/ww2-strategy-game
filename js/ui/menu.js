@@ -49,6 +49,7 @@ function showStart() {
       <button class="mbtn" data-go="mp"><b>${iconSvg('pol')} Multiplayer</b><span>Online rooms with a code: Grand Campaign, Team War, Blitz, Co-op</span></button>
       <button class="mbtn" data-go="hot"><b>${iconSvg('mp')} Hot-seat</b><span>2–6 players take turns on this device</span></button>
       <button class="mbtn" data-go="daily"><b>${iconSvg('target')} Daily challenge</b><span>${esc(dailyBrief().line)}</span></button>
+      <button class="mbtn" data-go="lb"><b>${iconSvg('medal')} Leaderboard</b><span>The best campaigns of every commander online</span></button>
       <button class="mbtn" data-go="tut"><b>${iconSvg('card')} Tutorial</b><span>Learn to command in five minutes</span></button>
       ${savedHot ? `<button class="mbtn small" data-go="conthot"><b>Continue hot-seat</b><span>${MONTHS_L[savedHot.m]} ${savedHot.y} · ${Object.keys(savedHot.humans).length} players</span></button>` : ''}
       ${savedMp ? `<button class="mbtn small" data-go="contmp"><b>Re-host saved online game</b><span>${MONTHS_L[savedMp.m]} ${savedMp.y} · ${Object.keys(savedMp.humans).length} players</span></button>` : ''}
@@ -57,6 +58,7 @@ function showStart() {
   st.querySelectorAll('[data-go]').forEach(b => b.onclick = () => {
     SFX.init(); SFX.click();
     const g = b.dataset.go;
+    if (g === 'lb') { showLeaderboard(); return; }
     if (g === 'back') startPlay(false);
     else if (g === 'cont') { Ctl.mode = 'sp'; adopt(saved); Ctl.setMe(Object.keys(G.humans)[0]); startPlay(false); if (G.tut) tutShow(); }
     else if (g === 'conthot') { Ctl.mode = 'hot'; adopt(savedHot); startPlay(false); passScreen(G.hs || activeHumans()[0]); }

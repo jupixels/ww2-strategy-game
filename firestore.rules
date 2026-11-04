@@ -1,0 +1,20 @@
+rules_version = '2';
+// Iron Dominion leaderboard: anyone may read; anyone may add one well-formed score; nobody may edit or delete.
+service cloud.firestore {
+  match /databases/{db}/documents {
+    match /scores/{id} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['name','tag','nation','score','share','result','sc','map','diff','mode','year','medals','kills','won','lost','daily','v','at'])
+        && request.resource.data.name is string && request.resource.data.name.size() >= 1 && request.resource.data.name.size() <= 20
+        && request.resource.data.tag is string && request.resource.data.tag.size() <= 4
+        && request.resource.data.nation is string && request.resource.data.nation.size() <= 40
+        && request.resource.data.score is int && request.resource.data.score >= 0 && request.resource.data.score <= 3000
+        && request.resource.data.share is int && request.resource.data.share >= 0 && request.resource.data.share <= 100
+        && request.resource.data.result in ['victory', 'time', 'defeat']
+        && request.resource.data.map in ['world', 'europe']
+        && request.resource.data.kills is int && request.resource.data.kills >= 0 && request.resource.data.kills <= 100000
+        && request.resource.data.at is timestamp && request.resource.data.at < request.time + duration.value(10, 'm') && request.resource.data.at > request.time - duration.value(10, 'm');
+      allow update, delete: if false;
+    }
+  }
+}

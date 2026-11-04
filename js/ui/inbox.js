@@ -132,14 +132,16 @@ function showEnd() {
   m.innerHTML = `<div class="paper final" role="dialog" aria-modal="true"><div class="mast"><h5>The ${WORLD ? 'World' : 'European'} Dispatch</h5><span>${dateStr()}<br>Special edition</span></div>
     <div class="head">${esc(head)}</div><p class="dek">${esc(o.reason)}</p>
     ${multi ? `<table class="score"><tr><th></th><th>Nation</th><th>${WORLD ? 'World' : 'Europe'}</th><th>Agendas</th><th>Score</th></tr>${rows.map((r, i) => `<tr class="${o.winners.includes(r.t) ? 'win' : ''}"><td>${i + 1}</td><td>${flagImg(r.t)} ${esc(natName(r.t))} <small>${esc(G.humans[r.t] ? G.humans[r.t].name || '' : '')}</small></td><td>${Math.round(vpOf(r.t) / totalVP() * 100)}%</td><td>${r.ag.filter(a => a.st === 'done').length}/${r.ag.length}</td><td><b>${r.s}</b></td></tr>`).join('')}</table>`
-    : n ? `<p class="copy" style="columns:1">Victories ${n.st.won}, defeats ${n.st.lost}, provinces captured ${n.st.caps}. Enemy divisions destroyed: ${n.st.kills}. Medals: ${medalsOf(ME).length} of ${Object.keys(ACH).length}. Final dominion: ${share}% of Europe. Score: <b>${scoreOf(ME)}</b>.</p>` : ''}
+    : n ? `<p class="copy" style="columns:1">Victories ${n.st.won}, defeats ${n.st.lost}, provinces captured ${n.st.caps}. Enemy divisions destroyed: ${n.st.kills}. Medals: ${medalsOf(ME).length} of ${Object.keys(ACH).length}. Final dominion: ${share}% of ${REALM}. Score: <b>${scoreOf(ME)}</b>.</p>` : ''}
     ${n && n.agendas && n.agendas.length ? `<div class="agendas">${n.agendas.map(a => `<span class="${a.st}">${a.st === 'done' ? '✓' : '✕'} ${esc(agendaText(a))}</span>`).join('')}</div>` : ''}
+    ${leaderboardPostBox()}
     <div class="choices">
       <button class="choice" data-a="lapse"><span>Watch the war unfold</span><em>Timelapse of every month</em></button>
       ${o.type !== 'defeat' && !multi ? '<button class="choice" data-a="keep"><span>Keep playing</span><em>The map is still yours</em></button>' : ''}
       ${o.type === 'defeat' && !multi && ME && membersOf(facOf(ME) || '').some(t => t !== ME && A(t)) ? `<button class="choice" data-a="ally"><span>Fight on as an ally</span><em>Take command of a friendly nation</em></button>` : ''}
       <button class="choice" data-a="menu"><span>Main menu</span><em>Back to the war room</em></button></div></div>`;
   if (won) { SFX.victory(); fireworks(36); } else if (o.type === 'defeat') { SFX.defeat(); document.body.classList.add('defeated'); }
+  wireLeaderboardPost(m, () => showEnd());
   m.querySelectorAll('.choice').forEach(b => b.onclick = () => {
     const a = b.dataset.a; m.hidden = true; m.innerHTML = ''; document.body.classList.remove('defeated');
     if (a === 'lapse') playTimelapse(() => showEnd());
