@@ -30,7 +30,7 @@ The leaderboard is off until it is connected to a Firestore database, and needs 
 2. **Build → Firestore Database → Create database** (production mode, any region).
 3. **Project settings → General → Your apps → Web (</>)**: register an app and copy `projectId` and `apiKey` into `js/net/leaderboard-config.js`. The web API key is a public identifier, not a secret; the rules protect the data.
 4. Upgrade the project to the **Blaze** (pay-as-you-go) plan — Cloud Functions require it. The free allowance (2 million function calls a month) covers far more than a hobby leaderboard; you can set a budget alert of a few dollars under **Usage and billing**.
-5. On your computer, with Node 20+ installed, from the repo root:
+5. On your computer, with Node 22+ installed, from the repo root:
    ```bash
    npm install -g firebase-tools
    firebase login
