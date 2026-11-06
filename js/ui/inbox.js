@@ -192,7 +192,6 @@ function playFilm(frames, caption, tag, done) {
 const TIPS = [
   'Attack with odds above <b>1.3:1</b> — hover a target to see the odds and every factor behind them.',
   '<b>Shift-click</b> several provinces to attack one target from all sides at once.',
-  '<b>Fronts</b> (Command → Fronts) take the clicking out of a big war: give each sector Hold, Advance or Encircle and a general, and its ready divisions act at month end, with reserves marching up. Anything you move by hand that month is left alone.',
   'Surround enemies before you strike: defenders with no friendly province behind them are <b>destroyed</b>.',
   'Armies far from a depot (capital, home city, or a big city held for six months) lose punch. Watch the supply truck on counters.',
   'Artillery shreds forts. Mountain troops own the hills. Armor is king on the plains but burns oil and stalls in mud.',
@@ -210,7 +209,8 @@ const TIPS = [
   'Every January and July the chief of staff sends a <b>situation report</b>: gains and losses, threatened sectors, fuel and supply, and three recommendations you can jump straight to. The latest stays in the Ledger.',
   'Losing? Offer peace from the World panel. Winning? Demand terms and keep what you hold.',
   'Leaderboard scores are <b>rated</b>: Veteran difficulty, a later start and a weaker nation all count for more, so a small country played well can top the board. Each <b>weekly challenge</b> gives everyone the same nation and dice; the next three are listed on its screen, and while you play it the top bar shows <b>You / #1</b>: your score against the leader\'s at the same date. Press ▶ on any leaderboard entry to watch that campaign.',
-  'Single player saves every campaign in its own slot (main menu → <b>Saved campaigns</b>; <b>Save a copy</b> keeps a moment to come back to). <b>Undo</b> (<kbd>Ctrl</kbd>+<kbd>Z</kbd>) rewinds this month, then earlier ones — but an undone campaign no longer counts for the leaderboard.'
+  'Single player saves every campaign in its own slot (main menu → <b>Saved campaigns</b>; <b>Save a copy</b> keeps a moment to come back to). <b>Undo</b> (<kbd>Ctrl</kbd>+<kbd>Z</kbd>) rewinds this month, then earlier ones — but an undone campaign no longer counts for the leaderboard.',
+  '<b>Research</b> (key 3) lays every technology out by year and branch. Gold cards can start now; lines show what each one needs. Keep every laboratory busy — the focus Research Universities adds another.'
 ].concat(WORLD ? [
   'The map spans the whole world and wraps east to west. Japan, China and the Americas fight their own wars — and yours, once Pearl Harbor drags America in.',
   'Ocean war: from New York a convoy reaches Normandy in one month; from San Francisco, Hawaii. Japan and America stage their armies at ports facing the enemy and island-hop.',

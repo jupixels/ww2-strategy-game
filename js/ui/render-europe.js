@@ -357,7 +357,6 @@ function drawStatic(allowCache) {
   if (z < 1.3) { c.font = `italic 600 ${15}px ${FONT_MAP}`; c.fillStyle = 'rgba(200,225,235,.28)'; for (const k in SEA) { const S = SEA[k]; c.fillText(S.n.toUpperCase(), S.x, S.y - 30); } }
   c.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (timelapseOwners) return;
-  drawFrontLines(c);
   drawCities(c);
   drawCounters(c);
   drawFleets(c);

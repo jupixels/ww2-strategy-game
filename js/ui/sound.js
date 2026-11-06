@@ -56,12 +56,12 @@ const SFX = (() => {
     if (lib || !window.SFX) return;
     try { lib = new window.SFX({ base:'assets/' }); lib.load(BANK); apply(); if (music && on) setTimeout(() => { music = false; api.toggleMusic(); }, 300); } catch (e) { lib = null; }
   }
-  function apply() { if (!lib) return; lib.setVolume('master', on ? 0.85 : 0); lib.setVolume('sfx', vol.sfx); lib.setVolume('ui', vol.sfx); lib.setVolume('music', vol.music); }
-  const ready = () => on && lib;
+  function apply() { if (!lib) return; lib.setVolume('master', on && !away ? 0.85 : 0); lib.setVolume('sfx', vol.sfx); lib.setVolume('ui', vol.sfx); lib.setVolume('music', vol.music); }
+  const ready = () => on && lib && !away; // nothing plays while the tab is in the background
   const has = k => lib && lib.buffers[k] && lib.buffers[k].length;
   const play = (k, o) => { if (ready() && has(k)) return lib.play(k, o); };
   const api = {
-    init, get on() { return on; }, get music() { return music; }, get vol() { return vol; },
+    init, get on() { return on; }, get _state() { return lib && { ctx:lib.ctx.state, master:+lib.master.gain.value.toFixed(3), track:tracks && cur >= 0 ? { paused:tracks[cur].el.paused } : null }; }, // for tests get music() { return music; }, get vol() { return vol; },
     setVol(k, v) { vol[k] = v; apply(); persist(); },
     toggle() { on = !on; apply(); persist(); if (!on && music) this.toggleMusic(); return on; },
     play(name, arg) { if (this[name]) this[name](arg); },
@@ -115,6 +115,22 @@ const SFX = (() => {
       return music;
     },
   };
+  // ---- silence in the background: another tab or a minimised window fades everything out, then pauses ----
+  let away = false;
+  document.addEventListener('visibilitychange', () => {
+    if (!lib) return;
+    const ac = lib.ctx, g = lib.master.gain, now = ac.currentTime;
+    g.cancelScheduledValues(now); g.setValueAtTime(g.value, now);
+    if (document.hidden) {
+      away = true; g.linearRampToValueAtTime(0, now + 0.6);
+      setTimeout(() => { if (!away) return; if (tracks && cur >= 0) tracks[cur].el.pause(); if (ac.state === 'running') ac.suspend(); }, 700);
+    } else {
+      away = false;
+      const back = () => { const t = ac.currentTime; g.cancelScheduledValues(t); g.setValueAtTime(0, t); g.linearRampToValueAtTime(on ? 0.85 : 0, t + 0.8); };
+      const p = ac.state !== 'running' ? ac.resume() : null; p && p.then ? p.then(back, back) : back();
+      if (playing && tracks && cur >= 0) { const q = tracks[cur].el.play(); if (q && q.catch) q.catch(() => {}); }
+    }
+  });
   // ---- streamed music ----
   let tracks = null, cur = -1, playing = false;
   function setupTracks() {

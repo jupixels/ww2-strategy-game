@@ -593,7 +593,6 @@ function drawStatic(allowCache) {
   }
   c.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (timelapseOwners) return;
-  drawFrontLines(c);
   drawCities(c);
   drawCounters(c);
   drawFleets(c);

@@ -79,12 +79,13 @@
   </header>
 
   <nav id="rail" hidden>
-    <button class="tab" data-tab="army" title="High Command: fronts, armies, generals, convoys (1)"><i class="ico" data-icon="inf"></i><span>Command</span><i class="dot" id="dotArmy" hidden></i></button>
+    <button class="tab" data-tab="army" title="High Command: armies, generals, convoys (1)"><i class="ico" data-icon="inf"></i><span>Command</span><i class="dot" id="dotArmy" hidden></i></button>
     <button class="tab" data-tab="industry" title="Industry (2)"><i class="ico" data-icon="fac"></i><span>Industry</span></button>
-    <button class="tab" data-tab="plans" title="Focus and research (3)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/><path d="M7.5 15h9"/></svg><span>Plans</span><i class="dot" id="dotPlans" hidden></i></button>
-    <button class="tab" data-tab="dip" title="The World (4)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span>World</span></button>
-    <button class="tab" data-tab="intel" title="Intelligence (5)"><i class="ico" data-icon="spy"></i><span>Intel</span><i class="dot" id="dotIntel" hidden></i></button>
-    <button class="tab" data-tab="log" title="Ledger and destiny (6)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3h11l3 3v15H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg><span>Ledger</span><i class="dot" id="dotLog" hidden></i></button>
+    <button class="tab" data-tab="tech" title="Research (3)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/><path d="M7.5 15h9"/></svg><span>Research</span><i class="dot" id="dotTech" hidden></i></button>
+    <button class="tab" data-tab="plans" title="National focus and nation (4)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 21V3"/><path d="M5 4h12l-2.5 4.5L17 13H5"/></svg><span>Plans</span><i class="dot" id="dotPlans" hidden></i></button>
+    <button class="tab" data-tab="dip" title="The World (5)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span>World</span></button>
+    <button class="tab" data-tab="intel" title="Intelligence (6)"><i class="ico" data-icon="spy"></i><span>Intel</span><i class="dot" id="dotIntel" hidden></i></button>
+    <button class="tab" data-tab="log" title="Ledger and destiny (7)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3h11l3 3v15H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg><span>Ledger</span><i class="dot" id="dotLog" hidden></i></button>
   </nav>
 
   <aside id="drawer" hidden></aside>
@@ -97,7 +98,7 @@
   <div id="hand" hidden></div>
   <div id="actions" hidden>
     <button id="inboxBtn" title="Newspapers and decisions waiting" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h13v14H6a2 2 0 0 1-2-2zM17 9h3v8a2 2 0 0 1-2 2"/><path d="M7 9h7M7 13h7"/></svg><b>0</b></button>
-    <button id="undoBtn" hidden><i class="ico" data-icon="undo"></i><span>Undo<br><small>this month</small></span></button>
+    <button id="undoBtn" hidden aria-label="Undo"><i class="ico" data-icon="undo"></i></button>
     <button id="nextArmy" title="Next army with orders left (N)"><i class="ico" data-icon="inf"></i><span><b>0</b><small>ready</small></span></button>
     <button id="endTurn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l9 8-9 8M13 4l9 8-9 8"/></svg><span><span class="l1">END MONTH</span><br><span class="l2" id="etSub">Space</span></span></button>
   </div>
@@ -135,7 +136,6 @@ document.write('<script src="data/' + (MAPKIND === 'world' ? 'map.js' : 'map-eur
 <script src="js/core/events.js"></script>
 <script src="js/core/acts.js"></script>
 <script src="js/core/orders.js"></script>
-<script src="js/core/fronts.js"></script>
 <script src="js/core/ai.js"></script>
 <script src="js/core/scenario.js"></script>
 <script src="js/core/turn.js"></script>

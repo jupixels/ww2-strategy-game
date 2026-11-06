@@ -108,5 +108,5 @@ const Undo = {
 function renderUndo() {
   const b = $('#undoBtn'); if (!b) return;
   const ok = Undo.can(); b.hidden = !ok;
-  if (ok) { b.querySelector('small').textContent = Undo.label(); b.title = `Undo ${Undo.label()} (Ctrl+Z)`; }
+  if (ok) { b.title = `Undo ${Undo.label()} (Ctrl+Z)`; b.setAttribute('aria-label', b.title); }
 }

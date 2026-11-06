@@ -47,9 +47,10 @@ function renderTop() {
 function renderDots() {
   if (!ME || !A(ME)) return;
   const n = nat(ME);
-  $('#dotPlans').hidden = !(!n.focus && focusFor(ME, n.major).some(f => !focusState(ME, f.k)) || n.rs.length < n.slots && TECHS.some(T => !techState(ME, T.k)));
+  $('#dotPlans').hidden = !(!n.focus && focusFor(ME, n.major).some(f => !focusState(ME, f.k)));
+  $('#dotTech').hidden = !(n.rs.length < n.slots && TECHS.some(T => !techState(ME, T.k)));
   $('#dotLog').hidden = !DECISIONS.some(D => { const s = decisionState(ME, D); return s && s.ok && !s.done && n.pol >= 50; });
-  $('#dotArmy').hidden = !(enemiesOf(ME).length && !frontsOf(ME).length);
+  $('#dotArmy').hidden = true;
   $('#dotIntel').hidden = !(freeSpies(ME) > 0 && enemiesOf(ME).length && n.pol >= SPY_COST);
 }
 function renderTicker() {
@@ -93,6 +94,7 @@ function pickNation(list, title, cb) {
 }
 /* ---------- picking a target on the map ---------- */
 function startPick(p) {
+  if (tab) openTab(tab); // picking happens on the map: close the full-screen panel
   clearSelection(); pickMode = p; rebuildOverlay(); document.body.classList.add('picking');
   $('#pickBar').hidden = false; $('#pickBar span').textContent = p.label;
   if (p.ids && p.ids.length) { const near = p.ids.slice().sort((a, b) => Math.hypot(PROV[a].x - cam.x, PROV[a].y - cam.y) - Math.hypot(PROV[b].x - cam.x, PROV[b].y - cam.y))[0]; const [sx, sy] = w2s(PROV[near].x, PROV[near].y); if (!onScreen(sx, sy, -80)) centerOn(near); }
@@ -106,11 +108,6 @@ function pickClick(id) {
   else if (p.kind === 'rocket') { endPick(); Ctl.act({ c:'rocket', to:id }); }
   else if (p.kind === 'bomb') { endPick(); Ctl.act({ c:'bomb', to:id }); }
   else if (p.kind === 'spy') { endPick(); Ctl.act({ c:'spy', op:p.op, target:id }); }
-  else if (p.kind === 'front') {
-    const i = p.sel.indexOf(id); if (i >= 0) p.sel.splice(i, 1); else p.sel.push(id);
-    updateFrontPickBar(); rebuildOverlay(); SFX.click();
-    return true;
-  }
   else if (p.kind === 'ops') {
     const i = p.sel.indexOf(id); if (i >= 0) p.sel.splice(i, 1); else if (p.sel.length < 4) p.sel.push(id);
     $('#pickBar span').textContent = `Operation objectives: ${p.sel.map(j => PROV[j].name).join(', ') || 'none yet'} (up to 4)`;
@@ -123,12 +120,6 @@ $('#pickCancel').onclick = () => { endPick(); $('#pickGo').textContent = 'Launch
 $('#pickGo').onclick = () => {
   const p = pickMode; if (!p) return;
   if (p.kind === 'ops') { endPick(); Ctl.act({ c:'ops', targets:p.sel }); }
-  else if (p.kind === 'front') {
-    endPick(); $('#pickGo').textContent = 'Launch';
-    if (p.fid) { const f = frontById(ME, p.fid); if (f) Ctl.act({ c:'front', op:'edit', id:p.fid, add:p.sel.filter(i => !f.z.includes(i)), rem:f.z.filter(i => !p.sel.includes(i)) }); }
-    else if (p.sel.length) { const r = Ctl.act({ c:'front', op:'create', pids:p.sel }); if (r && r.ok) { SFX.signal(); toast('⚑', `${r.front.name} formed`, 'It holds by default. Pick an order in High Command → Fronts.', 'medal'); } }
-    frontGeoVer++; openTab('fronts');
-  }
 };
 
 /* ---------- selection & orders ---------- */
@@ -189,14 +180,7 @@ function factorList(list) { return list.filter(([l, m]) => l !== 'Troops' && l !
 // a key to the highlighted targets: only the kinds actually on the map right now
 const KEY = { move:['#79b46c','Move'], attack:['#d0502f','Attack'], naval:['#5aa6d6','Sail'], land:['#5aa6d6','Land'], convoy:['#78d6dc','Convoy'], invade:['#ec963a','Invade'], para:['#be78e6','Airdrop'] };
 function targetKey() { const ks = [...new Set(targets.values())]; if (!ks.length) return ''; const seen = new Set(); return `<div class="tkey">${ks.map(k => KEY[k]).filter(x => x && !seen.has(x[1]) && seen.add(x[1])).map(([c, l]) => `<span><i style="background:${c}"></i>${l}</span>`).join('')}</div>`; }
-// the front a province belongs to, with a quick way to add it or take it out
-function frontChip(i, pl) {
-  if (!frontable(pl, i)) return '';
-  const f = frontAt(pl, i), fs = frontsOf(pl);
-  if (f) return `<div class="fchip" style="--fc:${frontColor(pl, f)}"><i class="fsw"></i><span><b>${esc(f.name)}</b> · ${FRONT_ORDERS[f.o].n}</span><button class="chipbtn" data-cfo="open">Orders</button><button class="chipbtn" data-cfo="rem">Remove</button></div>`;
-  return fs.length || touchesEnemy(pl, i) ? `<div class="fchip"><span>No front</span><button class="chipbtn" data-cfo="add">${fs.length ? 'Add to a front' : 'Form a front here'}</button></div>` : '';
-}
-const unitRow = (u, vis) => LAND.filter(k => !vis || u[k]).map(k => `<span title="${UNIT[k].pl}">${iconSvg(k, k)}<b>${vis ? u[k] : '?'}</b></span>`).join('') || '<span class="hint">No troops</span>';
+ const unitRow = (u, vis) => LAND.filter(k => !vis || u[k]).map(k => `<span title="${UNIT[k].pl}">${iconSvg(k, k)}<b>${vis ? u[k] : '?'}</b></span>`).join('') || '<span class="hint">No troops</span>';
 function renderCard() {
   const el = $('#card');
   if (!G || (!sel && !selFleet)) { el.hidden = true; return; }
@@ -225,7 +209,6 @@ function renderCard() {
   h += `<div class="units"><div class="u">${unitRow(p.u, vis)}</div>`;
   if ((mine || myG) && canAct) h += `<div class="seg" role="group" aria-label="Order size">${['all','half','one'].map(a => `<button class="${sel.amt === a ? 'on' : ''}" data-amt="${a}">${a}</button>`).join('')}</div>`;
   h += `</div>`;
-  if (pl && canAct) h += frontChip(i, pl);
   if (gts.length && vis) h += `<div class="sect">${myG && gts.length === 1 ? 'Your expeditionary force' : 'Allied forces here'}</div>` + gts.map(gt => `<div class="units"><div class="u">${flagImg(gt)}<b style="font-size:14px">${esc(natName(gt))}</b></div><div class="u">${unitRow(p.g[gt].u, true)}</div></div>`).join('');
   if (g) h += `<div class="gen">${iconSvg('gen')}<div><b>${esc(g.name)}</b> <span class="lv">${'★'.repeat(g.lv)}</span><p>${TRAITS[g.tr].n}: ${TRAITS[g.tr].d}</p></div></div>`;
   if ((p.air.ftr || p.air.bmb) && vis) h += `<div class="airbase">${iconSvg('ftr')} ${p.air.ftr} fighters &nbsp; ${iconSvg('bmb')} ${p.air.bmb} bombers${mine && p.ad ? ' · flown this month' : ''}</div>`;
@@ -273,17 +256,6 @@ function renderCard() {
   el.querySelectorAll('[data-amt]').forEach(b => b.onclick = () => { sel.amt = b.dataset.amt; SFX.click(); renderCard(); });
   el.querySelectorAll('[data-build]').forEach(b => b.onclick = e => { const k = b.dataset.build; const many = e.shiftKey ? 5 : 1; k === 'arm' ? SFX.tank() : AIR.includes(k) ? SFX.plane() : NAVY.includes(k) ? SFX.ship() : SFX.build(); Ctl.act({ c:'buildN', k, pid:i, n:many }); if (G.tut) G.tut.recruited = 1; addFloat(i, `+${many} ${UNIT[k].n}`, '#f0cd7f'); });
   el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => cardAction(b.dataset.act));
-  el.querySelectorAll('[data-cfo]').forEach(b => b.onclick = () => {
-    const k = b.dataset.cfo, f = frontAt(pl, i); SFX.click();
-    if (k === 'open') { if (tab !== 'army' || subTab.army !== 'fronts') openTab('fronts'); hoverFront = f.id; setTimeout(() => { hoverFront = null; }, 2000); }
-    else if (k === 'rem') { Ctl.act({ c:'front', op:'edit', id:f.id, rem:[i] }); frontGeoVer++; renderCard(); }
-    else if (k === 'add') {
-      const fs = frontsOf(pl);
-      const make = () => { const r = Ctl.act({ c:'front', op:'create', pids:[i, ...PROV[i].adj.filter(j => frontable(pl, j) && touchesEnemy(pl, j) && !frontAt(pl, j))] }); if (r && r.ok) toast('⚑', `${r.front.name} formed`, 'Holding by default. Add provinces or pick an order in High Command → Fronts.', 'medal'); frontGeoVer++; renderCard(); };
-      if (!fs.length) return make();
-      pickList(fs.map(f2 => ({ id:f2.id, t:f2.name, s:FRONT_ORDERS[f2.o].n + ' · ' + f2.z.length + ' provinces' })).concat(fs.length < FRONT_MAX ? [{ id:-1, t:'New front', s:'Starting here' }] : []), 'Add to which front?', id => { if (id === -1) make(); else { Ctl.act({ c:'front', op:'edit', id, add:[i] }); frontGeoVer++; renderCard(); } });
-    }
-  });
 }
 function cardAction(act) {
   const pl = ME, i = sel.id, p = G.prov[i];
@@ -368,65 +340,6 @@ function renderActions() {
   et.classList.toggle('waiting', !!lbl[2]);
 }
 
-/* ---------- front lines on the map ---------- */
-let frontGeoVer = 0, hoverFront = null, _fgeo = { key:'', list:[] };
-Hooks.on('capture', () => { frontGeoVer++; });
-function frontGeometry() {
-  const fs = ME ? frontsOf(ME) : [];
-  const key = G.turn + '|' + frontGeoVer + '|' + fs.map(f => f.id + ':' + f.z.length + f.o).join(',');
-  if (_fgeo.key === key) return _fgeo.list;
-  const list = fs.map(f => {
-    const L = new Set(frontLine(ME, f)), chains = [];
-    for (const [a, b, pts] of MAP.borders) {
-      if (a < 0 || b < 0) continue;
-      if ((L.has(a) && W(ME, G.prov[b].o)) || (L.has(b) && W(ME, G.prov[a].o))) chains.push(pts);
-    }
-    // label at the line province nearest the middle of the line
-    const ids = [...L]; let mx = 0, my = 0; for (const i of ids) { mx += PROV[i].x; my += PROV[i].y; }
-    const mid = ids.length ? ids.sort((p, q) => Math.hypot(PROV[p].x - mx / ids.length, PROV[p].y - my / ids.length) - Math.hypot(PROV[q].x - mx / ids.length, PROV[q].y - my / ids.length))[0] : -1;
-    return { f, chains, mid, col:frontColor(ME, f) };
-  });
-  _fgeo = { key, list };
-  return list;
-}
-function drawFrontLines(c) {
-  if (!G || !ME || timelapseOwners || cam.z < 0.3) return;
-  const list = frontGeometry(); if (!list.length) return;
-  const toS = (x, y) => [(x - cam.x) * cam.z + VW / 2, (y - cam.y) * cam.z + VH / 2];
-  c.save(); c.lineCap = 'round'; c.lineJoin = 'round';
-  for (const g of list) {
-    const hot = hoverFront === g.f.id || pickMode && pickMode.fid === g.f.id;
-    c.beginPath();
-    for (const pts of g.chains) {
-      let px = nearX(pts[0]);
-      for (let k = 0; k < pts.length; k += 2) { if (k) px = nearX(pts[k], px); const [x, y] = toS(px, pts[k + 1]); k ? c.lineTo(x, y) : c.moveTo(x, y); }
-    }
-    c.setLineDash(g.f.o === 'hold' ? [] : g.f.o === 'advance' ? [10, 5] : [3, 5]);
-    c.strokeStyle = 'rgba(0,0,0,.55)'; c.lineWidth = hot ? 8 : 6; c.stroke();
-    c.strokeStyle = g.col; c.lineWidth = hot ? 4.5 : 3; c.stroke();
-    c.setLineDash([]);
-  }
-  c.restore();
-}
-// front names go on top of everything else on the map
-function drawFrontLabels(c) {
-  if (!G || !ME || timelapseOwners || cam.z < 0.45) return;
-  const list = frontGeometry(); if (!list.length) return;
-  const toS = (x, y) => [(x - cam.x) * cam.z + VW / 2, (y - cam.y) * cam.z + VH / 2];
-  c.save();
-  for (const g of list) {
-    if (g.mid >= 0) {
-      const [x, y] = toS(nearX(PROV[g.mid].x), PROV[g.mid].y - 34 / cam.z);
-      const txt = `${{ hold:'■', advance:'▲', encircle:'◎' }[g.f.o]} ${g.f.name}`;
-      c.font = `700 11px ${FONT_BODY}`; const w = c.measureText(txt).width + 12;
-      c.fillStyle = 'rgba(10,14,16,.85)'; c.fillRect(x - w / 2, y - 9, w, 17);
-      c.fillStyle = g.col; c.fillRect(x - w / 2, y - 9, 3, 17);
-      c.fillStyle = '#f3ead6'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(txt, x + 1, y);
-    }
-  }
-  c.restore();
-}
-
 /* ---------- expeditionary forces on the map ---------- */
 // small flag-and-number tabs under a province's counter, one per allied army standing there
 function drawGuests(c, i, sx, sy) {
@@ -451,7 +364,6 @@ function drawGuests(c, i, sx, sy) {
 /* ---------- convoys at sea ---------- */
 // dashed routes from port through each sea zone to the landing, for the nation on this screen
 function drawConvoys(c) {
-  drawFrontLabels(c);
   if (!G || !ME || cam.z < 0.25) return;
   const L = (G.convoys || []).filter(v => v.t === ME); if (!L.length) return;
   const toS = (x, y) => [(x - cam.x) * cam.z + VW / 2, (y - cam.y) * cam.z + VH / 2];

@@ -17,11 +17,11 @@ const OUT = process.env.OUT, MAP = process.env.MAP === 'world' ? 'world' : 'euro
   await page.evaluate(() => startGame({ humans:{ GER:{ name:'You' } }, diff:'normal', scenario:1936, mode:'sp', seed:11 })); await page.waitForTimeout(500); await close();
   ok('no undo before anything happened', await page.evaluate(() => $('#undoBtn').hidden));
   await page.evaluate(() => Ctl.act({ c:'buildN', k:'inf', pid:homeProv(ME), n:1 }));
-  ok('undo offered for this month', await page.evaluate(() => !$('#undoBtn').hidden && /this month/.test($('#undoBtn').textContent)));
+  ok('undo offered for this month', await page.evaluate(() => !$('#undoBtn').hidden && /this month/.test($('#undoBtn').title)));
   const pp0 = await page.evaluate(() => { Ctl.act({ c:'buildN', k:'inf', pid:homeProv(ME), n:1 }); return nat(ME).pp; });
   await page.evaluate(() => Ctl.endTurn()); await page.waitForTimeout(900); await close();
   await page.evaluate(() => Ctl.endTurn()); await page.waitForTimeout(900); await close();
-  const before = await page.evaluate(() => ({ m:G.m, acts:Undo.acts, label:$('#undoBtn small').textContent }));
+  const before = await page.evaluate(() => ({ m:G.m, acts:Undo.acts, label:$('#undoBtn').title.replace(/^Undo | \(.*/g, '') }));
   ok('undo label matches (event choices count as moves)', before.m === 2 && before.label === (before.acts ? 'this month' : 'last month'), JSON.stringify(before));
   // the first undo of a ranked campaign asks
   await page.click('#undoBtn'); await page.waitForTimeout(200);

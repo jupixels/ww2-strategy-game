@@ -12,8 +12,6 @@ function playMonth(api, rng) {
     const tk = TECHS.find(T => !techState(t, T.k)); if (tk) out.push({ c:'research', k:tk.k });
     const fk = focusFor(t, n.major).find(f => !focusState(t, f.k)); if (fk) out.push({ c:'focus', k:fk.k });
     const cd = n.hand.find(c => !canPlay(t, c) && CARDS[c].tgt === 'none'); if (cd) out.push({ c:'card', k:cd }); else if (n.hand.length) out.push({ c:'discard', k:n.hand[0] });
-    if (!frontsOf(t).length && enemiesOf(t).length) out.push({ c:'front', op:'auto' });
-    for (const f of frontsOf(t)) out.push({ c:'front', op:'order', id:f.id, order:'advance' });
     for (const i of armiesOf(t).slice(0, 6)) for (const [j, k] of targetsFor(t, i)) { if (k === 'attack') { out.push({ c:'attack', from:[i], to:j, amt:'half' }); break; } if (k === 'invade') { out.push({ c:'ship', from:i, to:j, amt:'half' }); break; } }
     for (const it of inboxOf(t)) out.push({ c:'answer', uid:it.uid, choice:it.type === 'decision' ? 1 : 0 });
     if (SIGS[t]) out.push({ c:'sig', op:SIG_OPS[t][0], lv:1 });

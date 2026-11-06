@@ -3,12 +3,12 @@
 let outFilter = 'ready';
 // six drawers; three of them hold sub-pages
 const SUBS = {
-  army:[['fronts','Fronts'],['armies','Armies'],['generals','Generals'],['convoys','Convoys']],
-  plans:[['focus','National focus'],['tech','Research'],['nation','Nation']],
+  army:[['armies','Armies'],['generals','Generals'],['convoys','Convoys']],
+  plans:[['focus','National focus'],['nation','Nation']],
   log:[['ledger','Ledger'],['dec','Destiny']],
 };
-const subTab = { army:'fronts', plans:'focus', log:'ledger' };
-const TAB_ALIAS = { nation:['plans','nation'], focus:['plans','focus'], tech:['plans','tech'], dec:['log','dec'], generals:['army','generals'], convoys:['army','convoys'], fronts:['army','fronts'], armies:['army','armies'] };
+const subTab = { army:'armies', plans:'focus', log:'ledger' };
+const TAB_ALIAS = { nation:['plans','nation'], focus:['plans','focus'], dec:['log','dec'], generals:['army','generals'], convoys:['army','convoys'], armies:['army','armies'] };
 function openTab(t) {
   if (TAB_ALIAS[t]) { const [m, s2] = TAB_ALIAS[t]; if (tab === m && subTab[m] === s2) { tab = null; } else { tab = m; subTab[m] = s2; } $$('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab)); hoverNat = null; rebuildOverlay(); staticDirty = true; renderDrawer(); tab ? SFX.open() : SFX.close(); return; }
   tab = tab === t ? null : t;
@@ -57,45 +57,81 @@ function sigPanel(pl, n, act) {
   return h;
 }
 
-/* ---------- fronts ---------- */
-const FRONT_COLORS = ['#f0cd7f','#79c0e8','#e8836b','#9fd68f','#c79be8','#e8c36b','#6be0c8','#e86bb0'];
-const frontColor = (t, f) => FRONT_COLORS[frontsOf(t).indexOf(f) % FRONT_COLORS.length] || FRONT_COLORS[0];
-function frontsPanel(pl, n, act) {
-  const fs = frontsOf(pl), gens = G.gens.filter(g => g.tag === pl);
-  let h = '';
-  if (!fs.length) h += `<div class="hint">A <b>front</b> is a stretch of your border with an order. At the end of every month its divisions that are still ready <b>hold</b>, <b>advance</b> or try to <b>encircle</b> the enemy on their own, reserves march up from the interior, and the general you assign takes the strongest army. You only step in for the big pushes — anything you move by hand that month is left alone.</div>`;
-  for (const f of fs) {
-    const st = frontStats(pl, f), col = frontColor(pl, f), g = f.gid != null ? gens.find(x => x.id === f.gid) : null, L = f.last;
-    h += `<div class="front" style="--fc:${col}"><div class="fhead"><i class="fsw"></i><h4 data-fname="${f.id}" title="Rename">${esc(f.name)}</h4><span class="fst">${st.line ? `${st.line} on the line` : '<i>quiet</i>'} · ${st.div} div${st.ready !== st.div ? ` (${st.ready} ready)` : ''} · facing ~${st.foe}</span></div>
-      <div class="seg ford">${Object.keys(FRONT_ORDERS).map(o => `<button class="${f.o === o ? 'on' : ''}" data-ford="${f.id}:${o}" title="${esc(FRONT_ORDERS[o].d)}" ${act ? '' : 'disabled'}>${FRONT_ORDERS[o].n}</button>`).join('')}</div>
-      <div class="frow"><label>${iconSvg('gen')}<select data-fgen="${f.id}" ${act ? '' : 'disabled'}><option value="">No general</option>${gens.map(x => `<option value="${x.id}" ${g && g.id === x.id ? 'selected' : ''}>${esc(x.name)} · ${TRAITS[x.tr].n} ${'★'.repeat(x.lv)}</option>`).join('')}</select></label>
-        <button class="chipbtn ${f.pull ? 'on' : ''}" data-fpull="${f.id}" title="Idle divisions from the interior march to this front" ${act ? '' : 'disabled'}>Reserves ${f.pull ? 'on' : 'off'}</button></div>
-      ${L && (L.attacks || L.moved) ? `<p class="flast">Last month: ${L.attacks ? `${L.attacks} attack${L.attacks > 1 ? 's' : ''}, ${L.won} won${L.taken.length ? `, took ${L.taken.slice(0, 3).map(i => esc(PROV[i].name)).join(', ')}${L.taken.length > 3 ? '…' : ''}` : ''}` : 'no attacks'}${L.moved ? ` · ${L.moved} divisions moved up` : ''}.</p>` : ''}
-      <div class="fbtns"><button class="btn" data-fshow="${f.id}">Show</button><button class="btn" data-fedit="${f.id}" ${act ? '' : 'disabled'}>Edit area</button><button class="btn red" data-fdel="${f.id}" ${act ? '' : 'disabled'}>Disband</button></div></div>`;
+/* ---------- research: a Call of War style grid, years across, categories down ---------- */
+const TECH_ROWS = [
+  ['Infantry', 'inf', ['inf1','mtn','para','inf2','inf3']],
+  ['Armor', 'arm', ['arm1','arm2','arm3']],
+  ['Artillery', 'art', ['art1','art2']],
+  ['Fighters', 'ftr', ['ftr1','radar','ftr2','jet']],
+  ['Bombers', 'bmb', ['bmb1','bmb2']],
+  ['Navy', 'cap', ['cap1','sub1','sub2','amph','carrier']],
+  ['Doctrine', 'gen', ['depth','mobile','mass','grand','blitz','combined']],
+  ['Industry', 'fac', ['ind1','ind2','synth','ind3']],
+  ['Science', 'atom', ['rocket','atom','bomb']],
+];
+const TECH_ICON = { inf1:'inf', inf2:'inf', inf3:'inf', mtn:'mtn', para:'par', arm1:'arm', arm2:'arm', arm3:'arm', art1:'art', art2:'rocket', ftr1:'ftr', ftr2:'ftr', jet:'ftr', radar:'target', bmb1:'bmb', bmb2:'bmb',
+  cap1:'cap', carrier:'cap', sub1:'sub', sub2:'sub', amph:'anchor', depth:'fort', grand:'fort', mobile:'arm', blitz:'flame', combined:'gen', mass:'inf', ind1:'fac', ind2:'fac', ind3:'fac', synth:'oil', rocket:'rocket', atom:'atom', bomb:'atom' };
+function techTreeHTML(pl, n, act) {
+  const years = []; for (let y = 1936; y <= Math.max(...TECHS.map(T => T.y)); y++) years.push(y);
+  // research slots across the top
+  let h = `<div class="rslots">`;
+  for (let k = 0; k < n.slots; k++) {
+    const r = n.rs[k];
+    if (r) { const T = TECH[r.k], pc = Math.round((1 - r.left / T.m) * 100);
+      h += `<div class="rslot on">${iconSvg(TECH_ICON[T.k] || 'pp')}<div><b>${esc(T.n)}</b><div class="prog"><i style="width:${pc}%"></i></div><span>${Math.ceil(r.left)} month${r.left > 1 ? 's' : ''} left</span></div><button class="ibtn" data-cres="${T.k}" title="Cancel (half the cost back)" aria-label="Cancel" ${act ? '' : 'disabled'}>✕</button></div>`; }
+    else h += `<div class="rslot free"><span class="plus">+</span><div><b>Laboratory free</b><span>Pick a project below</span></div></div>`;
   }
-  h += `<div class="acts fnew"><button class="btn gold" data-fauto ${act && fs.length < FRONT_MAX ? '' : 'disabled'} title="One front for each enemy you border, on Hold">Auto-assign fronts</button><button class="btn" data-fnew ${act && fs.length < FRONT_MAX ? '' : 'disabled'} title="Click your provinces on the map to draw a front">Draw a front</button></div>`;
-  if (fs.length) h += `<div class="hint">Front lines are drawn on the map in each front's colour. Select any province to add it to a front or take it out.</div>`;
+  if (!n.done.includes('res_univ')) h += `<div class="rslot locked"><span class="plus">🔒</span><div><b>One more laboratory</b><span>National focus: Research Universities</span></div></div>`;
+  h += `</div>`;
+  // the grid
+  h += `<div class="rtree-wrap"><div class="rtree" style="grid-template-columns:118px repeat(${years.length},196px)">`;
+  h += `<div class="rcorner"></div>` + years.map(y => `<div class="ryear ${y === G.y ? 'now' : y > G.y ? 'later' : ''}">${y}</div>`).join('');
+  TECH_ROWS.forEach(([label, ic, keys], r) => {
+    h += `<div class="rcat" style="grid-row:${r + 2}">${iconSvg(ic)}<span>${label}</span></div>`;
+    years.forEach((y, c) => {
+      const cell = keys.filter(k => TECH[k] && TECH[k].y === y);
+      h += `<div class="rcell ${y === G.y ? 'now' : ''}" style="grid-row:${r + 2};grid-column:${c + 2}">`;
+      for (const k of cell) {
+        const T = TECH[k], st = techState(pl, k), act2 = n.rs.find(x => x.k === k);
+        const cls = st === 'done' ? 'done' : st === 'active' ? 'active' : !st ? 'open' : st.startsWith('Available') || st.startsWith('Needs') ? 'locked' : 'wait';
+        const foot = st === 'done' ? '<em class="ok">✓ Researched</em>'
+          : act2 ? `<div class="prog"><i style="width:${(1 - act2.left / T.m) * 100}%"></i></div><em>${Math.ceil(act2.left)} mo left</em>`
+          : cls === 'locked' ? `<em>${esc(st)}</em>`
+          : `<button class="btn ${st ? '' : 'gold'}" data-tech="${k}" ${st || !act ? `disabled title="${esc(st)}"` : ''}>${techCost(T)}⚙ · ${T.m} mo</button>`;
+        h += `<div class="rcard ${cls}" data-rk="${k}" ${T.req ? `data-req="${T.req}"` : ''} title="${esc(T.d)}"><div class="rh">${iconSvg(TECH_ICON[k] || 'pp')}<b>${esc(T.n)}</b></div><p>${esc(T.d)}</p>${foot}</div>`;
+      }
+      h += `</div>`;
+    });
+  });
+  h += `</div><svg class="rlinks" aria-hidden="true"></svg></div>`;
   return h;
 }
-function startFrontPick(pl, f) {
-  const ids = []; for (let i = 0; i < NP; i++) if (frontable(pl, i)) ids.push(i);
-  startPick({ kind:'front', ids, sel:f ? f.z.filter(i => frontable(pl, i)) : ids.filter(i => touchesEnemy(pl, i) && !frontAt(pl, i)).slice(0, 0), fid:f ? f.id : null, label:'' });
-  updateFrontPickBar(); $('#pickGo').hidden = false; $('#pickGo').textContent = f ? 'Save front' : 'Create front';
-  if (tab) openTab(tab);
+// lines from each technology to the one it needs, drawn once the grid is laid out
+function drawTechLinks() {
+  const wrap = $('#drawer .rtree-wrap'); if (!wrap) return;
+  const svg = wrap.querySelector('.rlinks'), base = wrap.getBoundingClientRect();
+  svg.setAttribute('width', wrap.scrollWidth); svg.setAttribute('height', wrap.scrollHeight);
+  const pos = el => { const r = el.getBoundingClientRect(); return { l:r.left - base.left + wrap.scrollLeft, r:r.right - base.left + wrap.scrollLeft, y:r.top - base.top + wrap.scrollTop + Math.min(22, r.height / 2) }; };
+  let d = '', dDone = '';
+  wrap.querySelectorAll('.rcard[data-req]').forEach(c => {
+    const req = wrap.querySelector(`.rcard[data-rk="${c.dataset.req}"]`); if (!req) return;
+    const a = pos(req), b = pos(c), mx = (a.r + b.l) / 2;
+    const path = `M${a.r},${a.y} C${mx},${a.y} ${mx},${b.y} ${b.l},${b.y} `;
+    if (req.classList.contains('done')) dDone += path; else d += path;
+  });
+  svg.innerHTML = `<path d="${d}" class="rl"/><path d="${dDone}" class="rl ok"/>`;
 }
-function updateFrontPickBar() { const p = pickMode; if (!p || p.kind !== 'front') return; $('#pickBar span').textContent = `${p.fid ? 'Edit front' : 'New front'}: click your provinces · ${p.sel.length} chosen`; }
+window.addEventListener('resize', () => { if (tab === 'tech') drawTechLinks(); });
 function renderDrawer() {
   const el = $('#drawer');
-  if (!G || !tab || !ME || !A(ME)) { el.hidden = true; return; }
+  const open = !!(G && tab && ME && A(ME)); document.body.classList.toggle('fullpanel', open);
+  if (!open) { el.hidden = true; return; }
   el.hidden = false;
   const pl = ME, n = nat(pl), act = Ctl.canAct();
   let h = '';
   const view = tab === 'plans' ? subTab.plans : tab === 'log' ? subTab.log : tab === 'army' ? 'army' : tab;
   const av = subTab.army;
-  if (tab === 'army' && av === 'fronts') {
-    h = dh('High Command', 'Fronts carry out standing orders at the end of every month.');
-    h += frontsPanel(pl, n, act);
-  } else if (tab === 'army') {
+  if (tab === 'army') {
     const d = divisions(pl), air = airOf(pl), navy = navyOf(pl);
     let ready = 0; for (const i of armiesOf(pl)) ready += readyAt(stackOf(i, pl));
     h = dh('High Command', 'Every army, airfield and general under your command.');
@@ -155,19 +191,10 @@ function renderDrawer() {
     }
     h += `</div>`;
   } else if (view === 'tech') {
-    h = dh('Research', `${n.rs.length}/${n.slots} laboratories busy. Projects take months; start several at once.`);
-    if (n.rs.length) h += n.rs.map(r => { const T = TECH[r.k]; return `<div class="row active"><div><h4>${esc(T.n)}</h4><p>${esc(T.d)}</p><div class="prog"><i style="width:${(1 - r.left / T.m) * 100}%"></i></div><p>${Math.ceil(r.left)} month${r.left > 1 ? 's' : ''} left</p></div><div><button class="btn" data-cres="${r.k}" ${act ? '' : 'disabled'} title="Refunds half the cost">Cancel</button></div></div>`; }).join('');
-    for (const b in BRANCHES) {
-      h += `<div class="sect">${BRANCHES[b]}</div>`;
-      for (const T of TECHS.filter(T => T.b === b)) {
-        const st = techState(pl, T.k);
-        if (st === 'active') continue;
-        h += `<div class="row ${st === 'done' ? 'done' : ''}"><div><h4>${esc(T.n)} <small class="yr">${T.y}</small></h4><p>${esc(T.d)}${T.req ? ` <i>Needs ${esc(TECH[T.req].n)}.</i>` : ''}</p></div>
-          <div>${st === 'done' ? '<span class="chip ally">Done</span>' : `<button class="btn ${st ? '' : 'gold'}" data-tech="${T.k}" ${st || !act ? `disabled title="${esc(st)}"` : ''}>${techCost(T)}⚙ · ${T.m}mo</button>`}</div></div>`;
-      }
-    }
+    h = dh('Research', `${n.rs.length} of ${n.slots} laboratories busy · each project takes months · new technology unlocks year by year`);
+    h += techTreeHTML(pl, n, act);
   } else if (tab === 'dip') {
-    h = dh('The World', 'Alliances, wars, pacts and peace. Hover a nation to find it.');
+    h = dh('The World', 'Alliances, wars, pacts and peace.');
     if (G.act) {
       const AC = ACTS[G.act.k], fk = facOf(pl), dm = G.act.doom;
       h += `<div class="act"><h5>The second act · until ${ACT_END}</h5><h4>${esc(AC.n)}</h4><p>${esc(AC.d)}</p>
@@ -246,17 +273,21 @@ function renderDrawer() {
     h += `<div class="sect">Dispatches</div>${G.log.slice(0, 50).map(l => `<div class="logline"><time>${l.d}</time>${l.txt}</div>`).join('')}`;
   }
   h += `</div>`;
-  if (SUBS[tab]) { const bar = `<div class="subtabs" role="tablist">${SUBS[tab].filter(([k]) => k !== 'nation' || SIGS[pl]).map(([k, l]) => [k, k === 'nation' ? SIGS[pl].n : l]).map(([k, l]) => `<button role="tab" class="${subTab[tab] === k ? 'on' : ''}" data-sub="${k}">${l}${k === 'focus' && !n.focus ? ' <i class="sdot"></i>' : k === 'tech' && n.rs.length < n.slots ? ' <i class="sdot"></i>' : k === 'fronts' && !frontsOf(pl).length && enemiesOf(pl).length ? ' <i class="sdot"></i>' : ''}</button>`).join('')}</div>`; h = h.replace('<div class="db">', bar + '<div class="db">'); }
-  el.innerHTML = h;
+  if (SUBS[tab]) { const bar = `<div class="subtabs" role="tablist">${SUBS[tab].filter(([k]) => k !== 'nation' || SIGS[pl]).map(([k, l]) => [k, k === 'nation' ? SIGS[pl].n : l]).map(([k, l]) => `<button role="tab" class="${subTab[tab] === k ? 'on' : ''}" data-sub="${k}">${l}${k === 'focus' && !n.focus ? ' <i class="sdot"></i>' : k === 'tech' && n.rs.length < n.slots ? ' <i class="sdot"></i>' : ''}</button>`).join('')}</div>`; h = h.replace('<div class="db">', bar + '<div class="db">'); }
+  // keep the reader's place when the page re-renders after an order
+  const key = tab + '/' + view, keep = el.dataset.view === key ? { db:(el.querySelector('.db') || {}).scrollTop, rx:(el.querySelector('.rtree-wrap') || {}).scrollLeft, ry:(el.querySelector('.rtree-wrap') || {}).scrollTop } : null;
+  el.innerHTML = h; el.dataset.view = key;
+  if (keep) { const db = el.querySelector('.db'), rw = el.querySelector('.rtree-wrap'); if (db) db.scrollTop = keep.db || 0; if (rw) { rw.scrollLeft = keep.rx || 0; rw.scrollTop = keep.ry || 0; rw.dataset.scrolled = 1; } }
   el.querySelectorAll('[data-sub]').forEach(b => b.onclick = () => { subTab[tab] = b.dataset.sub; SFX.click(); renderDrawer(); });
   wireDrawer(el, pl, n);
   if (view === 'ledger') drawVPGraph($('#vpGraph'), $('#vpLegend'));
+  if (view === 'tech') { drawTechLinks(); const w = $('#drawer .rtree-wrap'), now = w && w.querySelector('.ryear.now'); if (w && now && !w.dataset.scrolled) { const cat = w.querySelector('.rcat'); w.scrollLeft = Math.max(0, now.offsetLeft - (cat ? cat.offsetWidth : 120) - (innerWidth <= 820 ? 0 : 196)); w.dataset.scrolled = 1; } }
 }
 function wireDrawer(el, pl, n) {
   const on = (sel, f) => el.querySelectorAll(sel).forEach(b => b.onclick = e => { f(b, e); });
   on('[data-closetab]', () => openTab(tab));
-  on('[data-goto]', b => { const i = +b.dataset.goto; if (i >= 0) { select(i); centerOn(i, Math.max(cam.z, 1.3)); } });
-  on('[data-zone]', b => { const z = b.dataset.zone; centerXY(SEA[z].x, SEA[z].y, Math.max(cam.z, 1)); selectFleet(z); });
+  on('[data-goto]', b => { const i = +b.dataset.goto; if (i >= 0) { if (tab) openTab(tab); select(i); centerOn(i, Math.max(cam.z, 1.3)); } });
+  on('[data-zone]', b => { const z = b.dataset.zone; if (tab) openTab(tab); centerXY(SEA[z].x, SEA[z].y, Math.max(cam.z, 1)); selectFleet(z); });
   on('[data-filt]', b => { outFilter = b.dataset.filt; renderDrawer(); });
   on('[data-hire]', () => { Ctl.act({ c:'hiregen' }); SFX.fanfare(); });
   on('[data-imp]', b => { Ctl.act({ c:'import', k:b.dataset.imp }); SFX.coins(); });
@@ -270,17 +301,8 @@ function wireDrawer(el, pl, n) {
   on('[data-war]', b => Ctl.act({ c:'declare', tag:b.dataset.war }));
   on('[data-sphere]', b => Ctl.act({ c:'sphere', tag:b.dataset.sphere }));
   on('[data-call]', b => Ctl.act({ c:'calltowar', tag:b.dataset.call }));
-  on('[data-fauto]', () => { const r = Ctl.act({ c:'front', op:'auto' }); if (r && r.ok) { SFX.signal(); toast('⚑', `${r.made} front${r.made > 1 ? 's' : ''} formed`, 'Each holds its sector. Switch a front to Advance or Encircle to go on the offensive.', 'medal'); } frontGeoVer++; renderDrawer(); });
-  on('[data-fnew]', () => startFrontPick(pl, null));
   on('[data-sig]', b => { const c = JSON.parse(b.dataset.sig); const go = () => { const r = Ctl.act({ c:'sig', ...c }); if (r && r.ok) { SFX.confirm(); if (r.msg) toast('⚙', SIGS[pl].n, r.msg, ''); } renderDrawer(); renderTop(); }; if (c.op === 'armistice') confirmBox('Sign the armistice?', 'Italy leaves the Axis and joins the Allies. Germany will attack at once.', 'Sign', go); else go(); });
   on('[data-sr]', () => { openTab(tab); showReport({ ...G.lastSR[pl], uid:-1 }, () => {}); });
-  on('[data-fedit]', b => startFrontPick(pl, frontById(pl, +b.dataset.fedit)));
-  on('[data-ford]', b => { const [id, o] = b.dataset.ford.split(':'); Ctl.act({ c:'front', op:'order', id:+id, order:o }); SFX.click(); frontGeoVer++; renderDrawer(); });
-  on('[data-fpull]', b => { Ctl.act({ c:'front', op:'pull', id:+b.dataset.fpull }); SFX.click(); renderDrawer(); });
-  on('[data-fdel]', b => confirmBox('Disband this front?', 'Its armies stay where they are and wait for your orders.', 'Disband', () => { Ctl.act({ c:'front', op:'disband', id:+b.dataset.fdel }); frontGeoVer++; renderDrawer(); }));
-  on('[data-fname]', b => { const f = frontById(pl, +b.dataset.fname); const nm = f && prompt('Name this front', f.name); if (nm) { Ctl.act({ c:'front', op:'rename', id:f.id, name:nm }); renderDrawer(); } });
-  on('[data-fshow]', b => { const f = frontById(pl, +b.dataset.fshow); if (!f) return; const L = frontLine(pl, f).length ? frontLine(pl, f) : f.z; const c = L[Math.floor(L.length / 2)]; centerOn(c, Math.max(cam.z, WORLD ? 0.9 : 1.1)); hoverFront = f.id; setTimeout(() => { hoverFront = null; }, 2500); });
-  el.querySelectorAll('[data-fgen]').forEach(sl => sl.onchange = () => { Ctl.act({ c:'front', op:'general', id:+sl.dataset.fgen, gid:sl.value === '' ? null : +sl.value }); SFX.click(); renderDrawer(); });
   on('[data-unship]', b => Ctl.act({ c:'unship', id:+b.dataset.unship }));
   on('[data-pact]', b => Ctl.act({ c:'pact', tag:b.dataset.pact }));
   on('[data-guar]', b => Ctl.act({ c:'guarantee', tag:b.dataset.guar }));
@@ -305,17 +327,28 @@ function wireDrawer(el, pl, n) {
 }
 function drawVPGraph(cvs, leg) {
   if (!cvs || !G.hist.length) return;
-  const w = cvs.clientWidth || 340, h = 150; cvs.width = w * DPR; cvs.height = h * DPR; cvs.style.height = h + 'px';
+  // sized to the box it sits in, with room inside for the axis labels
+  const w = Math.max(240, cvs.clientWidth || 340), h = innerWidth <= 820 ? 170 : 230; cvs.width = w * DPR; cvs.height = h * DPR; cvs.style.height = h + 'px';
   const c = cvs.getContext('2d'); c.scale(DPR, DPR);
+  const L = 44, R = 14, T = 14, B = 26, pw = w - L - R, ph = h - T - B;
   const tags = [...new Set([ME, ...humanTags(), ...MAJORS])].filter(t => G.nat[t]);
-  const tot = totalVP(), H = G.hist, maxV = Math.max(0.2, ...H.flatMap(r => tags.map(t => (r.vp[t] || 0) / tot)));
-  c.strokeStyle = 'rgba(255,255,255,.08)'; c.lineWidth = 1;
-  for (let k = 0; k <= 4; k++) { const y = 6 + (h - 20) * k / 4; c.beginPath(); c.moveTo(28, y); c.lineTo(w - 4, y); c.stroke(); c.fillStyle = 'rgba(200,210,214,.6)'; c.font = '10px ' + FONT_BODY; c.fillText(Math.round(maxV * (1 - k / 4) * 100) + '%', 0, y + 3); }
-  const X = i => 28 + (w - 34) * (H.length > 1 ? i / (H.length - 1) : 0), Y = v => 6 + (h - 20) * (1 - v / maxV);
-  for (const t of tags) {
-    c.strokeStyle = natColor(t); c.lineWidth = t === ME ? 2.6 : 1.5; c.beginPath();
-    H.forEach((r, i) => { const v = (r.vp[t] || 0) / tot; i ? c.lineTo(X(i), Y(v)) : c.moveTo(X(i), Y(v)); }); c.stroke();
+  const tot = totalVP(), H = G.hist, maxV = Math.max(0.2, ...H.flatMap(r => tags.map(t => (r.vp[t] || 0) / tot))) * 1.08;
+  c.font = '11px ' + FONT_BODY; c.textBaseline = 'middle';
+  for (let k = 0; k <= 4; k++) {
+    const y = T + ph * k / 4;
+    c.strokeStyle = 'rgba(255,255,255,.08)'; c.lineWidth = 1; c.beginPath(); c.moveTo(L, Math.round(y) + 0.5); c.lineTo(w - R, Math.round(y) + 0.5); c.stroke();
+    c.fillStyle = 'rgba(200,210,214,.6)'; c.textAlign = 'right'; c.fillText(Math.round(maxV * (1 - k / 4) * 100) + '%', L - 8, y);
   }
-  c.fillStyle = 'rgba(200,210,214,.6)'; c.fillText(`${MONTHS[H[0].m]} ${H[0].y}`, 28, h - 2); const last = H[H.length - 1]; const lt = `${MONTHS[last.m]} ${last.y}`; c.fillText(lt, w - 4 - c.measureText(lt).width, h - 2);
+  const X = i => L + pw * (H.length > 1 ? i / (H.length - 1) : 0.5), Y = v => T + ph * (1 - v / maxV);
+  for (const t of [...tags].reverse()) {
+    c.strokeStyle = c.fillStyle = natColor(t); c.lineWidth = t === ME ? 2.8 : 1.6; c.lineJoin = 'round';
+    if (H.length === 1) { const v = (H[0].vp[t] || 0) / tot; c.beginPath(); c.arc(X(0), Y(v), t === ME ? 4 : 3, 0, 7); c.fill(); continue; }
+    c.beginPath(); H.forEach((r, i) => { const v = (r.vp[t] || 0) / tot; i ? c.lineTo(X(i), Y(v)) : c.moveTo(X(i), Y(v)); }); c.stroke();
+  }
+  c.fillStyle = 'rgba(200,210,214,.6)'; c.textBaseline = 'alphabetic';
+  const last = H[H.length - 1], ft = `${MONTHS[H[0].m]} ${H[0].y}`, lt = `${MONTHS[last.m]} ${last.y}`;
+  if (H.length === 1) { c.textAlign = 'center'; c.fillText(ft, X(0), h - 8); }
+  else { c.textAlign = 'left'; c.fillText(ft, L, h - 8); c.textAlign = 'right'; c.fillText(lt, w - R, h - 8); }
   leg.innerHTML = tags.map(t => `<span><i style="background:${natColor(t)}"></i>${esc(natName(t))}</span>`).join('');
 }
+window.addEventListener('resize', () => { if (tab === 'log' && subTab.log === 'ledger') drawVPGraph($('#vpGraph'), $('#vpLegend')); });

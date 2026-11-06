@@ -9,8 +9,6 @@ function endMonth() {
   try {
     // 1. simultaneous multiplayer orders
     out.battles.push(...resolveOrders());
-    // 1b. human fronts carry out their standing orders with whatever is still ready
-    runFronts(out.battles);
     // 2. the AI nations act
     const order = shuffleR(Object.keys(G.nat).filter(t => A(t) && !liveHuman(t) && !NATDEF[t].off));
     for (const t of order) aiTurn(t, out.battles);

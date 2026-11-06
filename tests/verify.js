@@ -13,8 +13,7 @@ const play = () => { const cmds = api.eval(`(() => { const t = humanTags()[0], n
   const h = homeProv(t); if (h >= 0) out.push({ c:'buildN', k:'inf', pid:h, n:2 });
   const tk = TECHS.find(T => !techState(t, T.k)); if (tk) out.push({ c:'research', k:tk.k });
   const fk = focusFor(t, n.major).find(f => !focusState(t, f.k)); if (fk) out.push({ c:'focus', k:fk.k });
-  if (!frontsOf(t).length && enemiesOf(t).length) out.push({ c:'front', op:'auto' });
-  for (const f of frontsOf(t)) out.push({ c:'front', op:'order', id:f.id, order:'advance' });
+  for (const i of armiesOf(t).slice(0, 6)) for (const [j, k] of targetsFor(t, i)) if (k === 'attack') { out.push({ c:'attack', from:[i], to:j, amt:'half' }); break; }
   for (const it of inboxOf(t)) out.push({ c:'answer', uid:it.uid, choice:it.type === 'decision' ? 1 : 0 });
   return out.map(c => [t, c]); })()`); for (const [t, c] of cmds) { api.doCommand(t, c, 'instant'); api.eval('checkVictory()'); } };
 let guard = 0;
@@ -30,7 +29,7 @@ expect('honest submission', sub, true);
 { const r = verify(sub), F = r.film; const ok = F && F.pace.length === rec.end + 1 && F.months.length >= rec.end && F.tags.includes(tag) && F.months[0][2].length === api.eval('NP');
   console.log((ok ? 'ok   ' : 'FAIL ') + `replay film: ${F.months.length} months, pace ${F.pace.slice(0, 3).join(',')}…${F.pace[F.pace.length - 1]}`); if (!ok) fails++; }
 expect('inflated score', { ...sub, claim:card.score + 50 }, false);
-const r2 = JSON.parse(JSON.stringify(rec)); r2.c = r2.c.filter(([, , c]) => c.c !== 'front' && c.c !== 'focus'); expect('moves removed', { ...sub, rec:pack(r2) }, api.G.turn < 24 ? 'either' : false);
+const r2 = JSON.parse(JSON.stringify(rec)); r2.c = r2.c.filter(([, , c]) => c.c !== 'attack' && c.c !== 'focus'); expect('moves removed', { ...sub, rec:pack(r2) }, api.G.turn < 24 ? 'either' : false);
 const r3 = JSON.parse(JSON.stringify(rec)); r3.o.seed = (r3.o.seed + 1) >>> 0; expect('different dice for the weekly', { ...sub, rec:pack(r3) }, false);
 const r4 = JSON.parse(JSON.stringify(rec)); r4.o.build = 'old'; expect('older game version', { ...sub, rec:pack(r4) }, false);
 // a build still in the verifier's archive (functions/builds/index.json) is replayed with its own code

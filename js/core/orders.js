@@ -131,7 +131,7 @@ function doCommand(t, c, mode) {
     case 'focus': return R(startFocus(t, c.k));
     case 'card': return R(playCard(t, c.k, c.target));
     case 'discard': return R(discardCard(t, c.k));
-    case 'front': { try { const r = frontCommand(t, c); return R(r.ok, r); } catch (err) { return R(false, { why:'Bad front order' }); } }
+    case 'front': return R(false, { why:'Fronts are no longer part of the game' });
     case 'sphere': { const why = canSphere(t, c.tag); if (why) return R(false, { why }); return R(true, { result:bringIntoBloc(t, c.tag) }); }
     case 'sig': { const r = sigCommand(t, c); return R(r.ok, r); }
     case 'spy': { const r = spyOp(t, c.op, c.target); return R(r, { spy:r }); }

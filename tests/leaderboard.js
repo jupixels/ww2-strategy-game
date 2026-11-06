@@ -54,7 +54,7 @@ const OUT = process.env.OUT;
   for (let m = 0; m < 30; m++) {
     await close();
     if (await page.evaluate(() => !!G.over)) break;
-    await page.evaluate(() => { const t = ME; if (!A(t)) return; const h = homeProv(t); Ctl.act({ c:'buildN', k:'inf', pid:h, n:2 }); const fk = focusFor(t, false).find(f => !focusState(t, f.k)); if (fk) Ctl.act({ c:'focus', k:fk.k }); if (!frontsOf(t).length) Ctl.act({ c:'front', op:'auto' }); });
+    await page.evaluate(() => { const t = ME; if (!A(t)) return; const h = homeProv(t); Ctl.act({ c:'buildN', k:'inf', pid:h, n:2 }); const fk = focusFor(t, false).find(f => !focusState(t, f.k)); if (fk) Ctl.act({ c:'focus', k:fk.k });});
     await page.evaluate(() => Ctl.endTurn()); await page.waitForTimeout(900);
   }
   await page.waitForTimeout(800);

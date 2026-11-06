@@ -30,6 +30,14 @@ const { chromium } = require(process.env.PW || '/opt/npm-tools/node_modules/play
   console.log('sound calls failing:', res.bad.length ? res.bad : 'none');
   console.log('music on:', on, 'music requested:', playing.map(n => n.split('/').pop()), 'music off again:', off === false);
   console.log('missing assets:', missing.length ? missing : 'none');
+  // another tab or a minimised window: everything fades out and pauses, then comes back
+  await page.evaluate(() => { if (!SFX.music) SFX.toggleMusic(); }); await page.waitForTimeout(1500);
+  const vis = h => page.evaluate(h => { Object.defineProperty(document, 'hidden', { configurable:true, get:() => h }); document.dispatchEvent(new Event('visibilitychange')); }, h);
+  await vis(true); await page.waitForTimeout(1200); const away = await page.evaluate(() => SFX._state);
+  await vis(false); await page.waitForTimeout(1200); const back = await page.evaluate(() => SFX._state);
+  const bgOk = away.master === 0 && away.ctx === 'suspended' && (!away.track || away.track.paused) && back.master > 0.5 && back.ctx === 'running';
+  console.log('background silence:', bgOk ? 'ok' : 'FAIL', JSON.stringify({ away, back }));
+  if (!bgOk) errs.push('background audio not silenced');
   console.log(errs.length ? 'ERRORS:\n' + errs.join('\n') : 'NO ERRORS');
   await browser.close();
   process.exit(errs.length || missing.length || res.bad.length || !playing.length ? 1 : 0);

@@ -291,8 +291,7 @@ function situationReport(t) {
   const say = (w, txt, go) => adv.push({ w, txt, go });
   const enemies = enemiesOf(t).filter(A), atWar = enemies.length > 0;
   if (threats.length && threats[0].pid === n.capital) say(10, `The enemy is massing outside ${PROV[n.capital].name}. Rush divisions to the capital and fortify it.`, { pid:n.capital });
-  else if (threats.length) say(7, `${PROV[threats[0].pid].name} faces ${threats[0].foe} enemy divisions with ${threats[0].ours} of ours. Reinforce it or put its front on Hold.`, { pid:threats[0].pid });
-  if (atWar && !frontsOf(t).length) say(6, 'Organise the army into fronts (Command → Fronts) so every sector acts each month without you moving each stack.', { tab:'fronts' });
+  else if (threats.length) say(7, `${PROV[threats[0].pid].name} faces ${threats[0].foe} enemy divisions with ${threats[0].ours} of ours. Reinforce it or dig in.`, { pid:threats[0].pid });
   if (cut) say(8, `${cut} division${cut === 1 ? ' is' : 's are'} cut off and losing a tenth of their strength every month. Break out or pull them back.`, { tab:'armies' });
   else if (low > 8) say(4, `${low} divisions fight on thin supply. Take a big city or a port near them, or shorten the line.`, { tab:'armies' });
   if (net < 0) { const m = n.oil > 0 ? Math.floor(n.oil / -net) : 0; say(n.oil <= 0 ? 8 : m < 6 ? 6 : 3, `Fuel: we burn ${Math.round(-net)} more oil a month than we get${n.oil > 0 ? ` — dry in ${m} months` : ' and the tanks are empty'}. Import oil, take an oil field or decommission idle ships.`, { tab:'industry' }); }
