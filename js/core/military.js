@@ -1,6 +1,6 @@
 'use strict';
 /* ================= SEA CONTROL ================= */
-function fleetPower(f, t) { if (!f) return 0; const n = nat(t); const fuel = (n ? fuelMul(t) : 1) * (anchored(t) ? 0.6 : 1); return (f.cap * 3 * (n && n.tech.carrier ? 1.4 : 1) + f.sub * 0.6) * fuel; }
+function fleetPower(f, t) { if (!f) return 0; const n = nat(t); const fuel = (n ? fuelMul(t) : 1) * (anchored(t) ? 0.6 : 1); return (f.cap * 3 * (n ? 1 + tm(t, 'navy') : 1) + f.sub * 0.6) * fuel; }
 // returns 'free' | 'ours' | 'contested' | 'enemy' from t's point of view
 function seaControl(z, t) {
   let fs = 0, hs = 0;
@@ -36,10 +36,10 @@ const fleetReady = f => !!f && (f.mv || 0) < FLEET_MOVES;
    Enemy ships and U-boats along the route sink part of it; your battle squadrons in those waters escort it.
    Sealift (divisions shipped per month) grows with the navy. Moving troops costs no oil. */
 const CONVOY_HOPS = 4;
-function convoyHops(t) { const n = nat(t); return CONVOY_HOPS + (n.tech.amph ? 1 : 0) + (n.done.includes('usa_liberty') ? 1 : 0); }
+function convoyHops(t) { const n = nat(t); return CONVOY_HOPS + (n.tech.amph ? 1 : 0) + tm(t, 'hop') + (n.done.includes('pw_bases') ? 2 : 0) + (n.done.includes('usa_liberty') ? 1 : 0); }
 function sealift(t) {
   const n = nat(t), nv = navyOf(t);
-  let c = 4 + 2 * nv.cap + (n.tech.amph ? 4 : 0) + (n.done.includes('usa_liberty') ? 12 : 0) + (n.done.includes('eng_rn') ? 4 : 0) + (n.done.includes('jap_southern') ? 8 : 0);
+  let c = 4 + 2 * nv.cap + (n.tech.amph ? 4 : 0) + tm(t, 'lift') + (n.done.includes('usa_liberty') ? 12 : 0) + (n.done.includes('eng_rn') ? 4 : 0) + (n.done.includes('jap_southern') ? 8 : 0);
   if (n.oil <= 0) c = Math.ceil(c * 0.6);
   return c;
 }
@@ -49,7 +49,7 @@ function convoyRisk(z, t) {
   let h = 0, f = 0;
   for (const o in G.fleet[z]) {
     const fl = G.fleet[z][o]; if (!fl) continue;
-    if (W(o, t)) h += (fl.cap * 1.5 + fl.sub * (hasTech(o, 'sub2') ? 1.6 : 1) * (nat(o).fx.wolfpack ? 2 : 1)) * fuelMul(o);
+    if (W(o, t)) h += (fl.cap * 1.5 + fl.sub * (1 + tm(o, 'sub')) * (1 - Math.min(0.6, tm(t, 'asw'))) * (nat(o).fx.wolfpack ? 2 : 1)) * fuelMul(o);
     else if (friendly(o, t)) f += fl.cap * 2 * fuelMul(o);
   }
   if (!h) return 0;
@@ -180,16 +180,16 @@ function airPower(sideOf, pid, kind) {
   let s = 0; const P = PROV[pid];
   for (let i = 0; i < NP; i++) {
     const q = G.prov[i]; const v = q.air[kind]; if (!v || !sideOf(q.o)) continue;
-    const n = nat(q.o); const range = AIR_RANGE * (kind === 'bmb' && n.tech.bmb2 ? 1.3 : 1);
+    const n = nat(q.o); const range = AIR_RANGE * (kind === 'bmb' ? 1 + tm(q.o, 'bmbR') : 1);
     if (Math.hypot(PROV[i].x - P.x, PROV[i].y - P.y) > range) continue;
-    let m = 1; if (kind === 'ftr') m *= 1 + (n.tech.ftr2 ? 0.3 : 0) + (n.tech.jet ? 0.6 : 0);
+    let m = 1; if (kind === 'ftr') m *= 1 + tm(q.o, 'ftr');
     m *= fuelMul(q.o);
     s += v * m;
   }
   return s;
 }
 function airBalance(a, d, pid) {
-  const fa = airPower(t => friendly(t, a), pid, 'ftr'), fd = airPower(t => friendly(t, d), pid, 'ftr') * (hasTech(d, 'radar') ? 1.25 : 1);
+  const fa = airPower(t => friendly(t, a), pid, 'ftr'), fd = airPower(t => friendly(t, d), pid, 'ftr') * (1 + tm(d, 'aa'));
   const share = fa + fd > 0 ? fa / (fa + fd) : 0.5;
   const ba = airPower(t => friendly(t, a), pid, 'bmb'), bd = airPower(t => friendly(t, d), pid, 'bmb');
   return { fa, fd, share, ba, bd };
@@ -247,16 +247,16 @@ function displaceGeneral(pid, t, retreatTo) {
 /* ================= COMBAT ================= */
 const WINTER_LANDS = new Set(['SOV','FIN']);
 function unitStrength(n, u, attacking, ter, opts = {}) {
-  const T = n.tech, infMul = 1 + 0.15 * ((T.inf1 ? 1 : 0) + (T.inf2 ? 1 : 0) + (T.inf3 ? 1 : 0));
+  const T = n.tech, infMul = 1 + tm(n.tag, 'inf');
   const rough = 'mfsu'.includes(ter), hilly = 'mh'.includes(ter);
   const fuel = fuelMul(n.tag);
   let s = 0;
   s += u.inf * infMul;
   s += u.mtn * infMul * (attacking ? 1.0 : 1.1) * (hilly ? (attacking ? 1.5 : 1.3) : 1);
   s += u.par * infMul * (attacking ? 1.2 : 0.9);
-  s += u.art * (attacking ? 1.5 : 0.9) * (T.art2 ? 1.3 : 1);
-  const armA = (2.6 + (T.arm2 ? 0.5 : 0) + (T.arm3 ? 0.5 : 0)) * (T.mobile ? 1.1 : 1) * (rough ? 0.6 : 1) * (opts.blitz ? 1.25 : 1);
-  const armD = 1.8 + (T.arm2 ? 0.3 : 0) + (T.arm3 ? 0.3 : 0);
+  s += u.art * (attacking ? 1.5 : 0.9) * (1 + tm(n.tag, 'art'));
+  const armA = 2.6 * (1 + tm(n.tag, 'arm')) * (rough ? 0.6 : 1) * (opts.blitz ? 1.25 : 1);
+  const armD = 1.8 * (1 + tm(n.tag, 'armD'));
   s += u.arm * (attacking ? armA : armD) * fuel * (opts.mud ? 0.8 : 1);
   if (attacking && T.combined && u.arm > 0 && u.art > 0 && u.inf > 0) s *= 1.15;
   if (n.tag === 'SOV' && G.flags.purge && G.y < 1942) s *= 0.8;
@@ -274,15 +274,21 @@ function defenseValue(pid, atkUnits, atkTag, detail) {
   mul(TER[P.ter].n, TER[P.ter].d);
   const artShare = atkUnits && landN(atkUnits) ? atkUnits.art / landN(atkUnits) : 0;
   mul('Forts', 1 + 0.25 * p.fort * (1 - 0.6 * artShare));
-  mul('Dug in', 1 + p.dig * (n.tech.grand ? 0.1 : 0.05));
+  mul('Dug in', 1 + p.dig * (0.05 + tm(p.o, 'dig')));
   mul('Veterancy', 1 + 0.08 * p.xp);
-  mul('Doctrine', n.tech.depth ? 1.1 : 1);
+  mul('Doctrine', 1 + tm(p.o, 'def'));
   mul('Capital', n.capital === pid ? 1.25 : 1);
   mul('General', genBonus(genAt(pid, p.o), 'def', P.ter));
   mul(p.sup ? 'Supply' : 'Out of supply', 0.75 + 0.25 * p.sup);
   mul('Low stability', n.stab < 20 ? 0.9 : 1);
   if (G.flags.gpw && p.o === 'SOV' && p.core === 'SOV' && G.y < 1944) mul('Not one step back', 1.15);
   if (p.o === 'CHI' && p.core === 'CHI' && atkTag && friendly(atkTag, 'JAP')) mul('Trading space for time', P.ter === 'p' ? 1.2 : 1.35);
+  // great powers fight hardest for their own homeland (not colonies)
+  if (n && n.major && p.core === p.o && !P.col) mul('Defending the homeland', 1.2);
+  // Barbarossa: for six months the Red Army is caught forward-deployed and leaderless
+  if (G.flags.barb > G.turn && atkTag && p.o === 'SOV' && (atkTag === 'GER' || friendly(atkTag, 'GER'))) mul('Caught by surprise', isHuman('SOV') ? 0.85 : 0.75);
+  // the sickle cut: six months after Fall Gelb the Allies in France and the Low Countries are caught out of position
+  if (G.flags.sickle > G.turn && atkTag && (atkTag === 'GER' || friendly(atkTag, 'GER')) && ['FRA','BEL','HOL','ENG'].includes(p.o)) mul('Ardennes surprise', isHuman(p.o) ? 0.9 : 0.8);
   mul('Hold the line', n.fx.maginot ? 1.2 : 1);
   mul('Codebreakers', n.fx.codebreak ? 1.1 : 1);
   mul('Union sacrée', p.o === 'FRA' && n.sig && n.sig.union > 0 ? 1.1 : 1);
@@ -312,7 +318,10 @@ function attackValue(t, u, pid, opts, detail) {
   if (n.ops && n.ops.tg.includes(pid)) mul('Operation ' + n.ops.name, 1.15);
   if (A(d.o) && nat(d.o).fx.scorched) mul('Scorched earth', 0.8);
   if (n.nextAtk && n.nextAtk !== 1) mul('Surprise', n.nextAtk);
-  mul('Doctrine', n.tech.doc3 ? 1.1 : 1);
+  mul('Doctrine', 1 + tm(t, 'atk'));
+  // the Red Army learned deep operations the hard way: its offensives before 1943 (Kharkov, Rzhev) mostly failed
+  if (t === 'SOV' && G.y < 1943 && !isHuman('SOV') && A(d.o) && (d.o === 'GER' || friendly(d.o, 'GER'))) mul('Inexperienced command', 0.85);
+  if (G.flags.barb > G.turn && t === 'SOV' && A(d.o) && (d.o === 'GER' || friendly(d.o, 'GER'))) mul('Disorganised', isHuman('SOV') ? 0.9 : 0.8);
   mul('Difficulty', diffMul(t, 'cb'));
   mul('National spirit', n.bonus);
   if (opts.meeting) mul('Meeting engagement', 1);
@@ -435,7 +444,8 @@ function checkCapitulation(d, w) {
   const n = nat(d), mine = owned(d);
   if (!mine.length) return capitulate(d, w);
   let coreVP = 0, holdVP = 0;
-  for (let i = 0; i < NP; i++) if (G.prov[i].core === d) { coreVP += PROV[i].vp + 0.5; if (G.prov[i].o === d) holdVP += PROV[i].vp + 0.5; }
+  // the homeland decides: an empire's colonies don't keep it in the war (France fell in 1940 with Algeria and Indochina intact)
+  for (let i = 0; i < NP; i++) if (G.prov[i].core === d && !PROV[i].col) { coreVP += PROV[i].vp + 0.5; if (G.prov[i].o === d) holdVP += PROV[i].vp + 0.5; }
   const capLost = !capitalOk(d);
   const small = n.nprov0 <= 4;
   // the Soviet Union traded space for time; Nationalist China never surrendered while it held any land
@@ -482,7 +492,9 @@ function capitulate(d, w) {
   const head = vichy ? 'FRANCE SIGNS ARMISTICE — VICHY REGIME FORMED' : `${n.name.toUpperCase()} CAPITULATES`;
   news(head);
   log(`<b>${n.name}</b> capitulated to <b>${wn.name}</b>.`);
-  sendNews('*', { title:vichy ? 'France Falls' : `${n.name} Capitulates`, head,
+  // a nation conquered again after a liberation gets a line on the wire, not another front page
+  G.flags.capN = G.flags.capN || {}; const again = G.flags.capN[d]; G.flags.capN[d] = (again || 0) + 1;
+  if (!again) sendNews('*', { title:vichy ? 'France Falls' : `${n.name} Capitulates`, head,
     dek: vichy ? 'Marshal Pétain signs the armistice in the forest of Compiègne; the south becomes the Vichy state' : `${wn.adj} columns parade through the streets of ${PROV[n.capital] ? PROV[n.capital].name : 'the capital'}`,
     text: vichy ? 'The Third Republic is dead. Northern France and the coast are occupied, while a rump French state governs the south and the colonies from a spa town in the Auvergne.' : `After a hopeless struggle the ${n.adj} government has laid down its arms. Its lands pass to ${wn.name}. Refugees crowd the roads; the victors count their spoils.`,
     plate:d });
@@ -564,7 +576,7 @@ function rocketTargets(t) {
 function fireRocket(t, tid) {
   const n = nat(t), p = G.prov[tid];
   n.rocket = true;
-  const k = Math.max(1, Math.round(unitsAt(p) * 0.3));
+  const k = Math.max(1, Math.round(unitsAt(p) * 0.3 * (1 + tm(t, 'rkt'))));
   const lost = takeLosses(p.u, k); clampReady(p);
   if (p.fort) p.fort--;
   if (p.fac > 0 && rnd() < 0.4) p.fac--;
@@ -575,7 +587,7 @@ function fireRocket(t, tid) {
 function canBomb(t) { const n = nat(t); if (!n.tech.bomb) return 'Research The Bomb'; if (n.bombCd) return `Ready in ${n.bombCd} months`; if (n.pp < 150) return 'Needs 150 production'; return ''; }
 function dropBomb(t, tid) {
   const n = nat(t), p = G.prov[tid], d = p.o;
-  n.bombCd = 6; n.pp -= 150;
+  n.bombCd = Math.max(2, 6 - tm(t, 'bombcd')); n.pp -= 150;
   const killed = unitsAt(p);
   clearLand(p); p.fac = Math.max(0, p.fac - 3); p.fort = 0; p.burn = 6; p.smoke = 6;
   for (const k of AIR) p.air[k] = 0;
@@ -588,17 +600,30 @@ function dropBomb(t, tid) {
   }
   return { killed, surrender:false };
 }
+// air wings fly to another of your airfields in range; they can't raid in the month they move
+const REBASE_RANGE = AIR_RANGE * 1.5;
+function rebaseTargets(t, from) {
+  const q = G.prov[from]; if (!q || q.o !== t || q.ad || !(q.air.ftr + q.air.bmb)) return [];
+  const out = []; for (let i = 0; i < NP; i++) if (i !== from && G.prov[i].o === t && dist(from, i) <= REBASE_RANGE) out.push(i); return out;
+}
+function rebaseAir(t, from, to, n) {
+  if (!rebaseTargets(t, from).includes(to)) return false;
+  const q = G.prov[from], d = G.prov[to], f = clamp((n && n.ftr) | 0, 0, q.air.ftr), b = clamp((n && n.bmb) | 0, 0, q.air.bmb);
+  if (f + b <= 0) return false;
+  q.air.ftr -= f; q.air.bmb -= b; d.air.ftr += f; d.air.bmb += b; d.ad = 1;
+  return true;
+}
 function raidTargets(t, from) {
   const q = G.prov[from]; if (q.o !== t || !q.air.bmb || q.ad) return [];
-  const range = AIR_RANGE * (hasTech(t, 'bmb2') ? 1.3 : 1);
+  const range = AIR_RANGE * (1 + tm(t, 'bmbR'));
   return G.prov.map((p, i) => i).filter(i => W(t, G.prov[i].o) && dist(from, i) <= range);
 }
 function airRaid(t, from, tid) {
   const q = G.prov[from], p = G.prov[tid], d = p.o;
   q.ad = 1;
-  const fa = airPower(x => friendly(x, t), tid, 'ftr'), fd = airPower(x => friendly(x, d), tid, 'ftr') * (hasTech(d, 'radar') ? 1.25 : 1);
+  const fa = airPower(x => friendly(x, t), tid, 'ftr'), fd = airPower(x => friendly(x, d), tid, 'ftr') * (1 + tm(d, 'aa'));
   const esc = fa + fd > 0 ? fa / (fa + fd) : 1;
-  const power = q.air.bmb * (hasTech(t, 'bmb2') ? 2 : 1) * (0.4 + 0.6 * esc);
+  const power = q.air.bmb * (1 + tm(t, 'bmb')) * (0.4 + 0.6 * esc);
   const lost = Math.min(q.air.bmb, rr(q.air.bmb * 0.3 * (1 - esc)));
   q.air.bmb -= lost;
   let fac = 0, kills = 0;
@@ -634,10 +659,15 @@ function navalBattle(z, a, b) {
   if (isHuman(a) || isHuman(b)) for (const t of [a, b]) if (isHuman(t)) notify(t, '⚓', `Naval battle in the ${SEA[z].n}`, `${win === t ? 'Victory' : 'Defeat'}: we lost ${t === a ? la : lb} ships, the enemy ${t === a ? lb : la}.`, win === t ? 'medal' : 'war');
   return r;
 }
+// which ships an order takes: 'all', 'half', or exact counts { cap, sub }
+function fleetPart(f, part, round) {
+  if (part && typeof part === 'object') return [clamp(part.cap | 0, 0, f.cap), clamp(part.sub | 0, 0, f.sub)];
+  return part === 'half' ? [round(f.cap / 2), round(f.sub / 2)] : [f.cap, f.sub];
+}
 function moveFleet(t, from, to, part) {
   const f = G.fleet[from][t]; if (!fleetReady(f)) return false;
   if (!SEA[from].adj.includes(to) || !passable(from, to, t)) return false;
-  const c = part === 'half' ? Math.ceil(f.cap / 2) : f.cap, s = part === 'half' ? Math.ceil(f.sub / 2) : f.sub;
+  const [c, s] = fleetPart(f, part, Math.ceil);
   if (c + s <= 0) return false;
   const had = G.fleet[to][t] && G.fleet[to][t].cap + G.fleet[to][t].sub > 0 ? G.fleet[to][t].mv || 0 : 0;
   f.cap -= c; f.sub -= s;
@@ -653,7 +683,7 @@ function moveFleet(t, from, to, part) {
 // decommission ships to save their oil: some steel comes back from the breakers' yards
 function scrapFleet(t, z, part) {
   const f = G.fleet[z] && G.fleet[z][t]; if (!f) return false;
-  const c = part === 'half' ? Math.floor(f.cap / 2) : f.cap, s = part === 'half' ? Math.floor(f.sub / 2) : f.sub;
+  const [c, s] = fleetPart(f, part, Math.floor);
   if (c + s <= 0) return false;
   f.cap -= c; f.sub -= s; nat(t).steel += c * 3 + s;
   if (f.cap + f.sub <= 0) delete G.fleet[z][t];
@@ -668,7 +698,7 @@ function convoyRaids() {
     let pr = 0;
     for (const z of zs) {
       let subs = 0, esc = 0;
-      for (const o in G.fleet[z]) { const f = G.fleet[z][o]; if (W(o, t)) subs += f.sub * (hasTech(o, 'sub2') ? 2 : 1) * (nat(o).fx.wolfpack ? 3 : 1); else if (friendly(o, t)) esc += f.cap; }
+      for (const o in G.fleet[z]) { const f = G.fleet[z][o]; if (W(o, t)) subs += f.sub * (1 + tm(o, 'sub') * 1.25) * (1 - Math.min(0.6, tm(t, 'asw'))) * (nat(o).fx.wolfpack ? 3 : 1); else if (friendly(o, t)) esc += f.cap; }
       pr += Math.max(0, subs - esc * 0.8);
     }
     n.raid = clamp(pr * 0.018, 0, 0.3) * share;

@@ -18,6 +18,14 @@ const isHuman = t => !!(G.humans && G.humans[t]);
 const humanTags = () => Object.keys(G.humans || {});
 const liveHuman = t => isHuman(t) && !G.humans[t].dead && !G.humans[t].away;
 const hasTech = (t, k) => !!(G.nat[t] && G.nat[t].tech[k]);
+// a nation's summed technology modifiers (TECHS[].fx), cached per tech object and refreshed when a tech is added
+const TM_CACHE = new WeakMap();
+function tm(t, key) {
+  const n = G.nat[t]; if (!n) return 0;
+  const ks = Object.keys(n.tech); let c = TM_CACHE.get(n.tech);
+  if (!c || c.n !== ks.length) { c = { n:ks.length, v:{} }; for (const k of ks) { const T = TECH[k]; if (T) for (const f in T.fx) c.v[f] = (c.v[f] || 0) + T.fx[f]; } TM_CACHE.set(n.tech, c); }
+  return c.v[key] || 0;
+}
 const isWinter = () => G.m === 11 || G.m <= 1;
 const isMud = () => G.m === 2 || G.m === 3 || G.m === 9 || G.m === 10;
 

@@ -132,7 +132,7 @@ function doCommand(t, c, mode) {
     case 'card': return R(playCard(t, c.k, c.target));
     case 'discard': return R(discardCard(t, c.k));
     case 'front': return R(false, { why:'Fronts are no longer part of the game' });
-    case 'sphere': { const why = canSphere(t, c.tag); if (why) return R(false, { why }); return R(true, { result:bringIntoBloc(t, c.tag) }); }
+    case 'sphere': { const why = canSphere(t, c.tag, !!c.aid); if (why) return R(false, { why }); return R(true, { result:bringIntoBloc(t, c.tag, !!c.aid) }); }
     case 'sig': { const r = sigCommand(t, c); return R(r.ok, r); }
     case 'spy': { const r = spyOp(t, c.op, c.target); return R(r, { spy:r }); }
     case 'hirespy': return R(hireSpy(t));
@@ -158,6 +158,7 @@ function doCommand(t, c, mode) {
     case 'rocket': { if (!n.tech.rocket || n.rocket || !rocketTargets(t).includes(c.to)) return R(false); const k = fireRocket(t, c.to); award(t, 'v2'); Hooks.emit('battle', { tid:c.to, from:[], a:t, d:G.prov[c.to].o, rocket:k }); return R(true, { killed:k }); }
     case 'bomb': { if (canBomb(t) || !rocketTargets(t).includes(c.to)) return R(false); const vic = G.prov[c.to].o; const r = dropBomb(t, c.to); award(t, 'bomb'); news(`ATOMIC BOMB DROPPED ON ${PROV[c.to].name.toUpperCase()}`); Hooks.emit('battle', { tid:c.to, from:[], a:t, d:vic, bomb:r.killed, surrender:r.surrender }); return R(true, { bomb:r }); }
     case 'fleet': return R(moveFleet(t, c.from, c.to, c.part));
+    case 'rebase': return R(rebaseAir(t, c.from, c.to, { ftr:c.ftr, bmb:c.bmb }));
     case 'ship': { const cv = shipConvoy(t, c.from, c.to, c.amt); return R(cv, { convoy:cv }); }
     case 'unship': return R(cancelConvoy(t, c.id));
     case 'scrap': return R(scrapFleet(t, c.z, c.part));

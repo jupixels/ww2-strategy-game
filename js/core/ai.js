@@ -6,23 +6,20 @@ function frontDistance(t, enemies) {
   while (q.length) { const i = q.shift(); for (const j of PROV[i].adj) if (G.prov[j].o === t && d[j] > d[i] + 1) { d[j] = d[i] + 1; q.push(j); } }
   return d;
 }
-const RESEARCH_PRIO = {
-  GER:['arm2','blitz','ind2','ftr2','radar','arm3','inf2','synth','rocket','combined','bmb2','jet','sub2','inf3','art2','atom','bomb'],
-  ENG:['radar','ind2','ftr2','cap1','carrier','amph','arm1','arm2','inf2','bmb2','sub2','depth','jet','atom','bomb','inf3'],
-  FRA:['depth','grand','arm2','ind2','ftr1','inf2','radar','ftr2','art2','combined','inf3'],
-  ITA:['ind2','arm1','inf1','mobile','inf2','ftr2','radar','sub2','arm2','amph','synth','inf3'],
-  SOV:['inf1','ind2','inf2','arm2','ftr2','grand','combined','arm3','art2','radar','ind3','inf3','jet','atom','bomb'],
-  _:['inf1','ind1','art1','inf2','ind2','depth','ftr1','arm1','radar','mtn','grand','inf3','synth'],
-};
+// keep the laboratories busy: aiBuild leaves the price of the next project in the bank (see reserve there)
 function aiResearch(t) {
-  const n = nat(t);
-  const prio = (RESEARCH_PRIO[t] || RESEARCH_PRIO._).concat(TECHS.map(T => T.k));
-  let guard = 0;
-  while (n.rs.length < n.slots && guard++ < 6) {
-    const k = prio.find(k => TECH[k] && !techState(t, k));
-    if (!k || n.pp < techCost(TECH[k]) + (enemiesOf(t).length ? 30 : 10)) break;
-    startResearch(t, k);
+  const n = nat(t); let guard = 0;
+  while (n.rs.length < n.slots && guard++ < 4) {
+    const T = techPick(t, TECHS.filter(T => !techState(t, T.k)));
+    if (!T || n.pp < techCost(T) + (enemiesOf(t).length ? 10 : 20)) break;
+    startResearch(t, T.k);
   }
+}
+// the price of the project this power would start next (what aiBuild keeps in the bank)
+function nextTechCost(t) {
+  const n = nat(t); if (n.rs.length >= n.slots) return 0;
+  const T = techPick(t, TECHS.filter(T => !n.tech[T.k] && !n.rs.some(r => r.k === T.k) && G.y >= T.y && (!T.req || n.tech[T.req])));
+  return T ? techCost(T) : 0;
 }
 function aiFocus(t) {
   const n = nat(t); if (n.focus) return;
@@ -55,7 +52,7 @@ function aiCards(t, enemies, fd) {
       case 'partisans': return 2;
       case 'peace': return atWar && n.stab < 35 ? 3 : 0;
       case 'coup': return 0.6;
-      case 'falseflag': return !atWar && (n.ide === 'F' || n.ide === 'C') && G.y >= 1939 && n.major ? 0.8 : 0;
+      case 'falseflag': return !atWar && (n.ide === 'F' || n.ide === 'C') && G.y >= 1940 && n.major ? 0.8 : 0;
     }
     return 0.5;
   };
@@ -68,7 +65,8 @@ function aiCards(t, enemies, fd) {
   if (CARDS[k].tgt === 'none') target = null;
   else if (k === 'fortress') target = fd ? tg.filter(i => fd[i] === 0).sort((a, b) => threatAt(t, b) - threatAt(t, a))[0] ?? tg[0] : tg[0];
   else if (k === 'airraid' || k === 'commando' || k === 'fifth') target = tg.sort((a, b) => G.prov[b].fac + G.prov[b].fort * 2 - G.prov[a].fac - G.prov[a].fort * 2)[0];
-  else if (k === 'falseflag') { const weak = tg.filter(o => !nat(o).major && !facOf(o)); target = weak.length ? pickR(weak) : null; }
+  // only prey nobody has promised to defend: a guaranteed minor would drag the great powers in years early
+  else if (k === 'falseflag') { const weak = tg.filter(o => !nat(o).major && !facOf(o) && !Object.values(G.nat).some(m => m.alive && (m.guar || []).includes(o))); target = weak.length ? pickR(weak) : null; }
   else target = pickR(tg);
   if (CARDS[k].tgt !== 'none' && target == null) return;
   playCard(t, k, target);
@@ -77,8 +75,9 @@ function aiBuild(t, atWar, fd, enemies, mine) {
   const n = nat(t);
   const d = divisions(t), total = landN(d);
   // peacetime army size follows the homeland (colonies and empty steppe count for little)
-  const cap = atWar ? 1e9 : sum(mine, i => PROV[i].col ? 0.3 : PROV[i].vp >= 2 ? 2.5 : PROV[i].vp ? 1.4 : 0.6) + (n.major ? 30 : 4) + (G.tension / 10) * (n.major ? 4 : 1);
-  const reserve = atWar ? 0 : 20;
+  let cap = atWar ? 1e9 : sum(mine, i => PROV[i].col ? 0.3 : PROV[i].vp >= 2 ? 2.5 : PROV[i].vp ? 1.4 : 0.3) + (n.major ? 30 : 4) + (G.tension / 10) * (n.major ? 4 : 1);
+  if (!n.major) cap = Math.min(cap, 2 + (NATDEF[t].mp || 10) * 0.4); // small nations kept small peacetime armies
+  const reserve = (atWar ? 0 : 20) + nextTechCost(t) * (atWar ? 0.6 : 1); // save up for the next research project
   const air = airOf(t), navy = navyOf(t);
   const home = homeProv(t);
   // air force: majors keep roughly one fighter wing per six divisions
@@ -117,7 +116,9 @@ function aiBuild(t, atWar, fd, enemies, mine) {
     if (!build(t, k, place)) { if (k === 'inf' || !build(t, 'inf', place)) break; }
   }
   // peacetime industry
-  for (let g = 0; g < 4 && n.pp > (atWar ? 260 : 90) && rnd() < (atWar ? 0.5 : 0.45); g++) {
+  // great powers stop pouring money into factories once war looms and keep a war chest for mobilisation instead
+  const chest = WORLD && !atWar && n.major && (G.y >= 1939 || G.tension > 60); // world-map provinces have room for far more factories than the Europe map's
+  for (let g = 0; g < 4 && !chest && n.pp > (atWar ? 260 : 90) && rnd() < (atWar ? 0.5 : 0.45); g++) {
     const c = mine.filter(i => G.prov[i].core === t && G.prov[i].fac < 6 && G.prov[i].sup);
     if (c.length) { const i = c[(rnd() * c.length) | 0]; if (n.pp >= factoryCost(G.prov[i].fac) + 30) buildFactory(t, i); }
   }
@@ -148,6 +149,17 @@ function stagingDistance(t, mine) {
   for (const i of mine) if (PROV[i].coast) { for (const k of navalTargets(i, t).values()) if (k === 'land') { d[i] = 0; q.push(i); break; } }
   for (let h = 0; h < q.length; h++) { const i = q[h]; for (const j of PROV[i].adj) if (G.prov[j].o === t && d[j] > d[i] + 1) { d[j] = d[i] + 1; q.push(j); } }
   return d;
+}
+// the Phony War: AI France and Britain sit behind the Maginot Line instead of marching into Germany's homeland
+// until Germany strikes west (Fall Gelb) — or 1941, if it never does
+// a province lending troops to a neighbour's attack keeps enough at home to face the other enemies next to it
+function helperKeep(t, k, target, enemies) {
+  const threat = PROV[k].adj.filter(j => j !== target && enemies.has(G.prov[j].o)).reduce((s, j) => s + unitsAt(G.prov[j]), 0);
+  return Math.max(k === nat(t).capital ? 3 : 1, threat >= 6 ? Math.ceil(threat / 3) : 0);
+}
+function phonyWar(t, j) {
+  const p = G.prov[j];
+  return (t === 'FRA' || t === 'ENG' || p.o === 'GER' && friendly(t, 'FRA') && !nat(t).major) && p.o === 'GER' && p.core === 'GER' && !G.ev.gelb && G.y < 1941 && !isHuman(t);
 }
 function aiTurn(t, battles) {
   const n = nat(t); if (!n.alive) return;
@@ -183,7 +195,7 @@ function aiTurn(t, battles) {
   // operations: majors pick objectives along the front
   if (n.major && !n.ops && n.pol >= 25 && rnd() < 0.25) {
     const cands = [];
-    for (const i of mine) if (fd[i] === 0) for (const j of PROV[i].adj) if (enemies.has(G.prov[j].o) && !cands.includes(j)) cands.push(j);
+    for (const i of mine) if (fd[i] === 0) for (const j of PROV[i].adj) if (enemies.has(G.prov[j].o) && !phonyWar(t, j) && !cands.includes(j)) cands.push(j);
     const tg = cands.sort((a, b) => PROV[b].vp - PROV[a].vp + (unitsAt(G.prov[a]) - unitsAt(G.prov[b])) * 0.2).slice(0, 3);
     if (tg.length) launchOperation(t, tg);
   }
@@ -211,13 +223,13 @@ function aiTurn(t, battles) {
   for (const i of order) {
     const p = G.prov[i]; if (p.o !== t || readyAt(p) === 0) continue;
     if (fd[i] === 0) {
-      const targets = PROV[i].adj.filter(j => enemies.has(G.prov[j].o));
+      const targets = PROV[i].adj.filter(j => enemies.has(G.prov[j].o) && !phonyWar(t, j));
       let best = null;
       for (const j of targets) {
         const T = G.prov[j];
         const helpers = PROV[j].adj.filter(k => k !== i && G.prov[k].o === t && readyAt(G.prov[k]) > 0);
         const sumU = portion(p, 'all');
-        for (const k of helpers) { const hp = portion(G.prov[k], 'all'); hp.inf = Math.max(0, hp.inf - (k === n.capital ? 3 : 1)); for (const kk of LAND) sumU[kk] += hp[kk]; }
+        for (const k of helpers) { const hp = portion(G.prov[k], 'all'); hp.inf = Math.max(0, hp.inf - helperKeep(t, k, j, enemies)); for (const kk of LAND) sumU[kk] += hp[kk]; }
         const atk = attackValue(t, sumU, j, { from:i });
         const def = forcesAt(T) === 0 ? 0.01 : defenseValue(j, sumU, t);
         const odds = atk / def;
@@ -231,7 +243,7 @@ function aiTurn(t, battles) {
         if (i === n.capital) keep = Math.min(p.r.inf, Math.max(keep, Math.ceil(otherThreat / 2), 2)); // never strip the capital
         const part = portion(p, 'all'); part.inf = Math.max(0, part.inf - keep);
         const srcs = [{ id:i, u:part }];
-        if (best.odds < 3) for (const k of best.helpers) { const hp = portion(G.prov[k], 'all'); hp.inf = Math.max(0, hp.inf - (k === n.capital ? 3 : 1)); if (landN(hp)) srcs.push({ id:k, u:hp }); }
+        if (best.odds < 3) for (const k of best.helpers) { const hp = portion(G.prov[k], 'all'); hp.inf = Math.max(0, hp.inf - helperKeep(t, k, best.j, enemies)); if (landN(hp)) srcs.push({ id:k, u:hp }); }
         if (!landN(srcs[0].u)) continue;
         const r = battle(srcs, best.j);
         battles.push(r);

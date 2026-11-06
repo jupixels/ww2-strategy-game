@@ -12,7 +12,7 @@ const stabMul = n => 0.75 + 0.5 * n.stab / 100;
 function income(t) {
   const n = nat(t); let s = 3;
   for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (p.o === t) s += p.fac * (p.core === t ? 1 : 0.5 * (1 - p.res / 100)); }
-  s *= 1 + (n.tech.ind1 ? 0.1 : 0) + (n.tech.ind2 ? 0.1 : 0) + (n.tech.ind3 ? 0.15 : 0);
+  s *= 1 + tm(t, 'ind');
   if (t === 'SPA' && G.flags.spain && nowNum() < G.flags.spain) s *= 0.5;
   if (n.totalWar > 0) s *= 1.2;
   if (t === 'CHI' && W('CHI', 'JAP')) s += 6; // Soviet credits and the Burma Road keep China in the war
@@ -27,6 +27,7 @@ function mpIncome(t) {
   let s = 0;
   for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (p.o !== t) continue; s += p.core !== t ? 0.25 : PROV[i].col ? 0.3 + 0.1 * PROV[i].vp : 0.9 + 0.3 * PROV[i].vp; }
   if (nat(t).tech.mass) s *= 1.2;
+  s *= 1 + tm(t, 'mp');
   if (G.gm === 'blitz') s *= 1.4;
   return Math.round(s * (isHuman(t) && G.diff === 'easy' ? 1.3 : 1));
 }
@@ -36,7 +37,7 @@ function oilBase(t) { if (t === 'JAP' && G.flags.embargo) return 1; return OIL_B
 function oilIncome(t) {
   const n = nat(t); let s = 2 + oilBase(t) * (blockadedCached(t) ? 0.3 : 1);
   for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (p.o === t && PROV[i].oil) s += PROV[i].oil * (p.core === t ? 1 : 0.6 * (1 - p.res / 100)); }
-  if (n.tech.synth) s += 4; if (n.done.includes('ind_synth')) s += 3; if (n.done.includes('ger_autarky')) s += 3;
+  s += tm(t, 'oil'); if (n.done.includes('ind_synth')) s += 3; if (n.done.includes('ger_autarky')) s += 3;
   if (n.done.includes('jap_fuel')) s += 3;
   if (G.flags.usa && isAllied(t) && t !== 'USA') s += 3;
   return Math.round(s);
@@ -44,7 +45,7 @@ function oilIncome(t) {
 function steelIncome(t) {
   const n = nat(t); let s = 2;
   for (let i = 0; i < NP; i++) { const p = G.prov[i]; if (p.o === t && PROV[i].steel) s += PROV[i].steel * (p.core === t ? 1 : 0.6 * (1 - p.res / 100)); }
-  if (n.done.includes('ind_steel')) s += 3; if (n.done.includes('ita_autarchia')) s += 2; if (n.done.includes('sov_urals')) s += 4;
+  s += tm(t, 'steel'); if (n.done.includes('ind_steel')) s += 3; if (n.done.includes('ita_autarchia')) s += 2; if (n.done.includes('sov_urals')) s += 4;
   if (G.flags.usa && isAllied(t) && t !== 'USA') s += 3;
   return Math.round(s);
 }
@@ -126,11 +127,12 @@ function techState(t, k) {
   if (n.pp < techCost(T)) return 'Not enough production';
   return '';
 }
+// paid in full when the project starts; cancelling refunds half
 function startResearch(t, k) { if (techState(t, k)) return false; const n = nat(t), T = TECH[k]; n.pp -= techCost(T); n.rs.push({ k, left:T.m }); return true; }
 function cancelResearch(t, k) { const n = nat(t); const i = n.rs.findIndex(r => r.k === k); if (i < 0) return; n.pp += Math.round(techCost(TECH[k]) * 0.5); n.rs.splice(i, 1); }
 function grantTech(t, k) { const n = nat(t); if (!TECH[k] || n.tech[k]) return; n.tech[k] = 1; n.rs = n.rs.filter(r => r.k !== k); }
 function tickResearch(t) {
-  const n = nat(t), sp = n.done.includes('sec_bureau') ? 1.3 : 1;
+  const n = nat(t), sp = (n.done.includes('sec_bureau') ? 1.3 : 1) * (1 + tm(t, 'res'));
   for (const r of [...n.rs]) { r.left -= sp; if (r.left <= 0.001) { grantTech(t, r.k); notify(t, '⚗', 'Breakthrough: ' + TECH[r.k].n, TECH[r.k].d); sfx('medal', t); if (isHuman(t)) log(`${n.adj} scientists complete <b>${TECH[r.k].n}</b>.`); } }
 }
 
@@ -155,6 +157,16 @@ function completeFocus(t, k) {
     case 'ind_plan': owned(t).filter(i => G.prov[i].core === t).sort((a, b) => G.prov[b].fac - G.prov[a].fac).slice(0, 3).forEach(i => G.prov[i].fac++); break;
     case 'ind_shadow': n.pp += 60; break;
     case 'res_univ': n.slots++; break;
+    case 'pw_demob': n.stab = Math.min(100, n.stab + 15); n.ww = Math.max(0, (n.ww || 0) - 20); n.mp += 60; break;
+    case 'pw_recon': owned(t).filter(i => G.prov[i].core === t && !PROV[i].col && G.prov[i].fac < 8).sort((a, b) => G.prov[a].fac - G.prov[b].fac).slice(0, 4).forEach(i => G.prov[i].fac++); break;
+    case 'pw_jet': grantTech(t, 'jet'); grantTech(t, 'ftr_swept'); if (C) C.air.ftr += 4; break;
+    case 'pw_nuke': if (n.tech.atom) grantTech(t, 'bomb'); else grantTech(t, 'atom'); break;
+    case 'pw_cia': n.spies += 2; n.intel = 12; break;
+    case 'pw_space': n.slots++; n.pol += 40; break;
+    case 'pw_aid': { let c = 0; if (G.act && facOf(t)) for (const o of sphereTargets(t).slice(0, 2)) { bringIntoBloc(t, o); c++; } if (!c) n.pol += 60; break; }
+    case 'pw_arms': if (C) { C.u.arm += 6; C.air.ftr += 6; } if (G.act && n.major) G.act.doom = Math.min(DOOM_MAX, G.act.doom + 6); break;
+    case 'pw_detente': if (G.act && n.major) { G.act.doom = Math.max(0, G.act.doom - 15); G.act.calm = Math.min(30, (G.act.calm || 0) + 10); } n.stab = Math.min(100, n.stab + 20); break;
+    case 'pw_bases': { const z = homeZone(); if (z) addFleet(z, t, 'cap', 3); break; }
     case 'mil_mob': n.mp += 60; if (C) C.u.inf += 6; break;
     case 'mil_mech': grantTech(t, 'arm1'); if (C) C.u.arm += 3; break;
     case 'mil_staff': n.genSlots += 2; hireGeneral(t, true); break;

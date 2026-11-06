@@ -37,6 +37,8 @@ function endMonth() {
     for (const t in G.nat) {
       const n = G.nat[t]; if (!n.alive || NATDEF[t].off) continue;
       n.pp += income(t); n.mp += mpIncome(t); n.pol += 2 + (n.stab > 70 ? 1 : 0);
+      // AI powers at peace can't sit on a hoard: savings above five months' income (min 300) go unspent
+      if (!isHuman(t) && !enemiesOf(t).length) n.pp = Math.min(n.pp, Math.max(300, income(t) * 5));
       n.oil = Math.min(999, n.oil + oilIncome(t) - oilUpkeep(t)); if (n.oil < -20) n.oil = -20;
       n.fuel = fuelLevel(t);
       n.steel = Math.min(999, n.steel + steelIncome(t));

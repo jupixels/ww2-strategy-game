@@ -165,50 +165,193 @@ const GENERALS = {
 const GEN_NAMES = ['Col. Varga','Gen. Novak','Gen. Petrov','Gen. Haas','Gen. Moreau','Gen. Silva','Gen. Kowal','Gen. Dimitrov','Gen. Lindqvist','Gen. Rossi','Gen. Brennan','Gen. Popescu'];
 const GEN_TRAITS = Object.keys(TRAITS);
 
-/* ---------- technology: four branches, timed research in parallel slots ---------- */
-const BRANCHES = { land:'Land Warfare', air:'Air & Naval', doc:'Doctrine', ind:'Industry & Science' };
+/* ---------- technology: nine branches, 1936–1950, small steps paid month by month ----------
+   Each tech's fx are modifiers summed per nation by tm(t, key) (state.js):
+     inf/art/ftr/bmb/navy/sub  % strength of that arm      arm/armD  % armor attack / defense
+     def/atk  % defense / attack everywhere (doctrine)      dig  +% per entrenchment level
+     aa  % fighters when defending                          bmbR  % bomber range
+     asw  cuts enemy submarine raiding on you               lift/hop  sealift divisions / convoy range
+     ind  % production    oil/steel  per month    mp  % manpower    res  % research speed
+     rkt  % V-weapon damage    bombcd  months off the atomic-strike cooldown
+   The original 34 keys are kept (saves, focuses, events and starting techs use them); some also keep a special
+   effect checked by name (unlocks, radar's sight, blitz, mass assault, grand battleplan, combined arms, amph,
+   rocket, atom, bomb). */
+const TECH_ROWS_DEF = [['inf','Infantry'],['arm','Armor'],['art','Artillery'],['ftr','Fighters'],['bmb','Bombers'],['nav','Navy'],['doc','Doctrine'],['ind','Industry'],['sci','Science']];
 const TECHS = [
-  {k:'inf1', b:'land', n:'Improved Rifles',       y:1936, m:3, d:'+15% infantry, mountain and airborne strength.'},
-  {k:'art1', b:'land', n:'Field Artillery',       y:1936, m:3, d:'Unlocks artillery divisions.'},
-  {k:'mtn',  b:'land', n:'Mountain Warfare',      y:1936, m:3, d:'Unlocks mountain divisions.'},
-  {k:'arm1', b:'land', n:'Light Tanks',           y:1936, m:4, d:'Unlocks armored divisions.'},
-  {k:'arm2', b:'land', n:'Medium Tanks',          y:1938, m:4, req:'arm1', d:'+0.5 armor strength.'},
-  {k:'inf2', b:'land', n:'Semi-Automatic Weapons',y:1939, m:4, req:'inf1', d:'+15% infantry strength.'},
-  {k:'para', b:'land', n:'Airborne Troops',       y:1938, m:4, req:'inf1', d:'Unlocks paratroopers.'},
-  {k:'art2', b:'land', n:'Rocket Artillery',      y:1941, m:4, req:'art1', d:'+30% artillery strength.'},
-  {k:'arm3', b:'land', n:'Heavy Tanks',           y:1941, m:5, req:'arm2', d:'+0.5 armor strength, +0.3 armor defense.'},
-  {k:'inf3', b:'land', n:'Assault Rifles',        y:1943, m:5, req:'inf2', d:'+15% infantry strength.'},
-  {k:'ftr1', b:'air',  n:'Monoplane Fighters',    y:1936, m:3, d:'Unlocks fighter wings.'},
-  {k:'bmb1', b:'air',  n:'Medium Bombers',        y:1936, m:3, d:'Unlocks bomber wings.'},
-  {k:'radar',b:'air',  n:'Radar',                 y:1938, m:4, d:'See every enemy unit. Fighters defend at +25%.'},
-  {k:'ftr2', b:'air',  n:'Advanced Fighters',     y:1940, m:4, req:'ftr1', d:'+30% fighter strength.'},
-  {k:'bmb2', b:'air',  n:'Strategic Bombers',     y:1941, m:4, req:'bmb1', d:'Bomb raids hit twice as hard, +range.'},
-  {k:'jet',  b:'air',  n:'Jet Engines',           y:1944, m:6, req:'ftr2', d:'+60% fighter strength.'},
-  {k:'cap1', b:'air',  n:'Capital Ships',         y:1936, m:4, d:'Unlocks battle squadrons.'},
-  {k:'sub1', b:'air',  n:'Submarines',            y:1936, m:3, d:'Unlocks submarine flotillas.'},
-  {k:'sub2', b:'air',  n:'Wolfpack Tactics',      y:1940, m:4, req:'sub1', d:'Submarines raid twice as effectively.'},
-  {k:'carrier',b:'air',n:'Carrier Aviation',      y:1941, m:5, req:'cap1', d:'+40% capital ship strength; fleets give air cover to landings.'},
-  {k:'depth',b:'doc',  n:'Defense in Depth',      y:1936, m:3, d:'+10% defense everywhere.'},
-  {k:'mobile',b:'doc', n:'Mobile Warfare',        y:1936, m:3, d:'Armor attacks at +10%.'},
-  {k:'blitz',b:'doc',  n:'Blitzkrieg',            y:1938, m:4, req:'mobile', d:'Armor can attack again after a crushing win.'},
-  {k:'mass', b:'doc',  n:'Mass Assault',          y:1936, m:3, d:'Infantry costs 25% less production and manpower.'},
-  {k:'grand',b:'doc',  n:'Grand Battleplan',      y:1938, m:4, req:'depth', d:'Dug-in troops get double entrenchment bonus.'},
-  {k:'combined',b:'doc',n:'Combined Arms',        y:1941, m:5, req:'mobile', d:'+15% attack for armies mixing armor, artillery and infantry.'},
-  {k:'amph', b:'doc',  n:'Amphibious Doctrine',   y:1940, m:4, d:'Naval landings fight at 75% instead of 50%.'},
-  {k:'ind1', b:'ind',  n:'Assembly Lines',        y:1936, m:4, d:'+10% production.'},
-  {k:'ind2', b:'ind',  n:'Mass Production',       y:1938, m:4, req:'ind1', d:'+10% production.'},
-  {k:'synth',b:'ind',  n:'Synthetic Oil',         y:1938, m:4, d:'+4 oil every month.'},
-  {k:'ind3', b:'ind',  n:'Automation',            y:1942, m:5, req:'ind2', d:'+15% production.'},
-  {k:'rocket',b:'ind', n:'Rocketry',              y:1941, m:5, d:'One free V-weapon strike every month.'},
-  {k:'atom', b:'ind',  n:'Nuclear Physics',       y:1942, m:6, d:'Opens the road to the Bomb.'},
-  {k:'bomb', b:'ind',  n:'The Bomb',              y:1944, m:8, req:'atom', d:'One atomic strike every six months.'},
+  // infantry
+  {k:'inf1',     r:'inf', n:'Improved Rifles',          y:1936, m:3, fx:{inf:.05}},
+  {k:'mtn',      r:'inf', n:'Mountain Warfare',         y:1936, m:3, d:'Unlocks mountain divisions.'},
+  {k:'inf_mg',   r:'inf', n:'Light Machine Guns',       y:1937, m:3, req:'inf1', fx:{inf:.05}},
+  {k:'para',     r:'inf', n:'Airborne Troops',          y:1938, m:3, req:'inf1', d:'Unlocks paratroopers.'},
+  {k:'inf_mortar',r:'inf',n:'Infantry Mortars',         y:1938, m:2, fx:{inf:.04}},
+  {k:'inf2',     r:'inf', n:'Semi-Automatic Weapons',   y:1939, m:3, req:'inf_mg', fx:{inf:.05}},
+  {k:'inf_at',   r:'inf', n:'Anti-Tank Rifles',         y:1940, m:2, fx:{inf:.04}},
+  {k:'inf_smg',  r:'inf', n:'Submachine Guns',          y:1941, m:3, req:'inf2', fx:{inf:.05}},
+  {k:'inf_baz',  r:'inf', n:'Bazookas',                 y:1942, m:2, req:'inf_at', fx:{inf:.04}},
+  {k:'inf3',     r:'inf', n:'Assault Rifles',           y:1943, m:3, req:'inf_smg', fx:{inf:.05}},
+  {k:'inf_mech', r:'inf', n:'Mechanised Infantry',      y:1944, m:3, fx:{inf:.04}},
+  {k:'inf_rcl',  r:'inf', n:'Recoilless Rifles',        y:1945, m:3, req:'inf_baz', fx:{inf:.04}},
+  {k:'inf_radio',r:'inf', n:'Squad Radios',             y:1946, m:3, fx:{inf:.03}},
+  {k:'inf_heli', r:'inf', n:'Helicopter Assault',       y:1948, m:3, req:'inf_mech', fx:{inf:.04}},
+  {k:'inf_nv',   r:'inf', n:'Night Sights',             y:1950, m:3, fx:{inf:.03}},
+  // armor
+  {k:'arm1',     r:'arm', n:'Light Tanks',              y:1936, m:3, d:'Unlocks armored divisions.'},
+  {k:'arm_radio',r:'arm', n:'Tank Radios',              y:1937, m:3, req:'arm1', fx:{arm:.05}},
+  {k:'arm2',     r:'arm', n:'Medium Tanks',             y:1938, m:3, req:'arm1', fx:{arm:.08, armD:.06}},
+  {k:'arm_susp', r:'arm', n:'Torsion-Bar Suspension',   y:1939, m:2, fx:{arm:.05}},
+  {k:'arm_gun',  r:'arm', n:'High-Velocity Tank Guns',  y:1940, m:3, req:'arm2', fx:{arm:.06, armD:.04}},
+  {k:'arm3',     r:'arm', n:'Heavy Tanks',              y:1941, m:4, req:'arm2', fx:{arm:.08, armD:.1}},
+  {k:'arm_slope',r:'arm', n:'Sloped Armour',            y:1942, m:3, fx:{armD:.08}},
+  {k:'arm_td',   r:'arm', n:'Tank Destroyers',          y:1943, m:3, req:'arm_gun', fx:{arm:.06}},
+  {k:'arm_late', r:'arm', n:'Late-War Medium Tanks',    y:1944, m:3, req:'arm3', fx:{arm:.05, armD:.05}},
+  {k:'arm_mbt',  r:'arm', n:'Main Battle Tanks',        y:1946, m:4, req:'arm_late', fx:{arm:.06, armD:.06}},
+  {k:'arm_stab', r:'arm', n:'Gun Stabilisers',          y:1948, m:3, fx:{arm:.04}},
+  {k:'arm_apc',  r:'arm', n:'Armoured Personnel Carriers',y:1950,m:3, fx:{arm:.03, inf:.02}},
+  // artillery
+  {k:'art1',     r:'art', n:'Field Artillery',          y:1936, m:3, d:'Unlocks artillery divisions.'},
+  {k:'art_obs',  r:'art', n:'Forward Observers',        y:1937, m:2, req:'art1', fx:{art:.05}},
+  {k:'art_how',  r:'art', n:'Medium Howitzers',         y:1938, m:3, req:'art1', fx:{art:.05}},
+  {k:'art_aa',   r:'art', n:'Anti-Aircraft Guns',       y:1939, m:2, fx:{aa:.05}},
+  {k:'art_mot',  r:'art', n:'Motorised Artillery',      y:1940, m:3, req:'art_how', fx:{art:.05}},
+  {k:'art2',     r:'art', n:'Rocket Artillery',         y:1941, m:3, req:'art1', fx:{art:.06}},
+  {k:'art_sp',   r:'art', n:'Self-Propelled Guns',      y:1942, m:3, req:'art_mot', fx:{art:.05}},
+  {k:'art_fdc',  r:'art', n:'Fire Direction Centres',   y:1943, m:2, fx:{art:.04}},
+  {k:'art_raa',  r:'art', n:'Radar-Guided Flak',        y:1945, m:3, req:'art_aa', fx:{aa:.05}},
+  {k:'art_hrl',  r:'art', n:'Heavy Rocket Launchers',   y:1947, m:3, req:'art2', fx:{art:.04}},
+  {k:'art_msl',  r:'art', n:'Battlefield Missiles',     y:1950, m:4, fx:{art:.05}},
+  // fighters
+  {k:'ftr1',     r:'ftr', n:'Monoplane Fighters',       y:1936, m:3, d:'Unlocks fighter wings.'},
+  {k:'ftr_gear', r:'ftr', n:'Retractable Landing Gear', y:1937, m:2, req:'ftr1', fx:{ftr:.08}},
+  {k:'ftr_8gun', r:'ftr', n:'Eight-Gun Fighters',       y:1938, m:3, req:'ftr1', fx:{ftr:.08}},
+  {k:'ftr_drop', r:'ftr', n:'Drop Tanks',               y:1939, m:2, fx:{ftr:.06}},
+  {k:'ftr2',     r:'ftr', n:'Advanced Fighters',        y:1940, m:3, req:'ftr1', fx:{ftr:.12}},
+  {k:'ftr_can',  r:'ftr', n:'Cannon Armament',          y:1941, m:3, req:'ftr2', fx:{ftr:.08}},
+  {k:'ftr_turbo',r:'ftr', n:'Turbo-Superchargers',      y:1942, m:3, fx:{ftr:.1}},
+  {k:'ftr_gyro', r:'ftr', n:'Gyro Gunsights',           y:1943, m:2, fx:{ftr:.08}},
+  {k:'jet',      r:'ftr', n:'Jet Engines',              y:1944, m:4, req:'ftr2', fx:{ftr:.2}},
+  {k:'ftr_swept',r:'ftr', n:'Swept Wings',              y:1946, m:3, req:'jet', fx:{ftr:.1}},
+  {k:'ftr_ab',   r:'ftr', n:'Afterburners',             y:1948, m:3, req:'ftr_swept', fx:{ftr:.08}},
+  {k:'ftr_aam',  r:'ftr', n:'Air-to-Air Missiles',      y:1950, m:4, fx:{ftr:.1}},
+  // bombers
+  {k:'bmb1',     r:'bmb', n:'Medium Bombers',           y:1936, m:3, d:'Unlocks bomber wings.'},
+  {k:'bmb_sight',r:'bmb', n:'Precision Bombsights',     y:1937, m:3, req:'bmb1', fx:{bmb:.15}},
+  {k:'bmb_dive', r:'bmb', n:'Dive Bombers',             y:1938, m:3, req:'bmb1', fx:{bmb:.1}},
+  {k:'bmb_range',r:'bmb', n:'Long-Range Fuel Tanks',    y:1939, m:2, fx:{bmbR:.1}},
+  {k:'bmb_4eng', r:'bmb', n:'Four-Engine Bombers',      y:1940, m:3, req:'bmb_sight', fx:{bmb:.1}},
+  {k:'bmb2',     r:'bmb', n:'Strategic Bombers',        y:1941, m:4, req:'bmb1', fx:{bmb:.25, bmbR:.15}},
+  {k:'bmb_nav',  r:'bmb', n:'Navigation Radar',         y:1942, m:3, fx:{bmb:.15}},
+  {k:'bmb_path', r:'bmb', n:'Pathfinder Squadrons',     y:1943, m:2, fx:{bmb:.1}},
+  {k:'bmb_vh',   r:'bmb', n:'Very Heavy Bombers',       y:1944, m:4, req:'bmb2', fx:{bmb:.15, bmbR:.05}},
+  {k:'bmb_jet',  r:'bmb', n:'Jet Bombers',              y:1946, m:4, req:'bmb_vh', fx:{bmb:.15, bmbR:.1}},
+  {k:'bmb_aar',  r:'bmb', n:'Aerial Refuelling',        y:1949, m:3, fx:{bmbR:.15}},
+  // navy
+  {k:'cap1',     r:'nav', n:'Capital Ships',            y:1936, m:3, d:'Unlocks battle squadrons.'},
+  {k:'sub1',     r:'nav', n:'Submarines',               y:1936, m:3, d:'Unlocks submarine flotillas.'},
+  {k:'nav_fire', r:'nav', n:'Naval Fire Control',       y:1937, m:3, req:'cap1', fx:{navy:.06}},
+  {k:'nav_sonar',r:'nav', n:'Sonar',                    y:1938, m:3, fx:{asw:.15}},
+  {k:'nav_torp', r:'nav', n:'Improved Torpedoes',       y:1939, m:2, req:'sub1', fx:{sub:.2, navy:.03}},
+  {k:'sub2',     r:'nav', n:'Wolfpack Tactics',         y:1940, m:3, req:'sub1', fx:{sub:.4}},
+  {k:'amph',     r:'nav', n:'Amphibious Doctrine',      y:1940, m:3, d:'Naval landings fight at 75% instead of 50%; +1 convoy range, +4 sealift.'},
+  {k:'carrier',  r:'nav', n:'Carrier Aviation',         y:1941, m:4, req:'cap1', fx:{navy:.2}},
+  {k:'nav_radar',r:'nav', n:'Naval Radar',              y:1942, m:3, fx:{navy:.06, asw:.1}},
+  {k:'nav_escort',r:'nav',n:'Escort Carriers',          y:1943, m:3, req:'carrier', fx:{asw:.15, lift:2}},
+  {k:'nav_snork',r:'nav', n:'Snorkel Submarines',       y:1944, m:3, req:'sub2', fx:{sub:.2}},
+  {k:'nav_lst',  r:'nav', n:'Tank Landing Ships',       y:1945, m:3, req:'amph', fx:{lift:3, hop:1}},
+  {k:'nav_angle',r:'nav', n:'Angled Flight Decks',      y:1946, m:3, req:'carrier', fx:{navy:.05}},
+  {k:'nav_fsub', r:'nav', n:'Fast Attack Submarines',   y:1948, m:4, req:'nav_snork', fx:{sub:.15}},
+  {k:'nav_msl',  r:'nav', n:'Naval Missiles',           y:1950, m:4, fx:{navy:.06}},
+  // doctrine
+  {k:'depth',    r:'doc', n:'Defense in Depth',         y:1936, m:3, fx:{def:.05}},
+  {k:'mobile',   r:'doc', n:'Mobile Warfare',           y:1936, m:3, fx:{arm:.1}},
+  {k:'mass',     r:'doc', n:'Mass Assault',             y:1936, m:3, d:'Infantry costs 25% less production and manpower; +20% manpower.'},
+  {k:'doc_staff',r:'doc', n:'General Staff Exercises',  y:1937, m:2, fx:{atk:.03}},
+  {k:'blitz',    r:'doc', n:'Blitzkrieg',               y:1938, m:3, req:'mobile', d:'Armor can attack again after a crushing win.'},
+  {k:'grand',    r:'doc', n:'Grand Battleplan',         y:1938, m:3, req:'depth', fx:{dig:.05}, d:'Troops can dig in one level deeper.'},
+  {k:'doc_infil',r:'doc', n:'Infiltration Tactics',     y:1939, m:2, fx:{atk:.03}},
+  {k:'doc_elast',r:'doc', n:'Elastic Defence',          y:1940, m:3, req:'depth', fx:{def:.04}},
+  {k:'combined', r:'doc', n:'Combined Arms',            y:1941, m:3, req:'mobile', d:'+15% attack for armies mixing armor, artillery and infantry.'},
+  {k:'doc_ops',  r:'doc', n:'Operational Art',          y:1942, m:3, req:'doc_staff', fx:{atk:.04}},
+  {k:'doc_hedge',r:'doc', n:'Hedgehog Defence',         y:1943, m:2, fx:{def:.03, dig:.02}},
+  {k:'doc_cas',  r:'doc', n:'Close Air Support',        y:1944, m:3, fx:{atk:.03}},
+  {k:'doc_atom', r:'doc', n:'Atomic Battlefield',       y:1946, m:3, fx:{def:.03}},
+  {k:'doc_net',  r:'doc', n:'Radio Command Nets',       y:1948, m:3, fx:{atk:.03}},
+  {k:'doc_fwd',  r:'doc', n:'Forward Defence',          y:1950, m:3, fx:{def:.03}},
+  // industry
+  {k:'ind1',     r:'ind', n:'Assembly Lines',           y:1936, m:3, fx:{ind:.05}},
+  {k:'ind_tool', r:'ind', n:'Machine Tools',            y:1937, m:3, req:'ind1', fx:{ind:.05}},
+  {k:'ind2',     r:'ind', n:'Mass Production',          y:1938, m:3, req:'ind1', fx:{ind:.05}},
+  {k:'synth',    r:'ind', n:'Synthetic Oil',            y:1938, m:3, fx:{oil:3}},
+  {k:'ind_conc', r:'ind', n:'Concentrated Industry',    y:1939, m:3, fx:{ind:.04}},
+  {k:'ind_arc',  r:'ind', n:'Electric Arc Furnaces',    y:1940, m:3, fx:{steel:2}},
+  {k:'ind_disp', r:'ind', n:'Dispersed Industry',       y:1941, m:3, fx:{ind:.04}},
+  {k:'ind3',     r:'ind', n:'Automation',               y:1942, m:3, req:'ind2', fx:{ind:.06}},
+  {k:'ind_crack',r:'ind', n:'Catalytic Cracking',       y:1942, m:2, req:'synth', fx:{oil:2}},
+  {k:'ind_flow', r:'ind', n:'Flow Production',          y:1943, m:3, fx:{ind:.04}},
+  {k:'ind_alloy',r:'ind', n:'Light Alloys',             y:1944, m:3, fx:{steel:2}},
+  {k:'ind_recon',r:'ind', n:'Reconstruction',           y:1945, m:3, fx:{ind:.04, mp:.05}},
+  {k:'ind_comp', r:'ind', n:'Electronic Computers',     y:1947, m:3, fx:{ind:.04, res:.1}},
+  {k:'ind_nuke', r:'ind', n:'Nuclear Power',            y:1949, m:4, req:'atom', fx:{ind:.05}},
+  // science
+  {k:'sci_grant',r:'sci', n:'University Grants',        y:1936, m:3, fx:{res:.05}},
+  {k:'sci_df',   r:'sci', n:'Radio Direction Finding',  y:1937, m:2, fx:{asw:.05, aa:.05}},
+  {k:'radar',    r:'sci', n:'Radar',                    y:1938, m:3, fx:{aa:.15}, d:'See every enemy unit.'},
+  {k:'sci_or',   r:'sci', n:'Operations Research',      y:1939, m:3, fx:{res:.1}},
+  {k:'sci_pen',  r:'sci', n:'Penicillin',               y:1940, m:3, fx:{mp:.05}},
+  {k:'rocket',   r:'sci', n:'Rocketry',                 y:1941, m:4, d:'One free V-weapon strike every month.'},
+  {k:'atom',     r:'sci', n:'Nuclear Physics',          y:1942, m:4, d:'Opens the road to the Bomb.'},
+  {k:'sci_prox', r:'sci', n:'Proximity Fuzes',          y:1943, m:3, fx:{aa:.1, art:.03}},
+  {k:'bomb',     r:'sci', n:'The Bomb',                 y:1944, m:6, req:'atom', d:'One atomic strike every six months.'},
+  {k:'sci_bal',  r:'sci', n:'Ballistic Missiles',       y:1945, m:4, req:'rocket', fx:{rkt:.5}},
+  {k:'sci_trans',r:'sci', n:'Transistors',              y:1947, m:3, fx:{res:.1}},
+  {k:'sci_dew',  r:'sci', n:'Early-Warning Radar',      y:1948, m:3, req:'radar', fx:{aa:.1}},
+  {k:'sci_hbomb',r:'sci', n:'Thermonuclear Bomb',       y:1950, m:6, req:'bomb', fx:{bombcd:2}},
 ];
-const TECH = {}; TECHS.forEach(t => TECH[t.k] = t);
-const techCost = T => 25 + T.m * 12 + Math.max(0, T.y - 1936) * 4;
+const TECH = {}; TECHS.forEach(T => { TECH[T.k] = T; T.b = T.r; T.fx = T.fx || {}; });
+// what each modifier means, for the tech cards ("+5% infantry strength")
+const FX_TEXT = { inf:'infantry strength', arm:'armor attack', armD:'armor defense', art:'artillery strength', ftr:'fighter strength', bmb:'bomber power',
+  bmbR:'bomber range', aa:'fighters defending', navy:'battle squadron strength', sub:'submarine raiding', asw:'less enemy submarine raiding',
+  lift:'sealift', hop:'convoy range', def:'defense', atk:'attack', dig:'per entrenchment level', ind:'production', oil:'oil a month', steel:'steel a month',
+  mp:'manpower', res:'research speed', rkt:'V-weapon damage', bombcd:'months off the atomic-strike cooldown' };
+const FX_ABS = { oil:1, steel:1, lift:1, hop:1, bombcd:1 };
+TECHS.forEach(T => {
+  const f = Object.entries(T.fx).map(([k, v]) => FX_ABS[k] ? `+${v} ${FX_TEXT[k]}` : `+${Math.round(v * 100)}% ${FX_TEXT[k]}`).join(', ');
+  T.d = [T.d, f ? f[0].toUpperCase() + f.slice(1) + '.' : ''].filter(Boolean).join(' ');
+});
+// paid in full when a project starts: 10 + 7 per month of work + 2 per year past 1936
+const techCost = T => 10 + T.m * 7 + Math.max(0, T.y - 1936) * 2;
+// what each AI power cares about when it picks research (weights per row)
+const RESEARCH_W = {
+  GER:{arm:3, ftr:2.5, doc:2, ind:2, inf:2, bmb:1.2, art:1.2, nav:1, sci:1.5},
+  ENG:{nav:3, ftr:3, ind:2, sci:2, bmb:2, inf:1.5, arm:1.2, art:1, doc:1},
+  FRA:{doc:2.5, inf:2, art:2, arm:1.5, ind:2, ftr:1.5, nav:1, bmb:.8, sci:1},
+  ITA:{ind:2.5, inf:2, nav:2, arm:1.5, ftr:1.5, art:1, doc:1, bmb:1, sci:.8},
+  SOV:{inf:2.5, arm:2.5, ind:2.5, art:2, doc:1.5, ftr:1.5, sci:1.2, bmb:.8, nav:.5},
+  USA:{ind:3, nav:2.5, bmb:2.5, ftr:2.5, sci:2, arm:1.5, inf:1.5, art:1, doc:1},
+  JAP:{nav:3, ftr:2.5, inf:2, ind:2, bmb:1.2, doc:1.2, art:1, arm:.8, sci:1},
+  _:{inf:2.5, ind:2.5, art:1.5, doc:1.5, ftr:1, arm:1, sci:1, nav:.6, bmb:.5},
+};
+// the research an AI (or a later start date) picks next: older and favoured rows first
+function techPick(t, avail) {
+  const W = RESEARCH_W[t] || RESEARCH_W._, y = G.y;
+  let best = null, bs = -1;
+  for (const T of avail) { const s = (W[T.r] || 1) * (1 + Math.max(0, y - T.y) * 0.6) / T.m; if (s > bs) { bs = s; best = T; } }
+  return best;
+}
 
 /* ---------- national focus: shared tree plus national branches ---------- */
 // col/row place each focus in the tree view; req links to its parent
 const FOCUS = [
+  // post-war focuses (rows 4–5): open to everyone once the war years end and the second act begins
+  {k:'pw_demob', post:1, col:0,row:4, n:'Demobilisation', m:3, d:'Send the conscripts home: +15 stability, war weariness falls by 20, +60k manpower.'},
+  {k:'pw_recon', post:1, col:1,row:4, n:'Reconstruction', m:4, d:'+1 factory in your four least-built home provinces.'},
+  {k:'pw_jet',   post:1, col:2,row:4, n:'The Jet Age', m:4, d:'Jet Engines and Swept Wings researched; +4 fighters at the capital.'},
+  {k:'pw_nuke',  post:1, col:3,row:4, n:'Nuclear Programme', m:6, d:'Nuclear Physics researched — or The Bomb, if you already have it.'},
+  {k:'pw_cia',   post:1, col:4,row:4, n:'Intelligence Agency', m:3, d:'+2 spies; every army in the world revealed for a year.'},
+  {k:'pw_space', post:1, col:0,row:5, req:'pw_recon', n:'The Space Race', m:6, d:'+1 research slot; +40 politics.'},
+  {k:'pw_aid',   post:1, col:1,row:5, req:'pw_recon', n:'Foreign Aid Programme', m:4, d:'Bring two neutral nations into your bloc (or +60 politics outside one).'},
+  {k:'pw_arms',  post:1, col:2,row:5, req:'pw_jet', n:'Arms Race', m:4, d:'+6 armored divisions and +6 fighters at the capital. The Doomsday Clock moves forward.'},
+  {k:'pw_detente',post:1,col:3,row:5, req:'pw_nuke', n:'Détente', m:4, d:'The Doomsday Clock moves back 15 minutes; +20 stability.'},
+  {k:'pw_bases', post:1, col:4,row:5, req:'pw_cia', n:'Overseas Bases', m:4, d:'+3 battle squadrons in home waters and +2 convoy range.'},
   {k:'ind_plan',  col:0,row:0, n:'Industrial Expansion', m:4, d:'+1 factory in your three biggest industrial provinces.'},
   {k:'ind_steel', col:0,row:1, req:'ind_plan', n:'Steel Works', m:3, d:'+3 steel every month.'},
   {k:'ind_synth', col:0,row:2, req:'ind_steel', n:'Synthetic Fuel Plants', m:4, d:'+3 oil every month.'},
@@ -258,7 +401,7 @@ const FOCUS = [
   {k:'min_patron', minor:1,     col:5,row:2, req:'min_army', n:'Seek a Patron', m:2, d:'+60 production of foreign aid, +30 politics.'},
 ];
 const FOC = {}; FOCUS.forEach(f => FOC[f.k] = f);
-const focusFor = (t, major) => FOCUS.filter(f => f.who ? f.who.includes(t) : f.minor ? !major : true);
+const focusFor = (t, major) => FOCUS.filter(f => (!f.post || (typeof G !== 'undefined' && G && G.act)) && (f.who ? f.who.includes(t) : f.minor ? !major : true));
 
 /* ---------- alternate-history destiny decisions ---------- */
 const DECISIONS = [

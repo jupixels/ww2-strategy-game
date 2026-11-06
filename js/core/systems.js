@@ -150,7 +150,8 @@ function tickHomeFront(t) {
   const atWar = enemiesOf(t).length > 0;
   const army = Math.max(10, landN(divisions(t)));
   const lm = n.lm || 0; n.lm = 0;
-  if (atWar) n.ww = clamp((n.ww || 0) + (0.5 + 28 * lm / army) * (n.done.includes('pol_unity') ? 0.5 : 1), 0, 60);
+  // dictatorships muzzle their home front: war weariness builds at 60% of the democratic rate
+  if (atWar) n.ww = clamp((n.ww || 0) + (0.5 + 28 * lm / army) * (n.done.includes('pol_unity') ? 0.5 : 1) * (n.ide === 'F' || n.ide === 'C' ? 0.6 : 1), 0, 60);
   else n.ww = Math.max(0, (n.ww || 0) - 3);
   const base = (NATDEF[t].stab || 55) + (n.stabB || 0);
   const target = clamp(base - n.ww * 0.7 + sigStabMod(t), 5, 100);
@@ -199,7 +200,7 @@ function agendaText(a) {
     case 'share': return `Hold ${a.need}% of ${REALM} when the war ends`;
     case 'destiny': return `Enact "${DECISIONS.find(D => D.k === a.dec).n}"`;
     case 'navy': return `Win ${a.need} naval battles`;
-    case 'oil': return `Control ${a.need} oil provinces when the war ends`;
+    case 'oil': return `Control ${a.need} oil provinces at the end of the game`;
     case 'peace': return `Be at peace in January ${a.y}`;
   }
   return '?';

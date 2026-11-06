@@ -38,9 +38,14 @@ function deployToFronts(t, frac) {
   for (const i of mine) { if (front.includes(i)) continue; const p = G.prov[i]; for (const k of LAND) { const m = Math.floor(p.u[k] * frac); p.u[k] -= m; pool[k] += m; } }
   let x = 0; for (const k of LAND) for (let i = 0; i < pool[k]; i++) G.prov[front[(x++) % front.length]].u[k]++;
 }
+// a later start date hands out the research a power would have done by then (count = how keen: 2 minor … 6 leader)
 function techsByYear(t, count) {
-  const n = nat(t), prio = (RESEARCH_PRIO[t] || RESEARCH_PRIO._).concat(TECHS.map(T => T.k));
-  let c = 0; for (const k of prio) { if (c >= count) break; const T = TECH[k]; if (!T || n.tech[k] || T.y > G.y || (T.req && !n.tech[T.req])) continue; n.tech[k] = 1; c++; }
+  const n = nat(t), share = Math.min(0.9, 0.35 + count * 0.1);
+  const past = TECHS.filter(T => T.y < G.y), want = Math.round(past.length * share) - past.filter(T => n.tech[T.k]).length;
+  for (let c = 0; c < want; c++) {
+    const avail = past.filter(T => !n.tech[T.k] && (!T.req || n.tech[T.req]));
+    const T = techPick(t, avail); if (!T) break; n.tech[T.k] = 1;
+  }
 }
 const runEv = (id, k = 0) => { const e = EVENT_BY_ID[id]; try { e.opts[k].f(e.actor); } catch (err) { console.error('scenario', id, err); } G.ev[id] = 1; };
 function placeFleet(t, z, c, s) { if (!A(t) && t !== 'USA' || !SEA[z]) return; addFleet(z, t, 'cap', c); addFleet(z, t, 'sub', s); }

@@ -40,10 +40,11 @@ function classifyWorld() {
 }
 function checkSecondAct() {
   if (G.act) return tickAct();
-  if (G.gm === 'blitz' || G.daily || G.y < 1943) return;
+  if (G.gm === 'blitz' || G.daily || G.y < 1942) return;
   const quiet = !majorWar();
   G.flags.quiet = quiet ? (G.flags.quiet || 0) + 1 : 0;
-  if (G.flags.quiet >= 3 && G.y >= 1944 || nowNum() >= ymNum(1946, 0)) startAct(classifyWorld());
+  // the second act opens as soon as the great powers have stopped fighting for three months (from 1942), or in 1946 regardless
+  if (G.flags.quiet >= 3 || nowNum() >= ymNum(1946, 0)) startAct(classifyWorld());
 }
 function startAct(k) {
   const A0 = ACTS[k]; if (!A0) return;
@@ -114,12 +115,16 @@ function tickAct() {
     const blocWar = Object.keys(G.facs).some(f => membersOf(f).some(m => enemiesOf(m).some(e => G.facs[facOf(e)] && facOf(e) !== f && G.facs[facOf(e)].lead && nat(G.facs[facOf(e)].lead).major)));
     if (!majorWar()) tension(-0.8); // peace slowly lowers world tension
     // the clock drifts toward where the world stands, and crises jolt it
-    const target = 18 + Math.min(3, bombs) * 8 + (blocWar ? 15 : 0) + (G.tension - 50) * 0.2;
+    // ...and the arms race winds it on year by year: every Bomb, every hydrogen bomb and every proxy war adds to it
+    const hb = Object.keys(G.nat).filter(t => A(t) && nat(t).tech.sci_hbomb).length, yrs = Math.max(0, G.y - a.y0);
+    const target = 15 + yrs * 2.5 + Math.min(4, bombs) * 7 + hb * 5 + (blocWar ? 15 : 0) + (a.proxy || 0) * 3 + (G.tension - 50) * 0.2 - (a.calm || 0);
     a.doom = clamp(a.doom + (target - a.doom) * 0.07 + (rnd() - 0.5) * 2, 0, DOOM_MAX);
-    if (rnd() < 0.05) { const up = rnd() < 0.6, k = up ? pickR(['Berlin Crisis','Strait Crisis','Spy Plane Shot Down','Border Clash']) : pickR(['Summit in Geneva','The Thaw','Hotline Agreed']); a.doom = clamp(a.doom + (up ? 9 : -9), 0, DOOM_MAX); news((up ? 'CRISIS: ' : 'THAW: ') + k.toUpperCase()); }
+    if (rnd() < 0.05) { const up = rnd() < 0.6, k = up ? pickR(['Berlin Crisis','Strait Crisis','Spy Plane Shot Down','Border Clash']) : pickR(['Summit in Geneva','The Thaw','Hotline Agreed']); a.doom = clamp(a.doom + (up ? 9 : -9), 0, DOOM_MAX); if (!up) a.calm = Math.min(30, (a.calm || 0) + 3); news((up ? 'CRISIS: ' : 'THAW: ') + k.toUpperCase()); }
     if (a.doom >= DOOM_MAX && !a.ww3) worldWarThree();
     if (a.doom >= 75 && !a.warned) { a.warned = 1; news('THE DOOMSDAY CLOCK STANDS AT TWO MINUTES TO MIDNIGHT'); for (const h of humanTags()) notify(h, '☢', 'Two minutes to midnight', 'Tension between the blocs is near breaking point. Lower it — make pacts, avoid border wars — or the world goes to war again.', 'war'); }
   }
+  // proxy wars: a bloc member picks a fight with an unaligned neighbour, and the clock notices
+  if (a.k !== 'exhaust' && !a.ww3 && rnd() < 0.06) proxyWar(a);
   // the bloc leaders court the neutrals
   for (const fk of Object.keys(G.facs)) {
     const L = G.facs[fk].lead; if (!L || !A(L) || isHuman(L) || !nat(L).major) continue;
@@ -135,6 +140,19 @@ function tickAct() {
   decolonise();
   if (G.y >= 1949 && !a.bombRace) { a.bombRace = 1; for (const t of majorsAlive()) if (!nat(t).tech.atom && !nat(t).tech.bomb) nat(t).rs.length < nat(t).slots && startResearch(t, 'atom'); }
 }
+function proxyWar(a) {
+  const cands = [];
+  for (const t of Object.keys(G.nat)) {
+    if (!A(t) || isHuman(t) || NATDEF[t].off || !facOf(t) || enemiesOf(t).length) continue;
+    const nbs = new Set(); for (const i of owned(t)) for (const j of PROV[i].adj) { const o = G.prov[j].o; if (o !== t && A(o) && !facOf(o) && !nat(o).major && !isHuman(o) && !pactWith(o, t) && !truceWith(o, t)) nbs.add(o); }
+    for (const o of nbs) cands.push([t, o]);
+  }
+  if (!cands.length) return;
+  const [t, o] = pickR(cands);
+  declareWar(t, o); a.proxy = (a.proxy || 0) + 1;
+  news(`PROXY WAR: ${natName(t).toUpperCase()} INVADES ${natName(o).toUpperCase()}`);
+  for (const h of humanTags()) notify(h, '☢', 'A proxy war', `${natName(t)} has invaded ${natName(o)}. The Doomsday Clock ticks forward.`);
+}
 function worldWarThree() {
   const a = G.act; a.ww3 = 1;
   const blocs = Object.keys(G.facs).filter(f => G.facs[f].lead && A(G.facs[f].lead) && nat(G.facs[f].lead).major).sort((x, y) => blocVP(membersOf(y)) - blocVP(membersOf(x)));
@@ -147,17 +165,18 @@ function worldWarThree() {
 function sphereTargets(t) {
   const fk = facOf(t); if (!fk) return [];
   return Object.keys(G.nat).filter(o => A(o) && !NATDEF[o].off && !nat(o).major && !facOf(o) && !W(o, t) && !isHuman(o)).map(o => {
-    let s = (nat(o).ide === nat(t).ide ? 2 : nat(o).ide === 'N' ? 1 : 0) + (owned(o).some(i => PROV[i].adj.some(j => friendly(G.prov[j].o, t))) ? 1.5 : 0) + rnd();
+    let s = (nat(o).ide === nat(t).ide ? 2 : nat(o).ide === 'N' ? 1 : 0) + (owned(o).some(i => PROV[i].adj.some(j => friendly(G.prov[j].o, t))) ? 1.5 : 0) + (hashStr(o + G.turn) % 1000) / 1000; // no dice: the World panel calls this while drawing
     return [o, s];
   }).sort((a, b) => b[1] - a[1]).map(x => x[0]);
 }
-const SPHERE_COST = 25;
-function canSphere(t, o) { if (!G.act) return 'Only after the war'; if (!facOf(t)) return 'Lead or join a bloc first'; if (!A(o) || facOf(o) || nat(o).major || W(t, o) || isHuman(o)) return 'Unavailable'; if (nat(t).pol < SPHERE_COST) return `Needs ${SPHERE_COST} politics`; return ''; }
-function bringIntoBloc(t, o) {
-  if (canSphere(t, o)) return 'refused';
-  nat(t).pol -= SPHERE_COST;
+const SPHERE_COST = 25, AID_COST = 150;
+// courting costs politics, or production as economic aid (aid=true); aid is a little more persuasive
+function canSphere(t, o, aid) { if (!G.act) return 'Only after the war'; if (!facOf(t)) return 'Lead or join a bloc first'; if (!A(o) || facOf(o) || nat(o).major || W(t, o) || isHuman(o)) return 'Unavailable'; if (aid ? nat(t).pp < AID_COST : nat(t).pol < SPHERE_COST) return aid ? `Needs ${AID_COST} production` : `Needs ${SPHERE_COST} politics`; return ''; }
+function bringIntoBloc(t, o, aid) {
+  if (canSphere(t, o, aid)) return 'refused';
+  if (aid) nat(t).pp -= AID_COST; else nat(t).pol -= SPHERE_COST;
   const fk = facOf(t), ide = nat(o).ide === nat(t).ide, near = owned(o).some(i => PROV[i].adj.some(j => friendly(G.prov[j].o, t)));
-  const p = 0.25 + (ide ? 0.35 : 0) + (near ? 0.2 : 0) - (nat(o).ide !== 'N' && !ide ? 0.3 : 0);
+  const p = 0.25 + (ide ? 0.35 : 0) + (near ? 0.2 : 0) - (nat(o).ide !== 'N' && !ide ? 0.3 : 0) + (aid ? 0.1 : 0);
   if (rnd() < p) { joinFaction(o, fk, true); news(`${natName(o).toUpperCase()} JOINS THE ${G.facs[fk].n.toUpperCase()}`); if (G.act) G.act.doom = Math.min(DOOM_MAX, G.act.doom + 1); return 'accepted'; }
   return 'refused';
 }

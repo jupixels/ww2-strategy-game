@@ -432,7 +432,7 @@ body.fullpanel #card,body.fullpanel #hand,body.fullpanel #report,body.fullpanel 
 @media (min-width:821px){ body.fullpanel #actions,body.fullpanel #ticker{visibility:hidden} }
 /* phone research: icon-only category column, compact laboratories */
 @media (max-width:820px){
-  .rtree{grid-template-columns:52px repeat(9,172px)!important}
+  .rtree{grid-template-columns:52px repeat(15,172px)!important}
   .rcat span{display:none}
   .rslots{display:grid;grid-template-columns:1fr 1fr;gap:6px}
   .rslot{max-width:none;min-width:0}
@@ -445,3 +445,17 @@ body.fullpanel #card,body.fullpanel #hand,body.fullpanel #report,body.fullpanel 
   .rslot.locked{display:none}
   #drawer .dh p{display:none}
 }
+.row .btns{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+/* notifications move to the lower right while a full-screen panel is open, so they never cover its header */
+@media (min-width:821px){ body.fullpanel #toasts{top:auto;bottom:24px;left:auto;right:24px;transform:none;align-items:flex-end} }
+/* choosing exact units: counters per type in the province and fleet cards */
+.upick{display:flex;flex-direction:column;gap:4px;margin:6px 0 4px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:rgba(0,0,0,.22)}
+.upk{display:grid;grid-template-columns:1fr 28px 52px 28px 34px;align-items:center;gap:4px;font-size:13px}
+.upk>span{display:flex;align-items:center;gap:6px;color:var(--paper-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.upk .uicon{width:20px;height:15px;color:var(--brass-hi);flex:none}
+.upk b{text-align:center;font-variant-numeric:tabular-nums;font-size:15px}
+.upk b small{font-size:11px;color:var(--muted);font-weight:400}
+.upk .ibtn{width:28px;height:28px;padding:0;font-size:17px;font-weight:700;color:var(--paper);border:1px solid var(--line-hi);background:rgba(255,255,255,.04)}
+.upk .ibtn:hover:not(:disabled){border-color:var(--brass);color:var(--brass-hi)}
+.upk .ibtn.sm{width:34px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase}
+.upk .ibtn:disabled{opacity:.3}

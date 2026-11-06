@@ -58,19 +58,11 @@ function sigPanel(pl, n, act) {
 }
 
 /* ---------- research: a Call of War style grid, years across, categories down ---------- */
-const TECH_ROWS = [
-  ['Infantry', 'inf', ['inf1','mtn','para','inf2','inf3']],
-  ['Armor', 'arm', ['arm1','arm2','arm3']],
-  ['Artillery', 'art', ['art1','art2']],
-  ['Fighters', 'ftr', ['ftr1','radar','ftr2','jet']],
-  ['Bombers', 'bmb', ['bmb1','bmb2']],
-  ['Navy', 'cap', ['cap1','sub1','sub2','amph','carrier']],
-  ['Doctrine', 'gen', ['depth','mobile','mass','grand','blitz','combined']],
-  ['Industry', 'fac', ['ind1','ind2','synth','ind3']],
-  ['Science', 'atom', ['rocket','atom','bomb']],
-];
-const TECH_ICON = { inf1:'inf', inf2:'inf', inf3:'inf', mtn:'mtn', para:'par', arm1:'arm', arm2:'arm', arm3:'arm', art1:'art', art2:'rocket', ftr1:'ftr', ftr2:'ftr', jet:'ftr', radar:'target', bmb1:'bmb', bmb2:'bmb',
-  cap1:'cap', carrier:'cap', sub1:'sub', sub2:'sub', amph:'anchor', depth:'fort', grand:'fort', mobile:'arm', blitz:'flame', combined:'gen', mass:'inf', ind1:'fac', ind2:'fac', ind3:'fac', synth:'oil', rocket:'rocket', atom:'atom', bomb:'atom' };
+const ROW_ICON = { inf:'inf', arm:'arm', art:'art', ftr:'ftr', bmb:'bmb', nav:'cap', doc:'gen', ind:'fac', sci:'atom' };
+const TECH_ICON = { mtn:'mtn', para:'par', art2:'rocket', art_hrl:'rocket', art_msl:'rocket', art_aa:'target', art_raa:'target', radar:'target', sci_df:'target', sci_dew:'target',
+  sub1:'sub', sub2:'sub', nav_torp:'sub', nav_snork:'sub', nav_fsub:'sub', nav_sonar:'anchor', amph:'anchor', nav_lst:'anchor', nav_escort:'anchor',
+  depth:'fort', grand:'fort', doc_elast:'fort', doc_hedge:'fort', doc_fwd:'fort', mobile:'arm', blitz:'flame', mass:'inf', synth:'oil', ind_crack:'oil',
+  rocket:'rocket', sci_bal:'rocket', bomb:'atom', sci_hbomb:'atom', atom:'atom', inf_mech:'arm', arm_apc:'inf' };
 function techTreeHTML(pl, n, act) {
   const years = []; for (let y = 1936; y <= Math.max(...TECHS.map(T => T.y)); y++) years.push(y);
   // research slots across the top
@@ -78,27 +70,27 @@ function techTreeHTML(pl, n, act) {
   for (let k = 0; k < n.slots; k++) {
     const r = n.rs[k];
     if (r) { const T = TECH[r.k], pc = Math.round((1 - r.left / T.m) * 100);
-      h += `<div class="rslot on">${iconSvg(TECH_ICON[T.k] || 'pp')}<div><b>${esc(T.n)}</b><div class="prog"><i style="width:${pc}%"></i></div><span>${Math.ceil(r.left)} month${r.left > 1 ? 's' : ''} left</span></div><button class="ibtn" data-cres="${T.k}" title="Cancel (half the cost back)" aria-label="Cancel" ${act ? '' : 'disabled'}>✕</button></div>`; }
-    else h += `<div class="rslot free"><span class="plus">+</span><div><b>Laboratory free</b><span>Pick a project below</span></div></div>`;
+      h += `<div class="rslot on">${iconSvg(TECH_ICON[T.k] || ROW_ICON[T.r])}<div><b>${esc(T.n)}</b><div class="prog"><i style="width:${pc}%"></i></div><span>${Math.ceil(r.left)} month${r.left > 1 ? 's' : ''} left</span></div><button class="ibtn" data-cres="${T.k}" title="Cancel (half the cost back)" aria-label="Cancel" ${act ? '' : 'disabled'}>✕</button></div>`; }
+    else h += `<div class="rslot free"><span class="plus">+</span><div><b>Laboratory free</b><span>Pick a gold card below</span></div></div>`;
   }
   if (!n.done.includes('res_univ')) h += `<div class="rslot locked"><span class="plus">🔒</span><div><b>One more laboratory</b><span>National focus: Research Universities</span></div></div>`;
   h += `</div>`;
   // the grid
   h += `<div class="rtree-wrap"><div class="rtree" style="grid-template-columns:118px repeat(${years.length},196px)">`;
   h += `<div class="rcorner"></div>` + years.map(y => `<div class="ryear ${y === G.y ? 'now' : y > G.y ? 'later' : ''}">${y}</div>`).join('');
-  TECH_ROWS.forEach(([label, ic, keys], r) => {
-    h += `<div class="rcat" style="grid-row:${r + 2}">${iconSvg(ic)}<span>${label}</span></div>`;
+  TECH_ROWS_DEF.forEach(([row, label], r) => {
+    h += `<div class="rcat" style="grid-row:${r + 2}">${iconSvg(ROW_ICON[row])}<span>${label}</span></div>`;
     years.forEach((y, c) => {
-      const cell = keys.filter(k => TECH[k] && TECH[k].y === y);
       h += `<div class="rcell ${y === G.y ? 'now' : ''}" style="grid-row:${r + 2};grid-column:${c + 2}">`;
-      for (const k of cell) {
-        const T = TECH[k], st = techState(pl, k), act2 = n.rs.find(x => x.k === k);
+      for (const T of TECHS) {
+        if (T.r !== row || T.y !== y) continue;
+        const k = T.k, st = techState(pl, k), run = n.rs.find(x => x.k === k);
         const cls = st === 'done' ? 'done' : st === 'active' ? 'active' : !st ? 'open' : st.startsWith('Available') || st.startsWith('Needs') ? 'locked' : 'wait';
         const foot = st === 'done' ? '<em class="ok">✓ Researched</em>'
-          : act2 ? `<div class="prog"><i style="width:${(1 - act2.left / T.m) * 100}%"></i></div><em>${Math.ceil(act2.left)} mo left</em>`
+          : run ? `<div class="prog"><i style="width:${(1 - run.left / T.m) * 100}%"></i></div><em>${Math.ceil(run.left)} mo left</em>`
           : cls === 'locked' ? `<em>${esc(st)}</em>`
           : `<button class="btn ${st ? '' : 'gold'}" data-tech="${k}" ${st || !act ? `disabled title="${esc(st)}"` : ''}>${techCost(T)}⚙ · ${T.m} mo</button>`;
-        h += `<div class="rcard ${cls}" data-rk="${k}" ${T.req ? `data-req="${T.req}"` : ''} title="${esc(T.d)}"><div class="rh">${iconSvg(TECH_ICON[k] || 'pp')}<b>${esc(T.n)}</b></div><p>${esc(T.d)}</p>${foot}</div>`;
+        h += `<div class="rcard ${cls}" data-rk="${k}" ${T.req ? `data-req="${T.req}"` : ''} title="${esc(T.d)}"><div class="rh">${iconSvg(TECH_ICON[k] || ROW_ICON[row])}<b>${esc(T.n)}</b></div><p>${esc(T.d)}</p>${foot}</div>`;
       }
       h += `</div>`;
     });
@@ -191,7 +183,8 @@ function renderDrawer() {
     }
     h += `</div>`;
   } else if (view === 'tech') {
-    h = dh('Research', `${n.rs.length} of ${n.slots} laboratories busy · each project takes months · new technology unlocks year by year`);
+    const left = TECHS.filter(T => !nat(pl).tech[T.k]).length;
+    h = dh('Research', !left ? 'Every technology researched.' : `${n.rs.length} of ${n.slots} laboratories busy · each project is paid for when it starts and takes months · new technology every year`);
     h += techTreeHTML(pl, n, act);
   } else if (tab === 'dip') {
     h = dh('The World', 'Alliances, wars, pacts and peace.');
@@ -200,7 +193,7 @@ function renderDrawer() {
       h += `<div class="act"><h5>The second act · until ${ACT_END}</h5><h4>${esc(AC.n)}</h4><p>${esc(AC.d)}</p>
         ${G.act.k !== 'exhaust' ? `<div class="doom"><span>Doomsday Clock</span>${meter(dm, DOOM_MAX, dm >= 75 ? 'bad' : '')}<b>${G.act.ww3 ? 'Midnight' : `${Math.max(1, Math.round((DOOM_MAX - dm) / 8))} min to midnight`}</b></div>` : ''}
         <p class="small">${fk ? `Your bloc: <b>${esc(G.facs[fk].n)}</b> · ${blocVP(membersOf(fk))} VP${actBlocWinner() === fk ? ' · <b class="tg">the strongest bloc (+15 score)</b>' : ''}` : 'You belong to no bloc. Found or join one to compete for the world.'}</p></div>`;
-      if (fk) { const tg = sphereTargets(pl).slice(0, 5); if (tg.length) h += `<div class="sect">Bring into the bloc · ${SPHERE_COST} politics</div>` + tg.map(o => { const why = canSphere(pl, o); return `<div class="row" data-hover="${o}"><div><h4>${flagImg(o)} ${esc(natName(o))}</h4><p>${IDEO[nat(o).ide]} · ${owned(o).length} prov</p></div><div><button class="btn" data-sphere="${o}" ${why || !act ? `disabled title="${esc(why)}"` : ''}>Court</button></div></div>`; }).join(''); }
+      if (fk) { const tg = sphereTargets(pl).slice(0, 5); if (tg.length) h += `<div class="sect">Bring into the bloc · ${SPHERE_COST} politics, or ${AID_COST}⚙ of economic aid</div>` + tg.map(o => { const why = canSphere(pl, o), whyA = canSphere(pl, o, true); return `<div class="row" data-hover="${o}"><div><h4>${flagImg(o)} ${esc(natName(o))}</h4><p>${IDEO[nat(o).ide]} · ${owned(o).length} prov</p></div><div class="btns"><button class="btn" data-sphere="${o}" ${why || !act ? `disabled title="${esc(why)}"` : ''}>Court</button><button class="btn" data-sphere-aid="${o}" title="Economic aid: a better chance than courting" ${whyA || !act ? `disabled title="${esc(whyA)}"` : ''}>Aid ${AID_COST}⚙</button></div></div>`; }).join(''); }
     }
     h += `<div class="sect">Alliances</div>`;
     for (const fk in G.facs) {
@@ -300,6 +293,7 @@ function wireDrawer(el, pl, n) {
   on('[data-found]', () => { const name = prompt('Name your alliance', `${nat(pl).adj} Pact`); if (name) Ctl.act({ c:'found', name:name.slice(0, 32) }); });
   on('[data-war]', b => Ctl.act({ c:'declare', tag:b.dataset.war }));
   on('[data-sphere]', b => Ctl.act({ c:'sphere', tag:b.dataset.sphere }));
+  on('[data-sphere-aid]', b => Ctl.act({ c:'sphere', tag:b.dataset.sphereAid, aid:1 }));
   on('[data-call]', b => Ctl.act({ c:'calltowar', tag:b.dataset.call }));
   on('[data-sig]', b => { const c = JSON.parse(b.dataset.sig); const go = () => { const r = Ctl.act({ c:'sig', ...c }); if (r && r.ok) { SFX.confirm(); if (r.msg) toast('⚙', SIGS[pl].n, r.msg, ''); } renderDrawer(); renderTop(); }; if (c.op === 'armistice') confirmBox('Sign the armistice?', 'Italy leaves the Axis and joins the Allies. Germany will attack at once.', 'Sign', go); else go(); });
   on('[data-sr]', () => { openTab(tab); showReport({ ...G.lastSR[pl], uid:-1 }, () => {}); });

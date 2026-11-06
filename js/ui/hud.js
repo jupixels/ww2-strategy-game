@@ -31,12 +31,16 @@ function renderTop() {
   $('#sPP').innerHTML = statHTML('pp', fmt(n.pp), income(t));
   $('#sMP').innerHTML = statHTML('mp', fmt(n.mp) + 'k', mpIncome(t));
   $('#sPol').innerHTML = statHTML('pol', fmt(n.pol), 2 + (n.stab > 70 ? 1 : 0));
-  $('#sOil').innerHTML = statHTML('oil', fmt(n.oil), oilNet, n.oil <= 0 ? 'bad' : '');
-  $('#sSteel').innerHTML = statHTML('steel', fmt(n.steel), steelIncome(t));
+  // stockpiles stop at 999: say so instead of showing income that has nowhere to go
+  $('#sOil').innerHTML = n.oil >= 999 ? statHTML('oil', '999', null) + '<small>full</small>' : statHTML('oil', fmt(n.oil), oilNet, n.oil <= 0 ? 'bad' : '');
+  $('#sSteel').innerHTML = n.steel >= 999 ? statHTML('steel', '999', null) + '<small>full</small>' : statHTML('steel', fmt(n.steel), steelIncome(t));
   $('#sStab').innerHTML = statHTML('stab', Math.round(n.stab) + '%', null, n.stab < 30 ? 'bad' : '');
   $('#sDiv').innerHTML = `${iconSvg('inf', 'si')}<span>${landN(d)}</span>${d.arm ? `<small style="color:var(--brass-hi)">${d.arm} armor</small>` : ''}`;
   $('#sDom').textContent = Math.round(vpOf(t) / totalVP() * 100) + '%';
-  $('#sTen').style.width = G.tension + '%'; $('#sTenN').textContent = Math.round(G.tension) + '%';
+  { const doom = G.act && G.act.k !== 'exhaust', v = doom ? G.act.doom / DOOM_MAX * 100 : G.tension;
+    $('#sTen').style.width = v + '%'; $('#sTenN').textContent = doom ? (G.act.ww3 ? 'Midnight' : Math.max(1, Math.round((DOOM_MAX - G.act.doom) / 8)) + ' min') : Math.round(G.tension) + '%';
+    const k = $('#sTenN').parentElement; if (k.firstChild.nodeType === 3) k.firstChild.textContent = doom ? 'Doomsday ' : 'Tension ';
+    k.closest('.stat').title = doom ? 'The Doomsday Clock: minutes to midnight. Bombs, proxy wars and the arms race move it on; summits and Détente pull it back.' : 'World tension: democracies may only declare war cheaply above 50%'; }
   $('#sStab').title = `Stability ${Math.round(n.stab)}%. War weariness ${Math.round(n.ww || 0)}. Production ×${stabMul(n).toFixed(2)}.`;
   { const b = oilBreakdown(t); $('#sOil').title = `Oil: +${oilIncome(t)} income, −${oilUpkeep(t)} upkeep (ships ${b.navy.toFixed(1)}, aircraft ${b.air.toFixed(1)}, tanks ${b.arm.toFixed(1)}${b.peace ? '; halved in peacetime' : ''}). Moving troops costs no oil.${n.oil <= 0 ? ` FUEL SHORTAGE: mechanised forces at ${Math.round(fuelMul(t) * 100)}%.` : ''}`; }
   { const P = typeof paceInfo === 'function' ? paceInfo() : null, w = $('#sPaceW'); w.hidden = !P;
@@ -56,7 +60,8 @@ function renderDots() {
 function renderTicker() {
   const items = G.news.length ? G.news : ['EUROPE HOLDS ITS BREATH', 'LEAGUE OF NATIONS MEETS IN GENEVA'];
   const s = items.map(x => '◆ ' + x).join('      ');
-  const el = $('#tickText'); if (el.textContent !== s) { el.textContent = s; el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''; }
+  const el = $('#tickText'), two = s + '      ' + s + '      ';
+  if (el.textContent !== two) { el.textContent = two; el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''; el.style.animationDuration = Math.max(20, s.length * 0.16) + 's'; }
 }
 
 /* ---------- cards in hand ---------- */
@@ -105,6 +110,7 @@ function pickClick(id) {
   if (id < 0 || !p.ids.includes(id)) { SFX.click(); return true; }
   if (p.kind === 'card') { endPick(); Ctl.act({ c:'card', k:p.k, target:id }); }
   else if (p.kind === 'raid') { endPick(); Ctl.act({ c:'raid', from:p.from, to:id }); }
+  else if (p.kind === 'rebase') { endPick(); const r = Ctl.act({ c:'rebase', from:p.from, to:id, ftr:p.n.ftr, bmb:p.n.bmb }); if (r && r.ok !== false) { addFloat(id, `+${p.n.ftr + p.n.bmb} air wings`, '#8ccbf0'); SFX.click(); } }
   else if (p.kind === 'rocket') { endPick(); Ctl.act({ c:'rocket', to:id }); }
   else if (p.kind === 'bomb') { endPick(); Ctl.act({ c:'bomb', to:id }); }
   else if (p.kind === 'spy') { endPick(); Ctl.act({ c:'spy', op:p.op, target:id }); }
@@ -129,18 +135,31 @@ function computeTargets() {
   const srcs = [sel.id, ...(sel.multi || [])];
   for (const s of srcs) for (const [j, k] of targetsFor(ME, s)) { const cur = targets.get(j); if (!cur || (k === 'attack' && cur !== 'attack')) targets.set(j, k); }
 }
+/* ---------- choosing exactly which units go: counters per unit type ---------- */
+const PICK_ICON = { inf:'inf', mtn:'mtn', art:'art', par:'par', arm:'arm', cap:'cap', sub:'sub', ftr:'ftr', bmb:'bmb' };
+const PICK_NAME = { inf:'Infantry', mtn:'Mountain', art:'Artillery', par:'Airborne', arm:'Armor', cap:'Battle squadrons', sub:'Submarines', ftr:'Fighters', bmb:'Bombers' };
+function stepRows(group, cur, max) {
+  return `<div class="upick" data-group="${group}">` + Object.keys(max).filter(k => max[k] > 0).map(k => `<div class="upk"><span>${iconSvg(PICK_ICON[k])}${PICK_NAME[k]}</span><button class="ibtn" data-step="${group}:${k}:-1" aria-label="One fewer ${PICK_NAME[k]}" ${cur[k] <= 0 ? 'disabled' : ''}>−</button><b>${cur[k] | 0}<small>/${max[k]}</small></b><button class="ibtn" data-step="${group}:${k}:1" aria-label="One more ${PICK_NAME[k]}" ${cur[k] >= max[k] ? 'disabled' : ''}>+</button><button class="ibtn sm" data-step="${group}:${k}:all" title="All ${max[k]}">all</button></div>`).join('') + `</div>`;
+}
+function wireSteps(el, get, set) {
+  el.querySelectorAll('[data-step]').forEach(b => b.onclick = e => {
+    e.stopPropagation(); const [g, k, d] = b.dataset.step.split(':'); const v = get(g); if (!v) return;
+    const { cur, max } = v; cur[k] = d === 'all' ? (cur[k] >= max[k] ? 0 : max[k]) : clamp((cur[k] | 0) + +d, 0, max[k]);
+    set(g, cur); SFX.click(); renderCard();
+  });
+}
 function select(id, add) {
   if (id == null || id < 0) { clearSelection(); return; }
   selFleet = null; fleetTargetsSet = new Set();
   if (add && sel && stackOf(id, ME) && sel.id !== id) { sel.multi = sel.multi || new Set(); if (sel.multi.has(id)) sel.multi.delete(id); else sel.multi.add(id); }
-  else sel = { id, amt:sel && sel.amt || 'all' };
+  else sel = { id, amt:sel && typeof sel.amt === 'string' ? sel.amt : 'all' };
   computeTargets(); rebuildOverlay(); staticDirty = true; renderCard(); if (tab === 'army') renderDrawer();
   hoverId = -1;
 }
 function clearSelection() { sel = null; selFleet = null; fleetTargetsSet = new Set(); targets = new Map(); rebuildOverlay(); staticDirty = true; renderCard(); hoverId = -1; }
 function selectFleet(z) {
   sel = null; targets = new Map();
-  selFleet = { z, part:selFleet && selFleet.part || 'all' };
+  selFleet = { z, part:selFleet && selFleet.z === z && selFleet.part || (selFleet && typeof selFleet.part === 'string' ? selFleet.part : 'all') };
   const f = G.fleet[z][ME];
   fleetTargetsSet = new Set(fleetReady(f) && Ctl.canAct() ? fleetTargets(z, ME) : []);
   rebuildOverlay(); staticDirty = true; renderCard();
@@ -207,11 +226,19 @@ function renderCard() {
   if (extras.length) h += `<div class="extras">${extras.map(x => `<span>${x}</span>`).join('')}</div>`;
   const gts = guestTags(p), myG = pl ? guestOf(i, pl) : null;
   h += `<div class="units"><div class="u">${unitRow(p.u, vis)}</div>`;
-  if ((mine || myG) && canAct) h += `<div class="seg" role="group" aria-label="Order size">${['all','half','one'].map(a => `<button class="${sel.amt === a ? 'on' : ''}" data-amt="${a}">${a}</button>`).join('')}</div>`;
+  const myStack = mine ? p : myG, picking = sel.amt && typeof sel.amt === 'object';
+  if ((mine || myG) && canAct) h += `<div class="seg" role="group" aria-label="Order size">${['all','half','one','pick'].map(a => `<button class="${sel.amt === a || a === 'pick' && picking ? 'on' : ''}" data-amt="${a}" ${a === 'pick' ? 'title="Choose exactly which divisions move"' : ''}>${a}</button>`).join('')}</div>`;
   h += `</div>`;
+  if (picking && myStack && canAct) { const max = {}; for (const k of LAND) { max[k] = myStack.r[k]; sel.amt[k] = Math.min(sel.amt[k] | 0, max[k]); } h += stepRows('land', sel.amt, max) + `<div class="hint">${landN(sel.amt)} division${landN(sel.amt) === 1 ? '' : 's'} chosen — now click a ringed province.</div>`; }
   if (gts.length && vis) h += `<div class="sect">${myG && gts.length === 1 ? 'Your expeditionary force' : 'Allied forces here'}</div>` + gts.map(gt => `<div class="units"><div class="u">${flagImg(gt)}<b style="font-size:14px">${esc(natName(gt))}</b></div><div class="u">${unitRow(p.g[gt].u, true)}</div></div>`).join('');
   if (g) h += `<div class="gen">${iconSvg('gen')}<div><b>${esc(g.name)}</b> <span class="lv">${'★'.repeat(g.lv)}</span><p>${TRAITS[g.tr].n}: ${TRAITS[g.tr].d}</p></div></div>`;
-  if ((p.air.ftr || p.air.bmb) && vis) h += `<div class="airbase">${iconSvg('ftr')} ${p.air.ftr} fighters &nbsp; ${iconSvg('bmb')} ${p.air.bmb} bombers${mine && p.ad ? ' · flown this month' : ''}</div>`;
+  if ((p.air.ftr || p.air.bmb) && vis) {
+    h += `<div class="airbase">${iconSvg('ftr')} ${p.air.ftr} fighters &nbsp; ${iconSvg('bmb')} ${p.air.bmb} bombers${mine && p.ad ? ' · flown this month' : ''}</div>`;
+    if (mine && canAct && !p.ad) {
+      if (!sel.airOpen) h += `<div class="acts"><button class="btn" data-airopen>${iconSvg('ftr')} Rebase air…<small>move wings to another airfield</small></button></div>`;
+      else { const cur = sel.air || (sel.air = { ftr:p.air.ftr, bmb:p.air.bmb }); cur.ftr = Math.min(cur.ftr, p.air.ftr); cur.bmb = Math.min(cur.bmb, p.air.bmb); h += stepRows('air', cur, { ftr:p.air.ftr, bmb:p.air.bmb }) + `<div class="acts"><button class="btn gold" data-act="rebase" ${cur.ftr + cur.bmb ? '' : 'disabled'}>${iconSvg('ftr')} Rebase ${cur.ftr + cur.bmb} wing${cur.ftr + cur.bmb === 1 ? '' : 's'}<small>then pick an airfield in range</small></button></div>`; }
+    }
+  }
   if (!mine && myG && canAct) {
     const ready = readyAt(myG);
     h += ready ? `<div class="hint"><b>${ready} of your divisions ready</b> in ${esc(natName(p.o))}'s territory. They fight beside your ally and draw its supply.</div>` + targetKey() : '<div class="hint">Your expeditionary force has acted this month.</div>';
@@ -253,7 +280,15 @@ function renderCard() {
   h += `</div>`;
   el.innerHTML = h;
   el.querySelector('[data-close]').onclick = () => clearSelection();
-  el.querySelectorAll('[data-amt]').forEach(b => b.onclick = () => { sel.amt = b.dataset.amt; SFX.click(); renderCard(); });
+  el.querySelectorAll('[data-amt]').forEach(b => b.onclick = () => {
+    const S = stackOf(sel.id, ME);
+    sel.amt = b.dataset.amt === 'pick' ? (S ? { ...S.r } : 'all') : b.dataset.amt; SFX.click(); computeTargets(); rebuildOverlay(); renderCard();
+  });
+  { const ao = el.querySelector('[data-airopen]'); if (ao) ao.onclick = () => { sel.airOpen = 1; SFX.click(); renderCard(); }; }
+  wireSteps(el, g => {
+    if (g === 'land') { const S = stackOf(sel.id, ME); return S && typeof sel.amt === 'object' ? { cur:sel.amt, max:{ ...S.r } } : null; }
+    if (g === 'air') { const q = G.prov[sel.id]; return { cur:sel.air || (sel.air = { ftr:q.air.ftr, bmb:q.air.bmb }), max:{ ftr:q.air.ftr, bmb:q.air.bmb } }; }
+  }, (g, cur) => { if (g === 'land') sel.amt = cur; else sel.air = cur; });
   el.querySelectorAll('[data-build]').forEach(b => b.onclick = e => { const k = b.dataset.build; const many = e.shiftKey ? 5 : 1; k === 'arm' ? SFX.tank() : AIR.includes(k) ? SFX.plane() : NAVY.includes(k) ? SFX.ship() : SFX.build(); Ctl.act({ c:'buildN', k, pid:i, n:many }); if (G.tut) G.tut.recruited = 1; addFloat(i, `+${many} ${UNIT[k].n}`, '#f0cd7f'); });
   el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => cardAction(b.dataset.act));
 }
@@ -266,6 +301,7 @@ function cardAction(act) {
   else if (act === 'demand') { Ctl.act({ c:'demand', tag:p.o }); }
   else if (act === 'rocket') { Ctl.act({ c:'rocket', to:i }); }
   else if (act === 'bomb') { confirmBox('Drop the Bomb?', `${PROV[i].name} will be wiped from the map. World tension will soar.`, 'Drop it', () => Ctl.act({ c:'bomb', to:i })); }
+  else if (act === 'rebase') { const ids = rebaseTargets(pl, i), n = sel.air || {}; if (ids.length) startPick({ kind:'rebase', from:i, n:{ ftr:n.ftr | 0, bmb:n.bmb | 0 }, ids, label:`Rebase ${(n.ftr | 0) + (n.bmb | 0)} air wings: choose one of your airfields` }); else toast('✕', 'No airfield in range', 'Air wings rebase to one of your provinces within reach.', ''); }
   else if (act === 'raid') { const ids = raidTargets(pl, i); if (ids.length) startPick({ kind:'raid', from:i, ids, label:'Bomb raid: choose an enemy province in range' }); else toast('✕', 'No targets in range', '', ''); }
   else if (act === 'ops') { const ids = []; for (let j = 0; j < NP; j++) if (W(pl, G.prov[j].o) && PROV[j].adj.some(k => friendly(G.prov[k].o, pl))) ids.push(j); startPick({ kind:'ops', ids, sel:[i], label:`Operation objectives: ${PROV[i].name} (up to 4)` }); $('#pickGo').hidden = false; }
   else if (act === 'postgen') { const gs = G.gens.filter(x => x.tag === pl && x.pid !== i); pickList(gs.map(x => ({ id:x.id, t:x.name, s:`${TRAITS[x.tr].n} · at ${PROV[x.pid] ? PROV[x.pid].name : '—'}` })), 'Post which general here?', id => Ctl.act({ c:'postgen', id, pid:i })); }
@@ -285,14 +321,17 @@ function renderFleetCard(el) {
   if (mine && Ctl.canAct()) {
     const left = FLEET_MOVES - (mine.mv || 0), up = mine.cap * UNIT.cap.up + mine.sub * UNIT.sub.up;
     h += !fleetReady(mine) ? '<div class="hint">This fleet has sailed as far as it can this month.</div>' : `<div class="hint">Click a <span style="color:#8ccbf0">ringed</span> sea zone to sail there — <b>${left} move${left > 1 ? 's' : ''} left</b> this month. Entering a zone with enemy ships starts a battle and ends the voyage. Battle squadrons escort convoys and landings, bombard coasts and add sealift; submarines sink enemy convoys and trade.</div>`;
-    h += `<div class="seg">${['all','half'].map(a => `<button class="${selFleet.part === a ? 'on' : ''}" data-part="${a}">${a}</button>`).join('')}</div>`;
-    h += `<div class="acts"><button class="btn" data-scrap title="Breaks up the selected ships for steel and stops their oil upkeep (${up.toFixed(1)} oil a month at war for the whole fleet)">Decommission ${selFleet.part}<small>+steel · saves oil</small></button></div>`;
+    const fpick = selFleet.part && typeof selFleet.part === 'object';
+    h += `<div class="seg">${['all','half','pick'].map(a => `<button class="${selFleet.part === a || a === 'pick' && fpick ? 'on' : ''}" data-part="${a}">${a}</button>`).join('')}</div>`;
+    if (fpick) { selFleet.part.cap = Math.min(selFleet.part.cap, mine.cap); selFleet.part.sub = Math.min(selFleet.part.sub, mine.sub); h += stepRows('fleet', selFleet.part, { cap:mine.cap, sub:mine.sub }); }
+    h += `<div class="acts"><button class="btn" data-scrap title="Breaks up the selected ships for steel and stops their oil upkeep (${up.toFixed(1)} oil a month at war for the whole fleet)">Decommission ${typeof selFleet.part === 'object' ? 'chosen' : selFleet.part}<small>+steel · saves oil</small></button></div>`;
   }
   h += `</div>`;
   el.innerHTML = h;
   el.querySelector('[data-close]').onclick = () => clearSelection();
-  el.querySelectorAll('[data-part]').forEach(b => b.onclick = () => { selFleet.part = b.dataset.part; renderCard(); });
-  const sb = el.querySelector('[data-scrap]'); if (sb) sb.onclick = () => confirmBox('Decommission ships?', `Break up ${selFleet.part === 'half' ? 'half of' : 'all of'} this fleet in the ${S.n}. You get back 3 steel per battle squadron and 1 per submarine, and stop paying their oil.`, 'Decommission', () => { Ctl.act({ c:'scrap', z, part:selFleet.part }); selectFleet(z); });
+  el.querySelectorAll('[data-part]').forEach(b => b.onclick = () => { const f = G.fleet[z] && G.fleet[z][ME]; selFleet.part = b.dataset.part === 'pick' && f ? { cap:f.cap, sub:f.sub } : b.dataset.part; renderCard(); });
+  wireSteps(el, () => { const f = G.fleet[z] && G.fleet[z][ME]; return f && typeof selFleet.part === 'object' ? { cur:selFleet.part, max:{ cap:f.cap, sub:f.sub } } : null; }, (g, cur) => { selFleet.part = cur; });
+  const sb = el.querySelector('[data-scrap]'); if (sb) sb.onclick = () => confirmBox('Decommission ships?', `Break up ${typeof selFleet.part === 'object' ? 'the chosen ships of' : selFleet.part === 'half' ? 'half of' : 'all of'} this fleet in the ${S.n}. You get back 3 steel per battle squadron and 1 per submarine, and stop paying their oil.`, 'Decommission', () => { Ctl.act({ c:'scrap', z, part:selFleet.part }); selectFleet(z); });
 }
 function confirmBox(title, body, yes, cb) {
   const m = $('#modal'); m.hidden = false;

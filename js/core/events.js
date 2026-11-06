@@ -113,7 +113,7 @@ const EVENTS = [
   { id:'gelb', y:1940, m:4, actor:'GER', cond:() => A('GER') && A('FRA') && W('GER','FRA') && (A('HOL') || A('BEL')) && !W('GER','BEL') && !W('GER','HOL'),
     title:'Fall Gelb', dek:'Panzers pour through the Ardennes; paratroopers seize the Belgian forts',
     text:'The phoney war is over. While the Allies rush north into Belgium, German armored divisions slip through forests everyone thought were impassable to tanks.',
-    opts:[{ t:'Through the Low Countries', e:'War with the Netherlands and Belgium', f(){ if (A('HOL')) declareWar('GER','HOL'); if (A('BEL')) declareWar('GER','BEL'); } }, { t:'Not yet', e:'Ask again in two months', retry:2, f(){} }] },
+    opts:[{ t:'Through the Low Countries', e:'War with the Netherlands and Belgium', f(){ if (A('HOL')) declareWar('GER','HOL'); if (A('BEL')) declareWar('GER','BEL'); G.flags.sickle = G.turn + 6; } }, { t:'Not yet', e:'Ask again in two months', retry:2, f(){} }] },
   { id:'dunkirk', y:1940, m:4, actor:'ENG', cond:() => A('ENG') && A('GER') && W('ENG','GER') && isAxis(O('Paris')) && O('London') === 'ENG',
     title:'The Miracle of Dunkirk', dek:'Destroyers, ferries and pleasure boats bring 338,000 men home across the Channel',
     text:'With the Allied armies cut off on the beaches, every vessel that can float sails for Dunkirk. The army leaves its guns behind, but the men come home to fight another day.',
@@ -263,7 +263,7 @@ function balticGrab() {
   tension(5);
 }
 function barbarossa() {
-  declareWar('GER','SOV');
+  declareWar('GER','SOV'); G.flags.barb = G.turn + 6; // six months of encirclements before the Red Army recovers
   G.flags.gpw = 1; if (!isHuman('SOV')) { nat('SOV').stab += 15; nat('SOV').mp += 80; }
   for (const t of membersOf('AXIS')) if (t !== 'GER' && !isHuman(t) && ['ROM','HUN','ITA'].includes(t)) setWar(t, 'SOV');
   if (A('FIN') && !facOf('FIN') && !isHuman('FIN')) { joinFaction('FIN','AXIS', true); setWar('FIN','SOV'); }

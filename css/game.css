@@ -127,8 +127,8 @@ button:disabled{cursor:not-allowed;opacity:.42}
 #ticker{position:absolute;left:270px;right:480px;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);height:40px;display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;z-index:3}
 #ticker .tag{flex:none;height:100%;display:flex;align-items:center;padding:0 12px;background:var(--war);color:#fff;font-family:var(--f-display);font-weight:800;font-size:15px;letter-spacing:.12em}
 #ticker .run{white-space:nowrap;font-family:var(--f-type);font-size:14px;color:var(--paper-dim);overflow:hidden;flex:1;mask-image:linear-gradient(90deg,transparent,#000 3%,#000 97%,transparent)}
-#ticker .run span{display:inline-block;padding-left:100%;animation:tick 48s linear infinite}
-@keyframes tick{to{transform:translateX(-100%)}}
+#ticker .run span{display:inline-block;animation:tick 48s linear infinite}
+@keyframes tick{to{transform:translateX(-50%)}} /* the text is written twice, so half a turn loops seamlessly */
 .zoom{position:absolute;right:14px;top:calc(env(safe-area-inset-top,0px) + 74px);display:flex;flex-direction:column;gap:6px;z-index:3}
 .zoom button{width:40px;height:40px;border-radius:9px;background:var(--panel);border:1px solid var(--line);font-size:20px;font-weight:700;color:var(--paper-dim)}
 .zoom button:hover{color:var(--paper);border-color:var(--line-hi)}
