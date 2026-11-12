@@ -16,7 +16,7 @@ const { chromium } = require(process.env.PW || '/opt/npm-tools/node_modules/play
     'Attack!': () => page.evaluate(() => { const to = [...targets].find(([j, k]) => k === 'attack')[0]; execOrder(to); }),
     'Supply lines': () => page.click('#zMode'),
     'Generals': async () => { await page.click('.tab[data-tab="army"]'); await wait(200); await page.click('[data-hire]'); },
-    'Air power': async () => { await page.click('#card [data-act="raid"]'); await wait(200); await page.evaluate(() => pickClick(pickMode.ids[0])); },
+    'Air power': async () => { if (!await page.evaluate(() => raidTargets(ME, ID['Berlin']).length)) return; await page.click('#card [data-act="raid"]'); await wait(200); await page.evaluate(() => pickClick(pickMode.ids[0])); },
     'The navy': () => page.evaluate(() => { selectFleet('NSE'); Ctl.act({ c:'fleet', from:'NSE', to:fleetTargets('NSE', ME)[0], part:'all' }); }),
     'Strategy cards': () => page.evaluate(() => { const k = nat(ME).hand.find(c => !canPlay(ME, c) && CARDS[c].tgt === 'none'); Ctl.act({ c:'card', k }); }),
     'Spies': async () => { await page.click('.tab[data-tab="intel"]'); await wait(200); await page.click('[data-spy="reveal"]'); await wait(200); await page.click('#modal [data-t]'); },
