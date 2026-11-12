@@ -1,6 +1,13 @@
 {
  "builds": [
   {
+   "id": "46021b26a52b",
+   "at": "2026-11-12",
+   "core": "core-46021b26a52b.js.gz",
+   "world": "map-world-ab570ec5ae81.js.gz",
+   "europe": "map-europe-7523fadacf18.js.gz"
+  },
+  {
    "id": "8bee1a912dc5",
    "at": "2026-11-06",
    "core": "core-8bee1a912dc5.js.gz",

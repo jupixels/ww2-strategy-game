@@ -195,6 +195,7 @@ const TIPS = [
   'Surround enemies before you strike: defenders with no friendly province behind them are <b>destroyed</b>.',
   'Armies far from a depot (capital, home city, or a big city held for six months) lose punch. Watch the supply truck on counters.',
   'Artillery shreds forts. Mountain troops own the hills. Armor is king on the plains but burns oil and stalls in mud.',
+  '<b>Troops or research?</b> A +5% infantry tech pays off once your army is big — around 60+ divisions it beats recruiting the same production in new divisions, and it never dies. Small nations get more from new divisions; industry techs pay back within about two years.',
   'Fighters within range decide <b>air superiority</b> — worth up to ±30% in every battle.',
   'Never attack Russia or Finland in winter unless you are Russian or Finnish: attackers lose 35% and freeze.',
   'Control the sea: landings and sea supply need waters the enemy does not control. Submarines strangle island economies and sink convoys.',

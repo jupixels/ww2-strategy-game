@@ -335,8 +335,13 @@ TECHS.forEach(T => {
   const f = Object.entries(T.fx).map(([k, v]) => FX_ABS[k] ? `+${v} ${FX_TEXT[k]}` : `+${Math.round(v * 100)}% ${FX_TEXT[k]}`).join(', ');
   T.d = [T.d, f ? f[0].toUpperCase() + f.slice(1) + '.' : ''].filter(Boolean).join(' ');
 });
-// paid in full when a project starts: 10 + 7 per month of work + 2 per year past 1936
-const techCost = T => 10 + T.m * 7 + Math.max(0, T.y - 1936) * 2;
+// paid in full when a project starts: 8 + 6 per month of work + 2 per year past 1936; industry (production %)
+// techs ×1.3. Tuned Nov 2026 (was 10 + 7/month + 2/year) against recruiting (an infantry division = 8 production
+// + 10k manpower) for a 75–140-division power in 1939: the median combat tech cost 13–22 production per division
+// of strength it adds, now 11–18 (main infantry tech 8–12.5 → 7–11); industry techs, counted over two years of
+// extra income, 3–9 → 3.5–10.5. A deeper cut tipped AI campaigns toward the Axis (18/24 seeds vs 8/24).
+// Recruiting stays the better buy for small nations.
+const techCost = T => Math.round((8 + T.m * 6 + Math.max(0, T.y - 1936) * 2) * (T.fx && T.fx.ind ? 1.3 : 1));
 // what each AI power cares about when it picks research (weights per row)
 const RESEARCH_W = {
   GER:{arm:3, ftr:2.5, doc:2, ind:2, inf:2, bmb:1.2, art:1.2, nav:1, sci:1.5},
