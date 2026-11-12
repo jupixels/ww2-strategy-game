@@ -165,7 +165,7 @@ const GENERALS = {
 const GEN_NAMES = ['Col. Varga','Gen. Novak','Gen. Petrov','Gen. Haas','Gen. Moreau','Gen. Silva','Gen. Kowal','Gen. Dimitrov','Gen. Lindqvist','Gen. Rossi','Gen. Brennan','Gen. Popescu'];
 const GEN_TRAITS = Object.keys(TRAITS);
 
-/* ---------- technology: nine branches, 1936–1950, small steps paid month by month ----------
+/* ---------- technology: nine branches, 1936–1954 (the post-war act runs to 1955), small steps paid month by month ----------
    Each tech's fx are modifiers summed per nation by tm(t, key) (state.js):
      inf/art/ftr/bmb/navy/sub  % strength of that arm      arm/armD  % armor attack / defense
      def/atk  % defense / attack everywhere (doctrine)      dig  +% per entrenchment level
@@ -194,6 +194,8 @@ const TECHS = [
   {k:'inf_radio',r:'inf', n:'Squad Radios',             y:1946, m:3, fx:{inf:.03}},
   {k:'inf_heli', r:'inf', n:'Helicopter Assault',       y:1948, m:3, req:'inf_mech', fx:{inf:.04}},
   {k:'inf_nv',   r:'inf', n:'Night Sights',             y:1950, m:3, fx:{inf:.03}},
+  {k:'inf_armr', r:'inf', n:'Body Armour',              y:1952, m:3, fx:{inf:.03}},
+  {k:'inf_atgm', r:'inf', n:'Anti-Tank Guided Missiles',y:1954, m:4, req:'inf_rcl', fx:{inf:.04, armD:.02}},
   // armor
   {k:'arm1',     r:'arm', n:'Light Tanks',              y:1936, m:3, d:'Unlocks armored divisions.'},
   {k:'arm_radio',r:'arm', n:'Tank Radios',              y:1937, m:3, req:'arm1', fx:{arm:.05}},
@@ -207,6 +209,8 @@ const TECHS = [
   {k:'arm_mbt',  r:'arm', n:'Main Battle Tanks',        y:1946, m:4, req:'arm_late', fx:{arm:.06, armD:.06}},
   {k:'arm_stab', r:'arm', n:'Gun Stabilisers',          y:1948, m:3, fx:{arm:.04}},
   {k:'arm_apc',  r:'arm', n:'Armoured Personnel Carriers',y:1950,m:3, fx:{arm:.03, inf:.02}},
+  {k:'arm_heat', r:'arm', n:'HEAT Ammunition',          y:1951, m:3, fx:{arm:.04}},
+  {k:'arm_rng',  r:'arm', n:'Optical Rangefinders',     y:1953, m:3, req:'arm_stab', fx:{arm:.03, armD:.03}},
   // artillery
   {k:'art1',     r:'art', n:'Field Artillery',          y:1936, m:3, d:'Unlocks artillery divisions.'},
   {k:'art_obs',  r:'art', n:'Forward Observers',        y:1937, m:2, req:'art1', fx:{art:.05}},
@@ -219,6 +223,8 @@ const TECHS = [
   {k:'art_raa',  r:'art', n:'Radar-Guided Flak',        y:1945, m:3, req:'art_aa', fx:{aa:.05}},
   {k:'art_hrl',  r:'art', n:'Heavy Rocket Launchers',   y:1947, m:3, req:'art2', fx:{art:.04}},
   {k:'art_msl',  r:'art', n:'Battlefield Missiles',     y:1950, m:4, fx:{art:.05}},
+  {k:'art_cbr',  r:'art', n:'Counter-Battery Radar',    y:1952, m:3, fx:{art:.04}},
+  {k:'art_sam',  r:'art', n:'Surface-to-Air Missiles',  y:1953, m:4, req:'art_raa', fx:{aa:.1}},
   // fighters
   {k:'ftr1',     r:'ftr', n:'Monoplane Fighters',       y:1936, m:3, d:'Unlocks fighter wings.'},
   {k:'ftr_gear', r:'ftr', n:'Retractable Landing Gear', y:1937, m:2, req:'ftr1', fx:{ftr:.08}},
@@ -232,6 +238,8 @@ const TECHS = [
   {k:'ftr_swept',r:'ftr', n:'Swept Wings',              y:1946, m:3, req:'jet', fx:{ftr:.1}},
   {k:'ftr_ab',   r:'ftr', n:'Afterburners',             y:1948, m:3, req:'ftr_swept', fx:{ftr:.08}},
   {k:'ftr_aam',  r:'ftr', n:'Air-to-Air Missiles',      y:1950, m:4, fx:{ftr:.1}},
+  {k:'ftr_ss',   r:'ftr', n:'Supersonic Fighters',      y:1952, m:4, req:'ftr_ab', fx:{ftr:.1}},
+  {k:'ftr_aw',   r:'ftr', n:'All-Weather Interceptors', y:1954, m:3, req:'ftr_aam', fx:{ftr:.05, aa:.05}},
   // bombers
   {k:'bmb1',     r:'bmb', n:'Medium Bombers',           y:1936, m:3, d:'Unlocks bomber wings.'},
   {k:'bmb_sight',r:'bmb', n:'Precision Bombsights',     y:1937, m:3, req:'bmb1', fx:{bmb:.15}},
@@ -244,6 +252,8 @@ const TECHS = [
   {k:'bmb_vh',   r:'bmb', n:'Very Heavy Bombers',       y:1944, m:4, req:'bmb2', fx:{bmb:.15, bmbR:.05}},
   {k:'bmb_jet',  r:'bmb', n:'Jet Bombers',              y:1946, m:4, req:'bmb_vh', fx:{bmb:.15, bmbR:.1}},
   {k:'bmb_aar',  r:'bmb', n:'Aerial Refuelling',        y:1949, m:3, fx:{bmbR:.15}},
+  {k:'bmb_strat',r:'bmb', n:'Intercontinental Jet Bombers',y:1952,m:4, req:'bmb_jet', fx:{bmb:.1, bmbR:.1}},
+  {k:'bmb_ecm',  r:'bmb', n:'Electronic Countermeasures',y:1954, m:3, fx:{bmb:.1}},
   // navy
   {k:'cap1',     r:'nav', n:'Capital Ships',            y:1936, m:3, d:'Unlocks battle squadrons.'},
   {k:'sub1',     r:'nav', n:'Submarines',               y:1936, m:3, d:'Unlocks submarine flotillas.'},
@@ -260,6 +270,8 @@ const TECHS = [
   {k:'nav_angle',r:'nav', n:'Angled Flight Decks',      y:1946, m:3, req:'carrier', fx:{navy:.05}},
   {k:'nav_fsub', r:'nav', n:'Fast Attack Submarines',   y:1948, m:4, req:'nav_snork', fx:{sub:.15}},
   {k:'nav_msl',  r:'nav', n:'Naval Missiles',           y:1950, m:4, fx:{navy:.06}},
+  {k:'nav_heli', r:'nav', n:'Anti-Submarine Helicopters',y:1951, m:3, fx:{asw:.1}},
+  {k:'nav_nsub', r:'nav', n:'Nuclear Submarines',       y:1954, m:5, req:'nav_fsub', fx:{sub:.2, navy:.03}},
   // doctrine
   {k:'depth',    r:'doc', n:'Defense in Depth',         y:1936, m:3, fx:{def:.05}},
   {k:'mobile',   r:'doc', n:'Mobile Warfare',           y:1936, m:3, fx:{arm:.1}},
@@ -276,6 +288,8 @@ const TECHS = [
   {k:'doc_atom', r:'doc', n:'Atomic Battlefield',       y:1946, m:3, fx:{def:.03}},
   {k:'doc_net',  r:'doc', n:'Radio Command Nets',       y:1948, m:3, fx:{atk:.03}},
   {k:'doc_fwd',  r:'doc', n:'Forward Defence',          y:1950, m:3, fx:{def:.03}},
+  {k:'doc_air',  r:'doc', n:'Air Mobility',             y:1951, m:3, req:'doc_net', fx:{atk:.03}},
+  {k:'doc_pento',r:'doc', n:'Pentomic Divisions',       y:1953, m:3, req:'doc_atom', fx:{def:.02, atk:.02}},
   // industry
   {k:'ind1',     r:'ind', n:'Assembly Lines',           y:1936, m:3, fx:{ind:.05}},
   {k:'ind_tool', r:'ind', n:'Machine Tools',            y:1937, m:3, req:'ind1', fx:{ind:.05}},
@@ -291,6 +305,8 @@ const TECHS = [
   {k:'ind_recon',r:'ind', n:'Reconstruction',           y:1945, m:3, fx:{ind:.04, mp:.05}},
   {k:'ind_comp', r:'ind', n:'Electronic Computers',     y:1947, m:3, fx:{ind:.04, res:.1}},
   {k:'ind_nuke', r:'ind', n:'Nuclear Power',            y:1949, m:4, req:'atom', fx:{ind:.05}},
+  {k:'ind_petro',r:'ind', n:'Petrochemicals',           y:1951, m:3, fx:{oil:2}},
+  {k:'ind_nc',   r:'ind', n:'Numerical Control',        y:1953, m:3, req:'ind_comp', fx:{ind:.04}},
   // science
   {k:'sci_grant',r:'sci', n:'University Grants',        y:1936, m:3, fx:{res:.05}},
   {k:'sci_df',   r:'sci', n:'Radio Direction Finding',  y:1937, m:2, fx:{asw:.05, aa:.05}},
@@ -305,6 +321,8 @@ const TECHS = [
   {k:'sci_trans',r:'sci', n:'Transistors',              y:1947, m:3, fx:{res:.1}},
   {k:'sci_dew',  r:'sci', n:'Early-Warning Radar',      y:1948, m:3, req:'radar', fx:{aa:.1}},
   {k:'sci_hbomb',r:'sci', n:'Thermonuclear Bomb',       y:1950, m:6, req:'bomb', fx:{bombcd:2}},
+  {k:'sci_icbm', r:'sci', n:'Intercontinental Missiles',y:1953, m:5, req:'sci_bal', fx:{rkt:.5}},
+  {k:'sci_sat',  r:'sci', n:'Artificial Satellites',    y:1954, m:4, req:'sci_icbm', fx:{res:.1}, d:'The first eyes in orbit.'},
 ];
 const TECH = {}; TECHS.forEach(T => { TECH[T.k] = T; T.b = T.r; T.fx = T.fx || {}; });
 // what each modifier means, for the tech cards ("+5% infantry strength")
